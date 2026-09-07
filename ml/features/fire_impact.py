@@ -182,13 +182,18 @@ def add_fire_features(
     """
     df = df.copy()
 
-    for col in ["fire_count", "fire_impact_score", "nearest_fire_distance", "wind_aligned_fire_count"]:
-        if col not in df.columns:
-            df[col] = 0
-    df["fire_impact_score"] = df.get("fire_impact_score", pd.Series(0.0, index=df.index))
-    df["nearest_fire_distance"] = df.get("nearest_fire_distance", pd.Series(max_distance_km + 1.0, index=df.index))
-    df["wind_aligned_fire_count"] = df.get("wind_aligned_fire_count", pd.Series(0, index=df.index))
-    df["fire_count"] = df.get("fire_count", pd.Series(0, index=df.index))
+    if "fire_count" not in df.columns:
+        df["fire_count"] = 0
+    if "fire_impact_score" not in df.columns:
+        df["fire_impact_score"] = 0.0
+    if "nearest_fire_distance" not in df.columns:
+        df["nearest_fire_distance"] = float(max_distance_km + 1.0)
+    if "wind_aligned_fire_count" not in df.columns:
+        df["wind_aligned_fire_count"] = 0
+    df["fire_impact_score"] = df["fire_impact_score"].astype(float)
+    df["nearest_fire_distance"] = df["nearest_fire_distance"].astype(float)
+    df["fire_count"] = df["fire_count"].astype(int)
+    df["wind_aligned_fire_count"] = df["wind_aligned_fire_count"].astype(int)
 
     if fires_df is None or fires_df.empty:
         return df
