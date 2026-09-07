@@ -1,0 +1,10 @@
+featured_dataset.csv (120MB) exceeds GitHub's 100 MB per-file push limit, so it
+is committed as two restored-verbatim parts:
+
+  featured_dataset_part1.csv  -> header row + first half of data rows
+  featured_dataset_part2.csv  -> remaining data rows (no header)
+
+Reassemble exactly:
+
+  Windows:    copy /b featured_dataset_part1.csv + featured_dataset_part2.csv featured_dataset.csv
+  Linux/mac:  cat featured_dataset_part1.csv featured_dataset_part2.csv > featured_dataset.csv

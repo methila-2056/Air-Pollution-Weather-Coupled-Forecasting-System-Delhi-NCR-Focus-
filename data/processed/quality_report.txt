@@ -1,0 +1,33 @@
+============================================================
+  AeroCast-NCR  —  Coupled Dataset Quality Report
+============================================================
+
+Total rows          : 131,520
+Columns             : ['timestamp', 'temperature_2m', 'relative_humidity_2m', 'pressure_msl', 'surface_pressure', 'wind_speed_10m', 'wind_direction_10m', 'precipitation', 'cloud_cover', 'boundary_layer_height', 'station', 'latitude', 'longitude', 'pm25', 'pm10', 'no2', 'o3', 'so2', 'co', 'fire_count', 'mean_frp', 'max_bright']
+
+--- Rows per station ---
+  Anand_Vihar         :   26,304
+  Dwarka              :   26,304
+  ITO                 :   26,304
+  Punjabi_Bagh        :   26,304
+  RK_Puram            :   26,304
+
+Date range          : 2023-01-01 00:00:00 to 2025-12-31 23:00:00
+Unique timestamps   : 26,304
+
+--- Missing values (%) ---
+  boundary_layer_height         :  16.6%
+  pm25                          :  35.5%
+  pm10                          :  35.6%
+  no2                           :  35.2%
+  o3                            :  35.5%
+  so2                           :  36.3%
+  co                            :  35.0%
+  fire_count                    :  75.0%
+  mean_frp                      :  75.0%
+  max_bright                    :  75.0%
+
+--- Validation ---
+  Date range: 2023-01-01 00:00:00 to 2025-12-31 23:00:00
+
+============================================================

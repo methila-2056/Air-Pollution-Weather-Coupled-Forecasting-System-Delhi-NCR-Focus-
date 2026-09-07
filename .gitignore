@@ -1,23 +1,13 @@
+# runtime/build caches & artifacts that are fully regenerable
 __pycache__/
 *.pyc
-.env
 node_modules/
-dist/
 .vite/
-*.egg-info/
+.pytest_cache/
 .ml-cache/
-models/*.joblib
-models/*.pkl
-data/raw/
-data/processed/
-*.csv
+*.egg-info/
 .DS_Store
 
-# Databases & logs
-*.db
-*.sqlite
-*.sqlite3
-server.log
-server_err.log
-vite_dev.log
-vite_dev_err.log
+# The 120MB row-export exceeds GitHub's 100MB push limit.
+# It is committed (byte-identical) as part1 + part2; see data/processed/SPLIT_NOTE.txt
+data/processed/featured_dataset.csv
