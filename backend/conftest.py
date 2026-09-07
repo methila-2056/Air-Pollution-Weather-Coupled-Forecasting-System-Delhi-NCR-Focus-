@@ -1,6 +1,7 @@
 import os
-import tempfile
 import pathlib
+import sys
+import tempfile
 from datetime import datetime, timedelta
 
 import pytest
@@ -12,6 +13,11 @@ if TEST_DB_PATH.exists():
     except PermissionError:
         pass
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
+
+# make the repository root importable so tests can reach `ml.*` directly
+REDIRECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(REDIRECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(REDIRECT_ROOT))
 
 from app.main import app
 from app.database import engine, Base, SessionLocal, seed_data
