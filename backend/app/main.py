@@ -9,7 +9,7 @@ from sqlalchemy import func
 
 from .config import get_settings
 from .database import engine, Base, SessionLocal, seed_data, apply_migrations
-from .api import stations, forecast, weather, inversion, fire, explanation, alerts, model_metrics, coupling, grid, dispersion, summary
+from .api import stations, forecast, weather, inversion, fire, explanation, alerts, model_metrics, coupling, grid, dispersion, summary, export
 
 logger = logging.getLogger("aerocast")
 settings = get_settings()
@@ -75,6 +75,7 @@ app.include_router(coupling.router, prefix="/api", tags=["Coupling Feedback"])
 app.include_router(grid.router, prefix="/api", tags=["Grid Forecast"])
 app.include_router(dispersion.router, prefix="/api", tags=["Dispersion Forecast"])
 app.include_router(summary.router, prefix="/api", tags=["Summary"])
+app.include_router(export.router, prefix="/api", tags=["Export"])
 
 @app.get("/health")
 def health():
