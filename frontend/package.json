@@ -16,7 +16,7 @@
     "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1",
     "axios": "^1.7.0",
-    "lucide-react": "^0.441.0"
+    "lucide-react": "^1.41.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
