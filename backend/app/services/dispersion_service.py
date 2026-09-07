@@ -18,6 +18,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from ..models.db_models import Station, WeatherReading, FireReading, Forecast
+from .aqi_calculator import get_aqi_category
 from .grid_service import idw_interpolate, build_grid, NCR_BOUNDS, GRID_STEP
 from ml.features.dispersion_solver import run_dispersion_forecast, conc_to_aqi
 
@@ -157,11 +158,12 @@ def run_dispersion_forecast_service(
         for i in range(lats.size):
             for j in range(lons.size):
                 v = int(aqi[i, j])
+                category, _ = get_aqi_category(v)
                 cells.append({
                     "lat": round(float(lats[i]), 4),
                     "lon": round(float(lons[j]), 4),
                     "aqi": v,
-                    "aqi_category": _category_for_aqi(v),
+                    "aqi_category": category,
                 })
         frames.append({
             "hour": fr["hour"],
@@ -190,17 +192,3 @@ def run_dispersion_forecast_service(
         "steps_per_hour": result["steps_per_hour"],
         "frames": frames,
     }
-
-
-def _category_for_aqi(aqi: int) -> str:
-    if aqi <= 50:
-        return "Good"
-    if aqi <= 100:
-        return "Satisfactory"
-    if aqi <= 200:
-        return "Moderate"
-    if aqi <= 300:
-        return "Poor"
-    if aqi <= 400:
-        return "Very Poor"
-    return "Severe"

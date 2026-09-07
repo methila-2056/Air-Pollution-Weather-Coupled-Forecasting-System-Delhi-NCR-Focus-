@@ -15,6 +15,8 @@ from typing import Optional
 
 import numpy as np
 
+from .aqi_calculator import get_aqi_category
+
 NCR_BOUNDS = {
     "lat_min": 28.2, "lat_max": 28.9,
     "lon_min": 76.6, "lon_max": 77.5,
@@ -157,26 +159,13 @@ def compute_ncr_grid(
             if np.isnan(aqi):
                 continue
             aqi = int(round(float(aqi)))
+            category, _ = get_aqi_category(aqi)
             result["cells"].append({
                 "lat": round(float(lats[i]), 4),
                 "lon": round(float(lons[j]), 4),
                 "aqi": aqi,
-                "aqi_category": _category_for_aqi(aqi),
+                "aqi_category": category,
             })
 
     result["grid_size"] = [len(result["cells"]), len(lats), len(lons)]
     return result
-
-
-def _category_for_aqi(aqi: int) -> str:
-    if aqi <= 50:
-        return "Good"
-    if aqi <= 100:
-        return "Satisfactory"
-    if aqi <= 200:
-        return "Moderate"
-    if aqi <= 300:
-        return "Poor"
-    if aqi <= 400:
-        return "Very Poor"
-    return "Severe"
