@@ -51,9 +51,15 @@ def standardize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     model inference layer see consistent, documented column names.
     """
     df = df.copy()
-    rename = {k: v for k, v in COLUMN_STANDARDIZATION.items() if k in df.columns}
-    if rename:
-        df.rename(columns=rename, inplace=True)
+    for source, target in COLUMN_STANDARDIZATION.items():
+        if source not in df.columns:
+            continue
+        if target in df.columns:
+            # canonical column already present (e.g. coupled datasets) — drop the
+            # raw duplicate rather than creating a duplicate target column.
+            df.drop(columns=[source], inplace=True)
+        else:
+            df.rename(columns={source: target}, inplace=True)
     return df
 
 
