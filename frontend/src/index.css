@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-navy-900 text-gray-100 antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-navy-800 border border-navy-700 rounded-xl p-6;
+  }
+  .card-header {
+    @apply text-sm font-medium text-gray-400 uppercase tracking-wider mb-4;
+  }
+  .stat-value {
+    @apply text-3xl font-bold;
+  }
+  .btn-primary {
+    @apply bg-accent-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors;
+  }
+}
+
+/* Leaflet map overrides */
+.leaflet-container {
+  background: #111640;
+}

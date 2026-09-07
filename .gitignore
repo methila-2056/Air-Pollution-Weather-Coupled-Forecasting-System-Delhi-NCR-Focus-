@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.env
+node_modules/
+dist/
+.vite/
+*.egg-info/
+.ml-cache/
+models/*.joblib
+models/*.pkl
+data/raw/
+data/processed/
+*.csv
+.DS_Store
+
+# Databases & logs
+*.db
+*.sqlite
+*.sqlite3
+server.log
+server_err.log
+vite_dev.log
+vite_dev_err.log

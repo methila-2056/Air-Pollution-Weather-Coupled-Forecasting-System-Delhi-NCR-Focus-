@@ -1,0 +1,19 @@
+import axios from 'axios'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric } from '../types'
+
+const api = axios.create({
+  baseURL: '/api',
+  timeout: 15000,
+})
+
+export const getStations = () => api.get<Station[]>('/stations')
+export const getCurrentAQI = (station: string) => api.get<CurrentAQI>(`/current/${station}`)
+export const getForecast = (station: string, hours = 72) => api.get<ForecastPoint[]>(`/forecast/${station}`, { params: { hours } })
+export const getNCRForecast = (hours = 72) => api.get<Record<string, ForecastPoint[]>>(`/forecast/ncr`, { params: { hours } })
+export const getWeather = (station: string) => api.get<WeatherData>(`/weather/${station}`)
+export const getInversion = (station: string) => api.get<InversionData>(`/inversion/${station}`)
+export const getFireActivity = () => api.get<FireActivity>('/fire-activity')
+export const getPlumeRisk = () => api.get<PlumeRisk>('/plume-risk')
+export const getExplanation = (station: string) => api.get<Explanation>(`/explanation/${station}`)
+export const getAlerts = () => api.get<Alert[]>('/alerts')
+export const getModelMetrics = () => api.get<ModelMetric[]>('/model/metrics')

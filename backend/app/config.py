@@ -1,0 +1,24 @@
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+import os
+import pathlib
+
+_ENV_CANDIDATES = [
+    pathlib.Path(__file__).resolve().parents[2] / ".env",
+    pathlib.Path(__file__).resolve().parents[1] / ".env",
+    pathlib.Path.cwd() / ".env",
+]
+_ENV_FILE = next((str(p) for p in _ENV_CANDIDATES if p.exists()), ".env")
+
+class Settings(BaseSettings):
+    database_url: str = "sqlite:///./aerocast_ncr.db"
+    cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    environment: str = "development"
+    log_level: str = "INFO"
+    nasa_firms_map_key: str = ""
+
+    model_config = {"env_file": _ENV_FILE}
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
