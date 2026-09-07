@@ -322,3 +322,42 @@ class TestDispersionForecast:
         hours_of_day = {f["hour_of_day"] for f in body["frames"]}
         assert hours_of_day  # diurnal cycle present
         assert all(0 <= h <= 23 for h in hours_of_day)
+
+
+class TestSummaryEndpoint:
+    def test_summary_kpis(self, client, db_session):
+        resp = client.get("/api/summary")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["stations"] == 5
+        assert body["stations_with_readings"] >= 1
+        assert body["ncr_avg_aqi"] is not None
+        assert body["worst_station"]["name"] == "Anand Vihar"
+        assert body["worst_station"]["aqi_category"] in {
+            "Good", "Satisfactory", "Moderate", "Poor", "Very Poor", "Severe"
+        }
+        assert body["active_fires_24h"] >= 3
+        assert body["open_alerts"] >= 1
+        assert body["models_trained"] >= 2
+        assert "stations_with_forecast" in body["forecast_coverage"]
+
+    def test_summary_best_is_not_worse_than_worst(self, client, db_session):
+        body = client.get("/api/summary").json()
+        assert body["best_station"]["aqi"] <= body["worst_station"]["aqi"]
+
+
+class TestExportEndpoint:
+    def test_export_forecast_csv(self, client, db_session):
+        client.post("/api/forecast/generate", json={"station_name": "Anand Vihar"})
+        resp = client.get("/api/export/forecast.csv", params={"station_name": "Anand Vihar", "hours": 72})
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"].startswith("text/csv")
+        assert "filename=" in resp.headers.get("content-disposition", "")
+        text = resp.content.decode("utf-8")
+        lines = text.strip().splitlines()
+        assert lines[0].startswith("timestamp,horizon_hours,pm25_pred")
+        assert len(lines) > 1
+
+    def test_export_forecast_csv_missing_station(self, client, db_session):
+        resp = client.get("/api/export/forecast.csv", params={"station_name": "Nowhere NCR"})
+        assert resp.status_code == 404
