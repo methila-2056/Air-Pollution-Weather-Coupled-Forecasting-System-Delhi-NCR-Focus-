@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse } from '../types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -23,3 +23,7 @@ export const getDispersionForecast = (horizon = 72, startHour = 8) =>
   api.get<DispersionForecast>('/dispersion/forecast', { params: { horizon_hours: horizon, start_hour: startHour } })
 export const getAlerts = () => api.get<Alert[]>('/alerts')
 export const getModelMetrics = () => api.get<ModelMetric[]>('/model/metrics')
+export const getSummary = () => api.get<SummaryResponse>('/summary')
+
+export const getForecastExportUrl = (station: string, hours = 72) =>
+  `/api/export/forecast.csv?station_name=${encodeURIComponent(station)}&hours=${hours}`

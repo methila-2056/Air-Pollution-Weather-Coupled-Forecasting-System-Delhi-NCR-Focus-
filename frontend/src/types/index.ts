@@ -216,3 +216,26 @@ export interface ModelMetric {
   test_period_start: string | null
   test_period_end: string | null
 }
+
+export interface StationAQISummary {
+  name: string
+  aqi: number | null
+  aqi_category: string
+  dominant_pollutant: string | null
+}
+
+export interface SummaryResponse {
+  generated_at: string
+  stations: number
+  stations_with_readings: number
+  ncr_avg_aqi: number | null
+  worst_station: StationAQISummary | null
+  best_station: StationAQISummary | null
+  active_fires_24h: number
+  open_alerts: number
+  models_trained: number
+  forecast_coverage: {
+    stations_with_forecast: number
+    latest_forecast_at: string | null
+  }
+}
