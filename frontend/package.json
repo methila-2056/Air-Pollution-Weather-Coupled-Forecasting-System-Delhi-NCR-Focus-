@@ -11,7 +11,7 @@
   "dependencies": {
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "react-router-dom": "^6.26.0",
+    "react-router-dom": "^7.18.3",
     "recharts": "^2.13.0",
     "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1",
