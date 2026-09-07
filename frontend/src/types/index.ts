@@ -34,7 +34,7 @@ export interface ForecastPoint {
   coupling_stability?: number | null
 }
 
-export interface CoupledDiagnostics {
+export interface CouplingDiagnostics {
   aod_est: number
   radiation_transmittance: number
   pbl_suppression_factor: number
@@ -46,7 +46,7 @@ export interface CoupledDiagnostics {
 export interface CoupledForecastPoint extends ForecastPoint {
   so2_pred: number | null
   co_pred: number | null
-  coupling: CoupledDiagnostics
+  coupling: CouplingDiagnostics
   pbl_effective: number
   coupling_stability: number
 }
