@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 import joblib
 import numpy as np
@@ -7,12 +6,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 from ..services.aqi_calculator import calculate_aqi, get_dominant_pollutant
 from ..utils.helpers import haversine_distance, is_winter, get_season
-
-# Make the repo-root `ml` feature-engineering package importable from the backend.
-_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
 logger = logging.getLogger("aerocast.forecast")
 

@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     nasa_firms_map_key: str = ""
+    live_refresh_enabled: bool = False
+    live_refresh_interval_hours: int = 3
 
     model_config = {"env_file": _ENV_FILE}
 

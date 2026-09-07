@@ -7,12 +7,9 @@ Usage:
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
 import pandas as pd
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from backend.app.database import Base, SessionLocal, engine  # noqa: E402
 import backend.app.models.db_models as dbm  # noqa: E402, F401  (registers tables)

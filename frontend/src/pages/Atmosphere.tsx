@@ -8,11 +8,17 @@ export default function Atmosphere() {
   const [selected, setSelected] = useState('Anand Vihar')
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [inversion, setInversion] = useState<InversionData | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { getStations().then(r => setStations(r.data)).catch(() => {}) }, [])
   useEffect(() => {
-    getWeather(selected).then(r => setWeather(r.data)).catch(() => {})
-    getInversion(selected).then(r => setInversion(r.data)).catch(() => {})
+    setError(null)
+    Promise.allSettled([
+      getWeather(selected).then(r => setWeather(r.data)),
+      getInversion(selected).then(r => setInversion(r.data)),
+    ]).then(results => {
+      if (results.every(r => r.status === 'rejected')) setError('Failed to load atmospheric data')
+    })
   }, [selected])
 
   return (
@@ -21,6 +27,9 @@ export default function Atmosphere() {
       <select value={selected} onChange={e => setSelected(e.target.value)} className="bg-navy-800 border border-navy-700 rounded-lg px-4 py-2 text-sm">
         {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
       </select>
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>
+      )}
       <div className="grid grid-cols-4 gap-4">
         <div className="card"><p className="card-header">Temperature</p><p className="stat-value">{weather?.temperature ?? '--'}°C</p></div>
         <div className="card"><p className="card-header">Humidity</p><p className="stat-value">{weather?.humidity ?? '--'}%</p></div>

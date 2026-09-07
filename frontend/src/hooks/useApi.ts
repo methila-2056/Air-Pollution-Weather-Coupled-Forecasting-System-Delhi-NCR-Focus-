@@ -1,19 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
-export function useApi<T>(fetcher: () => Promise<{ data: T }>, deps: any[] = []) {
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+interface UseApiState<T> {
+  data: T | null
+  loading: boolean
+  error: string | null
+}
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
+export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []) {
+  const [state, setState] = useState<UseApiState<T>>({
+    data: null,
+    loading: true,
+    error: null,
+  })
+
+  const refetch = useCallback(() => {
+    setState({ data: null, loading: true, error: null })
     fetcher()
-      .then(res => { if (!cancelled) setData(res.data) })
-      .catch(err => { if (!cancelled) setError(err.message) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+      .then(data => setState({ data, loading: false, error: null }))
+      .catch((err: Error) =>
+        setState({ data: null, loading: false, error: err.message || 'Failed to load data' })
+      )
   }, deps)
 
-  return { data, loading, error }
+  useEffect(() => { refetch() }, [refetch])
+
+  return { ...state, refetch }
 }

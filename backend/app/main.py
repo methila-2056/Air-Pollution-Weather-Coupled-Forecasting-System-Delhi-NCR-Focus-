@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -13,6 +14,9 @@ from .api import stations, forecast, weather, inversion, fire, explanation, aler
 logger = logging.getLogger("aerocast")
 settings = get_settings()
 
+_refresh_stop = asyncio.Event()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -23,7 +27,25 @@ async def lifespan(app: FastAPI):
                 logger.info("Seeded %d default Delhi NCR stations", seeded)
     except Exception as exc:
         logger.warning("Startup database initialisation skipped: %s", exc)
+
+    refresh_task = None
+    if getattr(settings, "live_refresh_enabled", False):
+        from .services.refresh_service import refresh_loop
+        refresh_task = asyncio.create_task(
+            refresh_loop(interval_hours=settings.live_refresh_interval_hours, stop=_refresh_stop)
+        )
+        logger.info(
+            "Live refresh scheduler started (interval=%sh)",
+            settings.live_refresh_interval_hours,
+        )
     yield
+    if refresh_task is not None:
+        _refresh_stop.set()
+        refresh_task.cancel()
+        try:
+            await refresh_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 app = FastAPI(
     title="AeroCast-NCR API",

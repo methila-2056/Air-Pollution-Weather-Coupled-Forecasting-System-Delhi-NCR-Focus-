@@ -5,11 +5,20 @@ import type { Station } from '../types'
 
 export default function NCRMap() {
   const [stations, setStations] = useState<Station[]>([])
-  useEffect(() => { getStations().then(r => setStations(r.data)).catch(() => {}) }, [])
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getStations()
+      .then(r => setStations(r.data))
+      .catch(() => setError('Failed to load station data'))
+  }, [])
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Delhi NCR Monitoring Map</h1>
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>
+      )}
       <div className="card p-0 overflow-hidden">
         <StationMap stations={stations} />
       </div>

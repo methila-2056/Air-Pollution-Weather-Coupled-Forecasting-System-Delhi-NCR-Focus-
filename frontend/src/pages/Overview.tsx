@@ -5,7 +5,7 @@ import ForecastChart from '../components/ForecastChart'
 import InversionPanel from '../components/InversionPanel'
 import StubblePlume from '../components/StubblePlume'
 import ExplainabilityPanel from '../components/ExplainabilityPanel'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation } from '../types'
 
 export default function Overview() {
   const [stations, setStations] = useState<Station[]>([])
@@ -18,22 +18,31 @@ export default function Overview() {
   const [plumeRisk, setPlumeRisk] = useState<PlumeRisk | null>(null)
   const [explanation, setExplanation] = useState<Explanation | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getStations().then(res => setStations(res.data)).catch(() => {})
+    getStations()
+      .then(res => setStations(res.data))
+      .catch(() => setStations([]))
   }, [])
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([
-      getCurrentAQI(selectedStation).then(r => setAqi(r.data)).catch(() => {}),
-      getForecast(selectedStation).then(r => setForecast(r.data)).catch(() => {}),
-      getWeather(selectedStation).then(r => setWeather(r.data)).catch(() => {}),
-      getInversion(selectedStation).then(r => setInversion(r.data)).catch(() => {}),
-      getFireActivity().then(r => setFire(r.data)).catch(() => {}),
-      getPlumeRisk().then(r => setPlumeRisk(r.data)).catch(() => {}),
-      getExplanation(selectedStation).then(r => setExplanation(r.data)).catch(() => {}),
-    ]).finally(() => setLoading(false))
+    setError(null)
+    Promise.allSettled([
+      getCurrentAQI(selectedStation).then(r => setAqi(r.data)),
+      getForecast(selectedStation).then(r => setForecast(r.data)),
+      getWeather(selectedStation).then(r => setWeather(r.data)),
+      getInversion(selectedStation).then(r => setInversion(r.data)),
+      getFireActivity().then(r => setFire(r.data)),
+      getPlumeRisk().then(r => setPlumeRisk(r.data)),
+      getExplanation(selectedStation).then(r => setExplanation(r.data)),
+    ]).then(results => {
+      const failures = results.filter(r => r.status === 'rejected')
+      if (failures.length === results.length) {
+        setError('Unable to reach the backend. Make sure the API server is running.')
+      }
+    }).finally(() => setLoading(false))
   }, [selectedStation])
 
   return (
@@ -52,6 +61,12 @@ export default function Overview() {
           {!stations.length && <option>Anand Vihar</option>}
         </select>
       </div>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">
+          {error}
+        </div>
+      )}
 
       {loading && <div className="text-center py-12 text-gray-400">Loading data...</div>}
 

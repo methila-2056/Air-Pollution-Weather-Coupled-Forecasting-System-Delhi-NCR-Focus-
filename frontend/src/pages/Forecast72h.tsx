@@ -8,9 +8,18 @@ export default function Forecast72h() {
   const [selectedStation, setSelectedStation] = useState('Anand Vihar')
   const [forecast, setForecast] = useState<ForecastPoint[]>([])
   const [pollutant, setPollutant] = useState<'aqi_pred' | 'pm25_pred' | 'pm10_pred' | 'o3_pred' | 'no2_pred'>('aqi_pred')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { getStations().then(r => setStations(r.data)).catch(() => {}) }, [])
-  useEffect(() => { getForecast(selectedStation).then(r => setForecast(r.data)).catch(() => {}) }, [selectedStation])
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    getForecast(selectedStation)
+      .then(r => { setForecast(r.data) })
+      .catch(() => setError('Failed to load forecast data'))
+      .finally(() => setLoading(false))
+  }, [selectedStation])
 
   const tabs = [
     { key: 'aqi_pred', label: 'AQI', color: '#3b82f6' },
@@ -28,6 +37,9 @@ export default function Forecast72h() {
           {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
         </select>
       </div>
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>
+      )}
       <div className="flex gap-2">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setPollutant(t.key as any)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${pollutant === t.key ? 'bg-accent-blue text-white' : 'bg-navy-800 text-gray-400 hover:text-white'}`}>
@@ -35,38 +47,44 @@ export default function Forecast72h() {
           </button>
         ))}
       </div>
-      <ForecastChart data={forecast} pollutant={pollutant} color={tabs.find(t => t.key === pollutant)?.color} />
-      <div className="card">
-        <h3 className="card-header">Forecast Table</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-gray-400 border-b border-navy-700">
-                <th className="text-left py-2">Horizon</th>
-                <th className="text-right py-2">PM2.5</th>
-                <th className="text-right py-2">PM10</th>
-                <th className="text-right py-2">O₃</th>
-                <th className="text-right py-2">NO₂</th>
-                <th className="text-right py-2">AQI</th>
-                <th className="text-right py-2">Category</th>
-              </tr>
-            </thead>
-            <tbody>
-              {forecast.map((f, i) => (
-                <tr key={i} className="border-b border-navy-700/50">
-                  <td className="py-2">+{f.horizon_hours}h</td>
-                  <td className="text-right py-2">{f.pm25_pred?.toFixed(1) ?? '--'}</td>
-                  <td className="text-right py-2">{f.pm10_pred?.toFixed(1) ?? '--'}</td>
-                  <td className="text-right py-2">{f.o3_pred?.toFixed(1) ?? '--'}</td>
-                  <td className="text-right py-2">{f.no2_pred?.toFixed(1) ?? '--'}</td>
-                  <td className="text-right py-2 font-bold">{f.aqi_pred ?? '--'}</td>
-                  <td className="text-right py-2">{f.aqi_category}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {loading ? (
+        <div className="text-center py-12 text-gray-400">Loading forecast...</div>
+      ) : (
+        <>
+          <ForecastChart data={forecast} pollutant={pollutant} color={tabs.find(t => t.key === pollutant)?.color} />
+          <div className="card">
+            <h3 className="card-header">Forecast Table</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-gray-400 border-b border-navy-700">
+                    <th className="text-left py-2">Horizon</th>
+                    <th className="text-right py-2">PM2.5</th>
+                    <th className="text-right py-2">PM10</th>
+                    <th className="text-right py-2">O₃</th>
+                    <th className="text-right py-2">NO₂</th>
+                    <th className="text-right py-2">AQI</th>
+                    <th className="text-right py-2">Category</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {forecast.map((f, i) => (
+                    <tr key={i} className="border-b border-navy-700/50">
+                      <td className="py-2">+{f.horizon_hours}h</td>
+                      <td className="text-right py-2">{f.pm25_pred?.toFixed(1) ?? '--'}</td>
+                      <td className="text-right py-2">{f.pm10_pred?.toFixed(1) ?? '--'}</td>
+                      <td className="text-right py-2">{f.o3_pred?.toFixed(1) ?? '--'}</td>
+                      <td className="text-right py-2">{f.no2_pred?.toFixed(1) ?? '--'}</td>
+                      <td className="text-right py-2 font-bold">{f.aqi_pred ?? '--'}</td>
+                      <td className="text-right py-2">{f.aqi_category}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

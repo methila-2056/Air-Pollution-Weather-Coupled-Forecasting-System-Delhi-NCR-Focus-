@@ -23,13 +23,16 @@ services:
       DATABASE_URL: postgresql://aerocast:aerocast_secret_2024@db:5432/aerocast_ncr
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://localhost
       NASA_FIRMS_MAP_KEY: ${NASA_FIRMS_MAP_KEY:-}
+      LIVE_REFRESH_ENABLED: "true"
+      LIVE_REFRESH_INTERVAL_HOURS: "3"
+      ENVIRONMENT: production
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./ml:/app/ml
-      - ./models:/app/models
-      - ./data:/app/data
+      - ./ml:/app/ml:ro
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
