@@ -105,3 +105,46 @@ advection of transported pollution. The `/api/grid/forecast` endpoint returns
 GeoJSON-style cells (lat/lon/AQI/category) rendered as a colour-coded heatmap
 with the monitoring stations overlaid (`/spatial` dashboard page).
 
+## 9. Numerical Dispersion Transport Core (WRF-Chem-style dynamical surrogate)
+
+Where §8 is *statistical* (interpolation of station forecasts), the
+**numerical core** (`ml/features/dispersion_solver.py`, service
+`backend/app/services/dispersion_service.py`) solves the actual transport
+equation on the same 36×46 NCR grid by **finite differences**, explicitly
+addressing the PS requirement to *"predict how stubble-burning plumes will
+disperse under prevailing weather"* and to dynamically interlink meteorology
+with pollution:
+
+```
+dC/dt = -u·dC/dx - v·dC/dy      wind advection (upwind flux, open lateral inflow)
+        + K_h·∇²C                horizontal turbulent diffusion
+        - (λ_dep + λ_wet)·C      dry deposition + wet scavenging
+        + E(x,y,t)               point (stubble fire FRP) + urban area sources
+```
+
+pipeline (`GET /api/dispersion/forecast?horizon_hours=72`):
+
+1. **Lateral boundary condition** — the latest persisted station AQI forecast
+   (IDW) seeds the initial field; the domain-time-mean concentration continuously
+   re-enters at the upwind boundary, keeping regional burden realistic over 72h.
+2. **Sources** — live VIIRS-scale stubble fires inside the NCR box are injected
+   as Gaussian point plumes proportional to `FRP`; the Delhi metro + NCR belt
+   receives a persistent urban emission rate balancing deposition/outflow.
+3. **Meteorology** — live PBL/wind/precipitation from `weather_readings` drive a
+   diurnal PBL cycle (shallow night, deep solar-noon) and per-hour advection.
+4. **Two-way coupling** — the resolved aerosol loading feeds back via
+   `corrected_pbl_height` / `boundary_stability_index` (coupling module):
+   elevated PM₂.₅ suppresses PBL growth and raises the stability-coupling index,
+   reducing lateral mixing and strengthening retention (chemistry → meteorology);
+   the resulting shallow, stable layer then increases pollutant trapping
+   (meteorology → chemistry).
+5. Output per hour: AQI grid frames, fire plume positions, PBL/stability/precip
+   + the four coupling diagnostics.
+
+Numerics: explicit upwind advection with CFL-safe adaptive step
+(`dt = 0.5·dx/max_wind`, ≈277 s at 4 m/s), 5-point diffusive operator with
+reflecting interior + open outflow boundaries, non-negativity preserving
+(120+ test-green). The solver integrates a full 72-hour horizon in <1 s
+(pure vectorised numpy), so the `/spatial` dashboard can switch between the
+statistical grid and the live numerical field, overlaying fire plumes.
+

@@ -8,8 +8,11 @@
 > (aerosol AOD → solar attenuation → PBL suppression → stability feedback),
 > exposed via `/api/coupling/{station}`, plus a **time-stepped online coupled
 > forecast loop** (`/api/forecast/coupled`), **SO2 + CO** coverage (all six
-> criteria pollutants), and a **high-resolution gridded NCR spatial surface**
-> (`/api/grid/forecast`, `/spatial` dashboard page).
+> criteria pollutants), a **high-resolution gridded NCR spatial surface**
+> (`/api/grid/forecast`, `/spatial` dashboard page), and a **numerical
+> advection–diffusion dispersion core** (`/api/dispersion/forecast`) that
+> explicitly models how stubble-burning plumes disperse under prevailing
+> weather over 72 h with aerosol↔PBL feedback.
 
 ## Architecture
 

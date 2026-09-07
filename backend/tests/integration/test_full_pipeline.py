@@ -283,3 +283,42 @@ class TestForecastCompletePollutantSet:
         assert "so2_pred" in f and "co_pred" in f
         assert f["so2_pred"] > 0
         assert f["co_pred"] > 0
+
+
+class TestDispersionForecast:
+    def test_dispersion_forecast_endpoint(self, client, db_session):
+        client.post("/api/forecast/coupled", json={"station_name": "Anand Vihar", "horizons": [1, 6, 12, 24, 48, 72]})
+        resp = client.get("/api/dispersion/forecast?horizon_hours=24&start_hour=8")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["mode"] == "numerical_advection_diffusion"
+        assert body["horizon_hours"] in (24, 72)
+        assert len(body["frames"]) >= 6
+        assert body["fire_count"] >= 0
+        frame = body["frames"][0]
+        assert {"hour", "aqi_mean", "aqi_max", "coupling", "cells"} <= set(frame)
+        assert {"stability_coupling_index", "corrected_pbl_height"} <= set(frame["coupling"])
+        assert len(frame["cells"]) > 0
+        for cell in frame["cells"][:5]:
+            assert {"lat", "lon", "aqi", "aqi_category"} <= set(cell)
+            assert 0 <= cell["aqi"] <= 500
+
+    def test_dispersion_forecast_with_no_surface(self, client, db_session):
+        resp = client.get("/api/dispersion/forecast?horizon_hours=24")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["frames"] == []
+        assert "error" in body
+
+    def test_dispersion_forecast_72h_evolution(self, client, db_session):
+        client.post("/api/forecast/generate", json={"station_name": "Dwarka"})
+        resp = client.get("/api/dispersion/forecast?horizon_hours=72&start_hour=23")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body["frames"]) == 72
+        means = [f["aqi_mean"] for f in body["frames"]]
+        assert all(0 <= m <= 500 for m in means)
+        assert all(int(f["precip_mm"]) >= 0 for f in body["frames"])
+        hours_of_day = {f["hour_of_day"] for f in body["frames"]}
+        assert hours_of_day  # diurnal cycle present
+        assert all(0 <= h <= 23 for h in hours_of_day)

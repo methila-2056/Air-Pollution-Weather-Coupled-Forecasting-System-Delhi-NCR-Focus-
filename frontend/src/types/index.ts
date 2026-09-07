@@ -86,6 +86,38 @@ export interface GridForecast {
   extent: { lats_min: number; lats_max: number; lons_min: number; lons_max: number }
 }
 
+export interface DispersionFrame {
+  hour: number
+  hour_of_day: number
+  wind_speed: number
+  wind_dir_deg: number
+  pbl_height: number
+  precip_mm: number
+  coupling: {
+    mean_pm25: number
+    stability_coupling_index: number
+    pbl_suppression_factor: number
+    corrected_pbl_height: number
+  }
+  aqi_mean: number
+  aqi_max: number
+  cells: GridCell[]
+}
+
+export interface DispersionForecast {
+  mode: string
+  horizon_hours: number
+  start_hour: number
+  domain: Record<string, number>
+  step_deg: number
+  wx: { wind_speed: number; wind_direction: number; pbl_height: number; precipitation: number }
+  fire_count: number
+  fires: Array<{ lat: number; lon: number; frp: number; confidence: string | null; satellite: string | null }>
+  dt_used: number
+  steps_per_hour: number
+  frames: DispersionFrame[]
+}
+
 export interface WeatherData {
   station: string
   timestamp: string
