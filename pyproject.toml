@@ -30,10 +30,37 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.6.0",
 ]
+
+[project.scripts]
+aerocast-dev = "scripts.run_dev:main"
+aerocast-env-check = "scripts.environment_check:main"
+aerocast-evaluate = "scripts.evaluate_models:main"
 
 [tool.setuptools.packages.find]
 include = ["ml*", "backend*"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E203", "E501"]
+
+[tool.coverage.run]
+source = ["backend", "ml"]
+omit = ["*/tests/*", "*/scripts/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
