@@ -1,10 +1,18 @@
 import os
+import sys
 import logging
 import joblib
 import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta
 from ..services.aqi_calculator import calculate_aqi, get_dominant_pollutant
 from ..utils.helpers import haversine_distance, is_winter, get_season
+
+# Make the repo-root `ml` feature-engineering package importable from the backend.
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 logger = logging.getLogger("aerocast.forecast")
 
@@ -162,66 +170,122 @@ def _fire_features(station_lat: float, station_lon: float, fires) -> dict:
         "fire_impact_score": round(min(1.0, impact / 1000.0), 4),
     }
 
-def build_features_from_db(db, station_id: int) -> dict:
-    from ..models.db_models import Station, PollutionReading, WeatherReading, FireReading
+def _flush_json_value(v):
+    """Coerce numpy/pandas values to plain JSON-safe python numbers."""
+    import math
+    if v is None:
+        return 0.0
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return f if math.isfinite(f) else 0.0
 
-    features = {name: 0.0 for name in FEATURE_NAMES}
-    features["season"] = "winter"
+
+def build_features_from_db(db, station_id: int) -> dict:
+    """Reconstruct the true ML feature vector for a station.
+
+    Queries the station's recent hourly pollution + weather history from the
+    database (the same schema the training pipeline consumes) and runs the
+    identical feature-engineering functions used at training time, so the API
+    feeds trained models the exact feature names/values they expect.
+    """
+    from ..models.db_models import Station, PollutionReading, WeatherReading
 
     station = db.query(Station).filter(Station.id == station_id).first()
-    station_lat = station.latitude if station else 28.6139
-    station_lon = station.longitude if station else 77.2090
+    station_name = station.name.replace(" ", "_") if station else "Anand_Vihar"
 
-    poll = (
+    poll_rows = (
         db.query(PollutionReading)
         .filter(PollutionReading.station_id == station_id)
         .order_by(PollutionReading.timestamp.desc())
-        .first()
+        .limit(120)
+        .all()
     )
-    if poll:
-        features.update({
-            "pm25_lag1": poll.pm25 or 0.0,
-            "pm10_lag1": poll.pm10 or 0.0,
-            "o3_lag1": poll.o3 or 0.0,
-            "no2_lag1": poll.no2 or 0.0,
-            "so2_lag1": poll.so2 or 0.0,
-            "co_lag1": poll.co or 0.0,
-            "aqi_lag1": poll.aqi or 0.0,
-        })
-        ts = poll.timestamp
-    else:
-        ts = datetime.utcnow()
-
-    weather = (
+    wx_rows = (
         db.query(WeatherReading)
         .filter(WeatherReading.station_id == station_id)
         .order_by(WeatherReading.timestamp.desc())
-        .first()
+        .limit(120)
+        .all()
     )
-    if weather:
-        pbl = weather.pbl_height or 500.0
-        features.update({
-            "temperature": weather.temperature or 0.0,
-            "humidity": weather.humidity or 0.0,
-            "pressure_msl": weather.pressure_msl or 0.0,
-            "wind_speed": weather.wind_speed or 0.0,
-            "wind_direction": weather.wind_direction or 0.0,
-            "precipitation": weather.precipitation or 0.0,
-            "cloud_cover": weather.cloud_cover or 0.0,
-            "pbl_height": pbl,
-            "inversion_strength": round(max(0.0, (500 - pbl) / 500), 4),
-        })
+    if not poll_rows and not wx_rows:
+        return {name: 0.0 for name in FEATURE_NAMES}
 
-    fires = db.query(FireReading).limit(500).all()
-    features.update(_fire_features(station_lat, station_lon, fires))
+    poll = pd.DataFrame([{
+        "timestamp": p.timestamp, "pm25": p.pm25, "pm10": p.pm10,
+        "o3": p.o3, "no2": p.no2, "so2": p.so2, "co": p.co,
+    } for p in poll_rows])
+    wx = pd.DataFrame([{
+        "timestamp": w.timestamp, "temperature": w.temperature,
+        "humidity": w.humidity, "pressure_msl": w.pressure_msl,
+        "surface_pressure": w.surface_pressure, "wind_speed": w.wind_speed,
+        "wind_direction": w.wind_direction, "precipitation": w.precipitation,
+        "cloud_cover": w.cloud_cover, "pbl_height": w.pbl_height,
+    } for w in wx_rows])
 
-    if ts.tzinfo is not None:
-        ts = ts.astimezone().replace(tzinfo=None)
-    features["hour"] = ts.hour
-    features["is_winter"] = int(is_winter(ts))
-    features["day_of_year"] = ts.timetuple().tm_yday
-    features["season"] = get_season(ts)
+    combined = poll
+    if not wx.empty and not poll.empty:
+        combined = poll.merge(wx, on="timestamp", how="outer", suffixes=("", "_wx"))
 
+    if combined.empty:
+        return {name: 0.0 for name in FEATURE_NAMES}
+
+    combined["timestamp"] = pd.to_datetime(combined["timestamp"], utc=True, errors="coerce")
+    combined["station"] = station_name
+    lat = station.latitude if station else 28.6139
+    lon = station.longitude if station else 77.2090
+    combined["latitude"] = lat
+    combined["longitude"] = lon
+    combined = combined.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
+
+    # Small helper module import (already installed; kept local to avoid heavy top-level import)
+    from ml.features.feature_engineering import (
+        add_temporal_features, add_pollution_lags, add_rolling_means,
+        add_rolling_std, add_wind_decomposition, add_temperature_lags,
+        add_humidity_lags, add_pollution_rate_of_change, add_composite_features,
+    )
+    from ml.features.inversion import add_inversion_features
+    from ml.features.fire_impact import add_fire_features
+
+    eng = add_temporal_features(combined)
+    eng = add_pollution_lags(eng)
+    eng = add_rolling_means(eng)
+    eng = add_rolling_std(eng)
+    eng = add_wind_decomposition(eng)
+    eng = add_temperature_lags(eng)
+    eng = add_humidity_lags(eng)
+    eng = add_inversion_features(eng)
+
+    # Real fire features from the FIRMS records stored in the DB
+    from ..models.db_models import FireReading
+    fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(2000).all()
+    if fires:
+        fires_df = pd.DataFrame([{
+            "lat": f.latitude, "lon": f.longitude,
+            "frp": f.frp or 1.0,
+            "acq_timestamp": f.acq_date,
+        } for f in fires])
+        eng = add_fire_features(eng, fires_df=fires_df)
+        fire_count_latest = int((eng.iloc[-1] if not eng.empty else pd.Series()).get("fire_count", 0) or 0)
+    else:
+        eng = add_fire_features(eng)
+        fire_count_latest = 0
+
+    eng = add_pollution_rate_of_change(eng)
+    eng = add_composite_features(eng)
+
+    latest = eng.iloc[-1]
+    features = {}
+    for col in eng.columns:
+        if col in ("timestamp", "station", "latitude", "longitude"):
+            continue
+        features[col] = _flush_json_value(latest.get(col))
+
+    # Keep aliases used by fallbacks / AQI computation
+    features.setdefault("fire_impact_score", min(1.0, fire_count_latest / 50.0))
+    features["day_of_year"] = features.get("day_of_year", 1)
+    features["is_winter"] = int(_flush_json_value(features.get("is_winter", 0)))
     return features
 
 def get_weather_context(db, station_id: int) -> dict:

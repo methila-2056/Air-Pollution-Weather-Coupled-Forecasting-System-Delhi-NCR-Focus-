@@ -182,10 +182,13 @@ def add_fire_features(
     """
     df = df.copy()
 
-    df["fire_count"] = 0
-    df["fire_impact_score"] = 0.0
-    df["nearest_fire_distance"] = max_distance_km + 1.0
-    df["wind_aligned_fire_count"] = 0
+    for col in ["fire_count", "fire_impact_score", "nearest_fire_distance", "wind_aligned_fire_count"]:
+        if col not in df.columns:
+            df[col] = 0
+    df["fire_impact_score"] = df.get("fire_impact_score", pd.Series(0.0, index=df.index))
+    df["nearest_fire_distance"] = df.get("nearest_fire_distance", pd.Series(max_distance_km + 1.0, index=df.index))
+    df["wind_aligned_fire_count"] = df.get("wind_aligned_fire_count", pd.Series(0, index=df.index))
+    df["fire_count"] = df.get("fire_count", pd.Series(0, index=df.index))
 
     if fires_df is None or fires_df.empty:
         return df

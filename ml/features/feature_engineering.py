@@ -23,12 +23,37 @@ STD_WINDOWS = [6, 24]
 TEMPERATURE_LAGS = [1, 6, 24]
 HUMIDITY_LAGS = [1, 6, 24]
 
+# Standardize column names coming from the raw Open-Meteo weather CSVs
+# (build_dataset.py) onto the canonical names used across the ML pipeline.
+COLUMN_STANDARDIZATION = {
+    "boundary_layer_height": "pbl_height",
+    "temperature_2m": "temperature",
+    "relative_humidity_2m": "humidity",
+    "wind_speed_10m": "wind_speed",
+    "wind_direction_10m": "wind_direction",
+    "pressure_msl": "pressure_msl",
+}
+
 SEASON_MAP = {
     12: "winter", 1: "winter", 2: "winter",
     3: "spring", 4: "spring", 5: "spring",
     6: "summer", 7: "summer", 8: "summer",
     9: "autumn", 10: "autumn", 11: "autumn",
 }
+
+
+def standardize_column_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename raw Open-Meteo columns to canonical ML-feature names.
+
+    Maps e.g. boundary_layer_height -> pbl_height, temperature_2m -> temperature
+    so downstream feature builders (inversion, ventilation, fire impact) and the
+    model inference layer see consistent, documented column names.
+    """
+    df = df.copy()
+    rename = {k: v for k, v in COLUMN_STANDARDIZATION.items() if k in df.columns}
+    if rename:
+        df.rename(columns=rename, inplace=True)
+    return df
 
 
 def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -243,6 +268,8 @@ def run_feature_engineering(
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
         df.sort_values(["station", "timestamp"], inplace=True)
         df.reset_index(drop=True, inplace=True)
+
+    df = standardize_column_names(df)
 
     print("Running feature engineering pipeline ...")
     n_before = len(df.columns)

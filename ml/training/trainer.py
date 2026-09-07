@@ -56,10 +56,20 @@ def get_feature_columns(df: pd.DataFrame) -> list:
 
 
 def create_target_columns(df: pd.DataFrame, pollutant: str, horizons: list = HORIZONS) -> pd.DataFrame:
-    """Create future-observation target columns for each forecast horizon."""
+    """Create future-observation target columns for each forecast horizon.
+
+    Targets are shifted *within each station's time series* so that a row
+    (station S, time T) is labelled with S's own observation at T+h — never
+    another station's reading at the same hour.
+    """
     df = df.copy()
-    for h in horizons:
-        df[f"target_{pollutant}_t+{h}"] = df[pollutant].shift(-h)
+    if "station" in df.columns:
+        grouped = df.groupby("station", group_keys=False)[pollutant]
+        for h in horizons:
+            df[f"target_{pollutant}_t+{h}"] = grouped.shift(-h)
+    else:
+        for h in horizons:
+            df[f"target_{pollutant}_t+{h}"] = df[pollutant].shift(-h)
     return df
 
 
@@ -97,21 +107,24 @@ def train_single_model(
     X_val: np.ndarray, y_val: np.ndarray,
     model_type: str,
     horizon: int,
+    feature_names: Optional[list] = None,
 ) -> tuple:
     """Train a single model and return (model_wrapper, val_metrics)."""
     if model_type == "persistence":
         model = PersistenceBaseline(horizon=horizon)
     elif model_type == "random_forest":
-        model = RandomForestModel(n_estimators=200, max_depth=15)
+        model = RandomForestModel(n_estimators=150, max_depth=12)
     elif model_type == "xgboost":
         model = XGBoostModel(
-            n_estimators=400, max_depth=7, learning_rate=0.08,
+            n_estimators=250, max_depth=7, learning_rate=0.08,
             subsample=0.8, colsample_bytree=0.8,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
     model.fit(X_train, y_train)
+    if feature_names is not None:
+        model.feature_names_ = list(feature_names)
     y_val_pred = model.predict(X_val)
     val_metrics = compute_metrics(y_val, y_val_pred)
     return model, val_metrics
@@ -236,7 +249,7 @@ def train_all(
                 print(f"    t+{horizon}h: train={len(y_tr)}, val={len(y_v)}, test={len(y_te)}")
 
                 model, val_metrics = train_single_model(
-                    X_tr, y_tr, X_v, y_v, model_type, horizon
+                    X_tr, y_tr, X_v, y_v, model_type, horizon, feature_names=feature_cols
                 )
                 print(f"      Val  MAE={val_metrics['mae']:.2f} RMSE={val_metrics['rmse']:.2f} R2={val_metrics['r2']:.3f}")
 
