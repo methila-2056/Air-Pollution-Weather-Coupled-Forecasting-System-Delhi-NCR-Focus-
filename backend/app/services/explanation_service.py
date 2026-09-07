@@ -25,6 +25,12 @@ FEATURE_DESCRIPTIONS = {
     "day_of_year": ("Day of year", "Seasonal progression affects baseline pollution"),
     "aqi_lag1": ("Previous-hour AQI", "Persistent poor air continues into the forecast window"),
     "season": ("Season", "Season conditions the typical pollution regime"),
+    "aod_est": ("Estimated aerosol optical depth", "Aerosol loading is attenuating solar radiation"),
+    "radiation_transmittance": ("Surface radiation transmittance", "Aerosols are reducing surface solar heating"),
+    "pbl_suppression_factor": ("PBL suppression by aerosols", "Aerosol radiative forcing is suppressing boundary-layer growth"),
+    "corrected_pbl_height": ("Aerosol-corrected PBL height", "Effective mixing layer is reduced by aerosol feedback"),
+    "stability_coupling_index": ("Aerosol-PBL stability coupling", "Coupled aerosol-PBL feedback is stabilising the layer"),
+    "feedback_multiplier": ("Two-way feedback multiplier", "Stable coupled system is retaining pollutants near surface"),
 }
 
 FALLBACK_WEIGHTS = [
@@ -125,6 +131,18 @@ def generate_natural_language(features: dict, top_features: list[dict], predicti
             lines.append("Active stubble burning in Punjab/Haryana is contributing regional smoke.")
         elif name == "humidity" and val > 80:
             lines.append("High humidity is promoting secondary aerosol formation.")
+    stability = features.get("stability_coupling_index")
+    if isinstance(stability, (int, float)) and stability:
+        if stability >= 0.6:
+            lines.append(
+                "Aerosol-PBL coupling is strong: the aerosol layer is suppressing the boundary layer, "
+                "which traps more PM2.5 at the surface and feeds back into even higher aerosol loading."
+            )
+        elif stability >= 0.35:
+            lines.append(
+                "Aerosol-PBL coupling is active: reduced vertical mixing from the coupled feedback is "
+                "moderately enhancing pollutant retention."
+            )
     if prediction:
         pts = []
         for key in ("pm25_pred", "pm10_pred", "o3_pred", "no2_pred"):

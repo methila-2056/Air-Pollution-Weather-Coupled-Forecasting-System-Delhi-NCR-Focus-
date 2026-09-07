@@ -173,3 +173,40 @@ class TestDataQuality:
         assert body["station_count"] == 5
         assert "tables" in body
         assert "recommendations" in body
+
+
+class TestCouplingFeedback:
+    def test_coupling_endpoint_structure(self, client, db_session):
+        resp = client.get("/api/coupling/Anand Vihar")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["station"] == "Anand Vihar"
+        diag = body["diag"]
+        assert {"aod_est", "radiation_transmittance", "pbl_suppression_factor",
+                "corrected_pbl_height", "stability_coupling_index",
+                "feedback_multiplier", "coupling_strength"} <= set(diag)
+        assert 0 <= diag["aod_est"] <= 2.5
+        assert 0 < diag["pbl_suppression_factor"] <= 1.0
+        assert 0 <= diag["stability_coupling_index"] <= 1.0
+        assert isinstance(body["narrative"], list) and body["narrative"]
+
+    def test_coupling_high_pm25_drives_stronger_feedback(self):
+        from ml.features.coupling import coupling_feedback_score
+        heavy = coupling_feedback_score(pm25=250, pbl_height=400, wind_speed=1, hour=13)
+        light = coupling_feedback_score(pm25=30, pbl_height=800, wind_speed=6, hour=13)
+        assert heavy["stability_coupling_index"] > light["stability_coupling_index"]
+        assert heavy["pbl_suppression_factor"] < light["pbl_suppression_factor"]
+        assert heavy["feedback_multiplier"] > light["feedback_multiplier"]
+
+    def test_coupling_features_in_feature_vector(self, client, db_session):
+        from app.database import SessionLocal
+        from app.models.db_models import Station
+        from app.services.forecast_service import build_features_from_db
+        with SessionLocal() as session:
+            station = session.query(Station).filter(Station.name == "Anand Vihar").first()
+            features = build_features_from_db(session, station.id)
+            assert features["stability_coupling_index"] != 0.0
+            assert 0.0 <= features["pbl_suppression_factor"] <= 1.0
+            assert features["feedback_multiplier"] > 1.0
+            assert 0.0 <= features["aod_est"] <= 2.5
+        session.close()

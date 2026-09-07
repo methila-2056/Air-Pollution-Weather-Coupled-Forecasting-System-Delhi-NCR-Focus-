@@ -40,3 +40,27 @@ Each alert carries level (WATCH / WARNING / SEVERE), factors, and recommendation
 ## 6. Plume Transport Risk
 
 Risk score estimates the likelihood that regional stubble fires impact Delhi NCR, based on fire count, distance, FRP intensity, and prevailing wind direction (NW → SE during the post-monsoon/winter season).
+
+## 7. Two-Way Weather–Chemistry Coupling Feedback
+
+A core requirement of SIH26082 is the coupled feedback between meteorology and
+chemistry. The system encodes the aerosol–radiation–boundary-layer feedback loop
+(`ml/features/coupling.py`):
+
+**Forward path (meteorology → chemistry):** PBL height, temperature, wind,
+humidity, and inversion strength drive pollutant dispersion / accumulation.
+These already feed the ML forecasters as features.
+
+**Backward path (chemistry → meteorology):**
+- AOD is estimated from surface PM2.5 loading.
+- Aerosols attenuate incoming solar radiation (Beer–Lambert transmittance).
+- Reduced surface heating suppresses daytime PBL growth (PBL suppression factor).
+- A suppressed PBL + light winds → elevated stability coupling index.
+- High stability → higher pollutant retention → further PM2.5 accumulation
+  (positive feedback), captured by the feedback multiplier.
+
+The module exposes these corrections (`corrected_pbl_height`,
+`pbl_suppression_factor`, `radiation_transmittance`, `aod_est`,
+`stability_coupling_index`, `feedback_multiplier`) as engineered features at
+training time AND in live inference, so the ML forecasters can learn the coupled
+dynamics. A dedicated `/api/coupling/{station}` endpoint reports the diagnostics with a natural-language narrative, surfaced in the dashboard's Weather↔Chemistry panel.

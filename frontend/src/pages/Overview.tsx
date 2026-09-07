@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { getStations, getCurrentAQI, getForecast, getWeather, getInversion, getFireActivity, getPlumeRisk, getExplanation } from '../api/client'
+import { getStations, getCurrentAQI, getForecast, getWeather, getInversion, getFireActivity, getPlumeRisk, getExplanation, getCoupling } from '../api/client'
 import AQICard from '../components/AQICard'
 import ForecastChart from '../components/ForecastChart'
 import InversionPanel from '../components/InversionPanel'
+import CouplingPanel from '../components/CouplingPanel'
 import StubblePlume from '../components/StubblePlume'
 import ExplainabilityPanel from '../components/ExplainabilityPanel'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, CouplingData } from '../types'
 
 export default function Overview() {
   const [stations, setStations] = useState<Station[]>([])
@@ -17,6 +18,7 @@ export default function Overview() {
   const [fire, setFire] = useState<FireActivity | null>(null)
   const [plumeRisk, setPlumeRisk] = useState<PlumeRisk | null>(null)
   const [explanation, setExplanation] = useState<Explanation | null>(null)
+  const [coupling, setCoupling] = useState<CouplingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,6 +39,7 @@ export default function Overview() {
       getFireActivity().then(r => setFire(r.data)),
       getPlumeRisk().then(r => setPlumeRisk(r.data)),
       getExplanation(selectedStation).then(r => setExplanation(r.data)),
+      getCoupling(selectedStation).then(r => setCoupling(r.data)),
     ]).then(results => {
       const failures = results.filter(r => r.status === 'rejected')
       if (failures.length === results.length) {
@@ -94,6 +97,11 @@ export default function Overview() {
       <div className="grid grid-cols-2 gap-6">
         <StubblePlume data={plumeRisk} />
         <ExplainabilityPanel data={explanation} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+        <CouplingPanel data={coupling} />
+        <InversionPanel data={inversion} />
       </div>
     </div>
   )

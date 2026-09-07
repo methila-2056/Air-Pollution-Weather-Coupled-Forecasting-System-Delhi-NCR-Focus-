@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric, CouplingData } from '../types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -15,5 +15,6 @@ export const getInversion = (station: string) => api.get<InversionData>(`/invers
 export const getFireActivity = () => api.get<FireActivity>('/fire-activity')
 export const getPlumeRisk = () => api.get<PlumeRisk>('/plume-risk')
 export const getExplanation = (station: string) => api.get<Explanation>(`/explanation/${station}`)
+export const getCoupling = (station: string) => api.get<CouplingData>(`/coupling/${station}`)
 export const getAlerts = () => api.get<Alert[]>('/alerts')
 export const getModelMetrics = () => api.get<ModelMetric[]>('/model/metrics')

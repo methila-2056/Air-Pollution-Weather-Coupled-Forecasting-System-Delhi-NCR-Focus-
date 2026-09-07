@@ -14,6 +14,7 @@ import pandas as pd
 
 from .inversion import add_inversion_features
 from .fire_impact import add_fire_features
+from .coupling import add_coupling_features
 
 
 POLLUTANT_COLS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
@@ -237,6 +238,12 @@ FEATURE_DOCUMENTATION = {
     "inversion_category": "none/weak/moderate/strong",
     "fire_impact_score": "Normalized fire impact weighted by wind alignment (0-1)",
     "wind_aligned_fire_count": "Count of fires that are upwind",
+    "aod_est": "Estimated aerosol optical depth from PM2.5 loading (chemistry->meteorology forcing)",
+    "radiation_transmittance": "Fraction of solar radiation reaching surface after aerosol attenuation",
+    "pbl_suppression_factor": "Aerosol-induced multiplier on PBL height (daytime strongest)",
+    "corrected_pbl_height": "Aerosol-suppressed effective PBL height (m)",
+    "stability_coupling_index": "Composite aerosol/PBL/wind trapping stability metric (0-1)",
+    "feedback_multiplier": "Two-way feedback retention multiplier (>1 = more trapped)",
 }
 
 
@@ -303,6 +310,7 @@ def run_feature_engineering(
 
     df = add_pollution_rate_of_change(df)
     df = add_composite_features(df)
+    df = add_coupling_features(df)
 
     n_after = len(df.columns)
     print(f"\nFeature engineering complete: {n_before} -> {n_after} columns (+{n_after - n_before} features)")

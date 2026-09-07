@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { getStations, getWeather, getInversion } from '../api/client'
+import { getStations, getWeather, getInversion, getCoupling } from '../api/client'
 import InversionPanel from '../components/InversionPanel'
-import type { Station, WeatherData, InversionData } from '../types'
+import CouplingPanel from '../components/CouplingPanel'
+import type { Station, WeatherData, InversionData, CouplingData } from '../types'
 
 export default function Atmosphere() {
   const [stations, setStations] = useState<Station[]>([])
   const [selected, setSelected] = useState('Anand Vihar')
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [inversion, setInversion] = useState<InversionData | null>(null)
+  const [coupling, setCoupling] = useState<CouplingData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { getStations().then(r => setStations(r.data)).catch(() => {}) }, [])
@@ -16,6 +18,7 @@ export default function Atmosphere() {
     Promise.allSettled([
       getWeather(selected).then(r => setWeather(r.data)),
       getInversion(selected).then(r => setInversion(r.data)),
+      getCoupling(selected).then(r => setCoupling(r.data)),
     ]).then(results => {
       if (results.every(r => r.status === 'rejected')) setError('Failed to load atmospheric data')
     })
@@ -37,7 +40,7 @@ export default function Atmosphere() {
         <div className="card"><p className="card-header">Pressure</p><p className="stat-value">{weather?.pressure_msl ?? '--'} hPa</p></div>
       </div>
       <div className="grid grid-cols-2 gap-6">
-        <InversionPanel data={inversion} />
+        <CouplingPanel data={coupling} />
         <div className="card">
           <h3 className="card-header">PBL Height & Ventilation</h3>
           <div className="space-y-4">
@@ -66,6 +69,17 @@ export default function Atmosphere() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-6">
+        <InversionPanel data={inversion} />
+        <div className="card">
+          <h3 className="card-header">Ventilation Index</h3>
+          <p className="text-sm text-gray-400">
+            Ventilation index = wind speed × PBL height. Low values indicate limited
+            atmospheric dilution capacity, which the aerosol-PBL coupling module
+            above further modulates.
+          </p>
         </div>
       </div>
     </div>

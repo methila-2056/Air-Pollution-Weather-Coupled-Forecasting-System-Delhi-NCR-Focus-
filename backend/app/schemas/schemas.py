@@ -87,6 +87,24 @@ class InversionResponse(BaseModel):
     inversion_strength: str
     trapping_risk: str
 
+class CouplingDiagnostics(BaseModel):
+    aod_est: float
+    radiation_transmittance: float
+    pbl_suppression_factor: float
+    corrected_pbl_height: float
+    stability_coupling_index: float
+    feedback_multiplier: float
+    coupling_strength: str
+
+class CouplingResponse(BaseModel):
+    station: str
+    timestamp: datetime
+    pm25: Optional[float]
+    pbl_height: Optional[float]
+    wind_speed: Optional[float]
+    diag: CouplingDiagnostics
+    narrative: List[str]
+
 class FireActivityResponse(BaseModel):
     total_fires: int
     high_confidence_fires: int

@@ -4,6 +4,10 @@
 
 > Problem Statement: SIH26082 | Ministry of Earth Sciences | NCMRWF
 
+> Includes a physics-informed **two-way weather–chemistry coupling** module
+> (aerosol AOD → solar attenuation → PBL suppression → stability feedback),
+> exposed via `/api/coupling/{station}` and the Weather↔Chemistry dashboard panel.
+
 ## Architecture
 
 ```
@@ -15,7 +19,7 @@ CPCB (Pollution) + Open-Meteo (Weather) + NASA FIRMS (Fire) + ERA5 (Atmosphere)
         ↓
     72-Hour Pollutant Forecast
         ↓
-    AQI Engine → Dashboard → Alerts → Explainability
+    AQI Engine → Dashboard → Alerts → Explainability → Coupling Feedback
 ```
 
 ## Quick Start

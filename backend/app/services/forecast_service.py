@@ -240,6 +240,7 @@ def build_features_from_db(db, station_id: int) -> dict:
     )
     from ml.features.inversion import add_inversion_features
     from ml.features.fire_impact import add_fire_features
+    from ml.features.coupling import add_coupling_features
 
     eng = add_temporal_features(combined)
     eng = add_pollution_lags(eng)
@@ -267,6 +268,7 @@ def build_features_from_db(db, station_id: int) -> dict:
 
     eng = add_pollution_rate_of_change(eng)
     eng = add_composite_features(eng)
+    eng = add_coupling_features(eng)
 
     latest = eng.iloc[-1]
     features = {}

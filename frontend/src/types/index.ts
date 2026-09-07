@@ -54,6 +54,26 @@ export interface InversionData {
   trapping_risk: string
 }
 
+export interface CouplingDiagnostics {
+  aod_est: number
+  radiation_transmittance: number
+  pbl_suppression_factor: number
+  corrected_pbl_height: number
+  stability_coupling_index: number
+  feedback_multiplier: number
+  coupling_strength: string
+}
+
+export interface CouplingData {
+  station: string
+  timestamp: string
+  pm25: number | null
+  pbl_height: number | null
+  wind_speed: number | null
+  diag: CouplingDiagnostics
+  narrative: string[]
+}
+
 export interface FireActivity {
   total_fires: number
   high_confidence_fires: number
