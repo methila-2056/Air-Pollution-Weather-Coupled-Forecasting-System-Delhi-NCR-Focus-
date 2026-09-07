@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric, CouplingData } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast } from '../types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -16,5 +16,8 @@ export const getFireActivity = () => api.get<FireActivity>('/fire-activity')
 export const getPlumeRisk = () => api.get<PlumeRisk>('/plume-risk')
 export const getExplanation = (station: string) => api.get<Explanation>(`/explanation/${station}`)
 export const getCoupling = (station: string) => api.get<CouplingData>(`/coupling/${station}`)
+export const generateCoupledForecast = (station: string, horizons?: number[]) =>
+  api.post<CoupledForecastResult>('/forecast/coupled', { station_name: station, horizons: horizons ?? [1, 6, 12, 24, 48, 72] })
+export const getGridForecast = (horizon = 24) => api.get<GridForecast>('/grid/forecast', { params: { horizon_hours: horizon } })
 export const getAlerts = () => api.get<Alert[]>('/alerts')
 export const getModelMetrics = () => api.get<ModelMetric[]>('/model/metrics')

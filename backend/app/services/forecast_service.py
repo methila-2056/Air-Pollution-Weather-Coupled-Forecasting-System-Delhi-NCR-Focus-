@@ -13,6 +13,8 @@ MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "models")
 
 DEFAULT_HORIZONS = [1, 6, 12, 24, 48, 72]
 
+ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
+
 FEATURE_NAMES = [
     "pm25_lag1", "pm10_lag1", "o3_lag1", "no2_lag1", "so2_lag1", "co_lag1",
     "temperature", "humidity", "pressure_msl", "wind_speed", "wind_direction",
@@ -106,6 +108,18 @@ def _fallback_no2(features: dict) -> float:
     disp = 1.0 + (features.get("wind_speed", 5) or 5) * 0.05
     return max(5.0, 48 / disp)
 
+def _fallback_so2(features: dict) -> float:
+    base = features.get("so2_lag1") or 15.0
+    disp = 1.0 + max(0.0, (features.get("wind_speed", 5) or 5) - 3.0) * 0.03
+    precip = features.get("precipitation", 0) or 0
+    washout = max(0.6, 1.0 - precip * 0.15)
+    return max(2.0, base * washout / disp)
+
+def _fallback_co(features: dict) -> float:
+    base = features.get("co_lag1") or 1.4
+    disp = 1.0 + (features.get("wind_speed", 5) or 5) * 0.04
+    return max(0.2, base / disp)
+
 def predict_pollutants(features: dict, horizons=None) -> list[dict]:
     if horizons is None:
         horizons = DEFAULT_HORIZONS
@@ -115,6 +129,8 @@ def predict_pollutants(features: dict, horizons=None) -> list[dict]:
         pm10_model = load_pollutant_model("pm10", h)
         o3_model = load_pollutant_model("o3", h)
         no2_model = load_pollutant_model("no2", h)
+        so2_model = load_pollutant_model("so2", h)
+        co_model = load_pollutant_model("co", h)
 
         pm25_pred = _model_predict(pm25_model, features)
         if pm25_pred is None:
@@ -128,10 +144,15 @@ def predict_pollutants(features: dict, horizons=None) -> list[dict]:
         no2_pred = _model_predict(no2_model, features)
         if no2_pred is None:
             no2_pred = _fallback_no2(features)
+        so2_pred = _model_predict(so2_model, features)
+        if so2_pred is None:
+            so2_pred = _fallback_so2(features)
+        co_pred = _model_predict(co_model, features)
+        if co_pred is None:
+            co_pred = _fallback_co(features)
 
         aqi_val, category, dominant = calculate_aqi(
-            pm25_pred, pm10_pred, o3_pred, no2_pred,
-            features.get("so2_lag1"), features.get("co_lag1"),
+            pm25_pred, pm10_pred, o3_pred, no2_pred, so2_pred, co_pred,
         )
         predictions.append({
             "horizon_hours": int(h),
@@ -139,6 +160,8 @@ def predict_pollutants(features: dict, horizons=None) -> list[dict]:
             "pm10_pred": round(pm10_pred, 1),
             "o3_pred": round(o3_pred, 1),
             "no2_pred": round(no2_pred, 1),
+            "so2_pred": round(so2_pred, 1),
+            "co_pred": round(co_pred, 2),
             "aqi_pred": aqi_val,
             "aqi_category": category,
             "dominant_pollutant": dominant,
@@ -333,6 +356,8 @@ def save_forecasts(db, station_id: int, predictions: list[dict], forecast_timest
             pm10_pred=p.get("pm10_pred"),
             o3_pred=p.get("o3_pred"),
             no2_pred=p.get("no2_pred"),
+            so2_pred=p.get("so2_pred"),
+            co_pred=p.get("co_pred"),
             aqi_pred=p.get("aqi_pred"),
             aqi_category=p.get("aqi_category"),
             dominant_pollutant=p.get("dominant_pollutant"),
@@ -351,3 +376,69 @@ def generate_forecast(db, station_id: int, horizons=None) -> tuple[list, list[di
     predictions = predict_pollutants(features, horizons)
     rows = save_forecasts(db, station_id, predictions)
     return rows, predictions
+
+
+def coupled_single_step(features: dict, horizon_hours: int) -> dict:
+    """Single-step hook used by the online coupling loop (horizon=1 stepping)."""
+    return predict_pollutants(features, horizons=[horizon_hours])[0]
+
+
+def generate_coupled_forecast(db, station_id: int, horizons=None) -> dict:
+    """Run the time-stepped two-way coupled forecast (SO2/CO + AQI included).
+
+    Returns {"coupled": [...], "uncoupled": [...], "feedback_path": [...]}.
+    The coupled points are persisted (coupling_mode != None).
+    """
+    from ml.features.coupling import corrected_pbl_height, coupling_feedback_score
+    from ml.features.coupled_loop import run_coupled_forecast as _run_coupled
+
+    horizons = horizons or DEFAULT_HORIZONS
+    features = build_features_from_db(db, station_id)
+    base_pbl = features.get("pbl_height") or 600.0
+
+    result = _run_coupled(
+        coupled_single_step, features, horizons,
+        start_hour=features.get("hour") or 12,
+    )
+
+    for point in result["coupled"]:
+        c = point["coupling"]
+        corrected = corrected_pbl_height(point["pm25_pred"], base_pbl, features.get("hour") or 12)
+        point["pbl_effective"] = round(corrected, 1)
+        point["coupling_stability"] = c["stability_coupling_index"]
+        point["coupling"] = c
+
+    return result
+
+
+def save_coupled_forecasts(db, station_id: int, points: list[dict], forecast_timestamp=None) -> list:
+    """Persist the coupled forecast points (including SO2/CO + coupling state)."""
+    from ..models.db_models import Forecast
+    base_ts = forecast_timestamp or datetime.utcnow()
+    rows = []
+    for p in points:
+        pbl = p.get("pbl_height") or p.get("pbl_effective") or 500.0
+        rows.append(Forecast(
+            station_id=station_id,
+            forecast_timestamp=base_ts + timedelta(hours=p["horizon_hours"]),
+            horizon_hours=p["horizon_hours"],
+            pm25_pred=p.get("pm25_pred"),
+            pm10_pred=p.get("pm10_pred"),
+            o3_pred=p.get("o3_pred"),
+            no2_pred=p.get("no2_pred"),
+            so2_pred=p.get("so2_pred"),
+            co_pred=p.get("co_pred"),
+            aqi_pred=p.get("aqi_pred"),
+            aqi_category=p.get("aqi_category"),
+            dominant_pollutant=p.get("dominant_pollutant"),
+            inversion_detected=1 if pbl < 500 else 0,
+            inversion_strength=round(max(0.0, (500 - pbl) / 500), 4),
+            pbl_height=pbl,
+            coupling_stability=p.get("coupling_stability"),
+            coupling_mode="coupled" if p.get("coupling_stability") is not None else None,
+        ))
+    db.add_all(rows)
+    db.commit()
+    for row in rows:
+        db.refresh(row)
+    return rows

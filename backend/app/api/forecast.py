@@ -35,9 +35,53 @@ def _to_forecast_point(f) -> ForecastPoint:
         pm10_pred=f.pm10_pred,
         o3_pred=f.o3_pred,
         no2_pred=f.no2_pred,
+        so2_pred=f.so2_pred,
+        co_pred=f.co_pred,
         aqi_pred=f.aqi_pred,
         aqi_category=f.aqi_category or "",
+        dominant_pollutant=f.dominant_pollutant,
+        coupling_stability=f.coupling_stability,
     )
+
+@router.post("/forecast/coupled", response_model=dict)
+def generate_coupled_forecast(
+    req: ForecastGenerateRequest = ForecastGenerateRequest(),
+    db: Session = Depends(get_db),
+):
+    """Run the time-stepped two-way coupled weather-chemistry forecast.
+
+    Steps meteorology + chemistry forward hour-by-hour, correcting PBL height,
+    temperature, and stability from the freshly forecast aerosol load, then
+    persists the coupled forecast points. Returns both the coupled series and
+    the direct (uncoupled) series for comparison, plus the feedback path.
+    """
+    if not req.horizons:
+        raise HTTPException(status_code=400, detail="horizons must be a non-empty list")
+    invalid = [h for h in req.horizons if not 1 <= h <= 72]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"invalid horizon values: {invalid}")
+
+    if req.station_name:
+        station = _station_or_404(db, req.station_name)
+    else:
+        station = db.query(Station).order_by(Station.id).first()
+        if not station:
+            raise HTTPException(status_code=503, detail="No stations available; seed the database first")
+
+    horizons = list(dict.fromkeys(req.horizons))
+    result = forecast_service.generate_coupled_forecast(db, station.id, horizons)
+    rows = forecast_service.save_coupled_forecasts(db, station.id, result["coupled"])
+
+    return {
+        "station": station.name,
+        "generated_at": datetime.utcnow(),
+        "horizons": horizons,
+        "mode": "coupled-two-way",
+        "coupled": result["coupled"],
+        "uncoupled": result["uncoupled"],
+        "feedback_path": result["feedback_path"],
+        "saved_points": len(rows),
+    }
 
 @router.post("/forecast/generate", response_model=ForecastGenerateResponse)
 def generate_forecast(
@@ -99,6 +143,8 @@ def generate_forecast(
                 pm10_pred=p["pm10_pred"],
                 o3_pred=p["o3_pred"],
                 no2_pred=p["no2_pred"],
+                so2_pred=p.get("so2_pred"),
+                co_pred=p.get("co_pred"),
                 aqi_pred=p["aqi_pred"],
                 aqi_category=p["aqi_category"],
             )

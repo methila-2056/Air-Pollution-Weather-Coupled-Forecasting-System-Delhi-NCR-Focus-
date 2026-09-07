@@ -8,6 +8,7 @@ import StubblePlumePage from './pages/StubblePlumePage'
 import AIExplanation from './pages/AIExplanation'
 import Alerts from './pages/Alerts'
 import ModelPerformancePage from './pages/ModelPerformancePage'
+import SpatialForecastPage from './pages/SpatialForecastPage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/explanation" element={<AIExplanation />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/performance" element={<ModelPerformancePage />} />
+        <Route path="/spatial" element={<SpatialForecastPage />} />
       </Routes>
     </Layout>
   )

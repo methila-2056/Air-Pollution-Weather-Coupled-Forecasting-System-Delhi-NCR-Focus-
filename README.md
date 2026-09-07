@@ -6,7 +6,10 @@
 
 > Includes a physics-informed **two-way weather–chemistry coupling** module
 > (aerosol AOD → solar attenuation → PBL suppression → stability feedback),
-> exposed via `/api/coupling/{station}` and the Weather↔Chemistry dashboard panel.
+> exposed via `/api/coupling/{station}`, plus a **time-stepped online coupled
+> forecast loop** (`/api/forecast/coupled`), **SO2 + CO** coverage (all six
+> criteria pollutants), and a **high-resolution gridded NCR spatial surface**
+> (`/api/grid/forecast`, `/spatial` dashboard page).
 
 ## Architecture
 

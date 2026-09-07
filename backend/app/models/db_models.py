@@ -66,12 +66,16 @@ class Forecast(Base):
     pm10_pred = Column(Float)
     o3_pred = Column(Float)
     no2_pred = Column(Float)
+    so2_pred = Column(Float)
+    co_pred = Column(Float)
     aqi_pred = Column(Integer)
     aqi_category = Column(String)
     dominant_pollutant = Column(String)
     inversion_detected = Column(Integer)
     inversion_strength = Column(Float)
     pbl_height = Column(Float)
+    coupling_stability = Column(Float)
+    coupling_mode = Column(String)
     __table_args__ = (
         Index("idx_forecast_station_time", "station_id", "forecast_timestamp"),
     )

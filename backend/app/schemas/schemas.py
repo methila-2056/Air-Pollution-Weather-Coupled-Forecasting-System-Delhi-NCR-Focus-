@@ -30,8 +30,20 @@ class ForecastPoint(BaseModel):
     pm10_pred: Optional[float]
     o3_pred: Optional[float]
     no2_pred: Optional[float]
+    so2_pred: Optional[float] = None
+    co_pred: Optional[float] = None
     aqi_pred: Optional[int]
     aqi_category: str
+    dominant_pollutant: Optional[str] = None
+    coupling_stability: Optional[float] = None
+
+class GridForecastPoint(BaseModel):
+    timestamp: datetime
+    horizon_hours: int
+    aqi_pred: Optional[int]
+    aqi_category: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 class ForecastGenerateRequest(BaseModel):
     station_name: Optional[str] = None

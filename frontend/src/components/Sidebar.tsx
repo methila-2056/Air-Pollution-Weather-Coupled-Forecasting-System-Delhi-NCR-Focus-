@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, TrendingUp, Map, Wind, Flame, Brain, Bell, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, TrendingUp, Map, Wind, Flame, Brain, Bell, BarChart3, Grid3x3 } from 'lucide-react'
 
 const links = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
   { to: '/forecast', icon: TrendingUp, label: '72-Hour Forecast' },
   { to: '/map', icon: Map, label: 'NCR Map' },
+  { to: '/spatial', icon: Grid3x3, label: 'Spatial Forecast' },
   { to: '/atmosphere', icon: Wind, label: 'Atmosphere' },
   { to: '/stubble', icon: Flame, label: 'Stubble Plume' },
   { to: '/explanation', icon: Brain, label: 'AI Explanation' },

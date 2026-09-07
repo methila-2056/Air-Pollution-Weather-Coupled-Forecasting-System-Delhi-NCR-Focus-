@@ -27,8 +27,63 @@ export interface ForecastPoint {
   pm10_pred: number | null
   o3_pred: number | null
   no2_pred: number | null
+  so2_pred?: number | null
+  co_pred?: number | null
   aqi_pred: number | null
   aqi_category: string
+  coupling_stability?: number | null
+}
+
+export interface CoupledDiagnostics {
+  aod_est: number
+  radiation_transmittance: number
+  pbl_suppression_factor: number
+  corrected_pbl_height: number
+  stability_coupling_index: number
+  feedback_multiplier: number
+}
+
+export interface CoupledForecastPoint extends ForecastPoint {
+  so2_pred: number | null
+  co_pred: number | null
+  coupling: CoupledDiagnostics
+  pbl_effective: number
+  coupling_stability: number
+}
+
+export interface CoupledForecastResult {
+  station: string
+  generated_at: string
+  horizons: number[]
+  mode: string
+  coupled: CoupledForecastPoint[]
+  uncoupled: ForecastPoint[]
+  feedback_path: Array<{
+    t_plus: number
+    pm25: number
+    pbl_effective: number
+    stability: number
+    feedback_multiplier: number
+  }>
+  saved_points: number
+}
+
+export interface GridCell {
+  lat: number
+  lon: number
+  aqi: number
+  aqi_category: string
+}
+
+export interface GridForecast {
+  horizon_hours: number
+  step_deg: number
+  bounds: Record<string, number>
+  wind_dir: number | null
+  wind_speed: number | null
+  cells: GridCell[]
+  grid_size: number[]
+  extent: { lats_min: number; lats_max: number; lons_min: number; lons_max: number }
 }
 
 export interface WeatherData {

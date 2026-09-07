@@ -21,11 +21,11 @@ from ..models.random_forest_model import RandomForestModel
 from ..models.persistence_baseline import PersistenceBaseline
 
 HORIZONS = [1, 6, 12, 24, 48, 72]
-ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2"]
+ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "models")
 DEFAULT_DATA_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "data", "processed", "featured_dataset.csv"
+    os.path.dirname(__file__), "..", "..", "data", "processed", "featured_dataset.csv"
 )
 
 
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument("--models", nargs="*", default=None,
                         help="Model types: persistence, random_forest, xgboost")
     parser.add_argument("--targets", nargs="*", default=None,
-                        help="Pollutants: pm25 pm10 o3 no2")
+                        help="Pollutants: pm25 pm10 o3 no2 so2 co")
     parser.add_argument("--horizons", nargs="*", type=int, default=None,
                         help="Forecast horizons in hours")
     args = parser.parse_args()

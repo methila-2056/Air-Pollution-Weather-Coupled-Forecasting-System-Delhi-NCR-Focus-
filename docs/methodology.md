@@ -64,3 +64,44 @@ The module exposes these corrections (`corrected_pbl_height`,
 `stability_coupling_index`, `feedback_multiplier`) as engineered features at
 training time AND in live inference, so the ML forecasters can learn the coupled
 dynamics. A dedicated `/api/coupling/{station}` endpoint reports the diagnostics with a natural-language narrative, surfaced in the dashboard's Weather↔Chemistry panel.
+
+### 7.1 Online Time-Stepped Coupled Forecast Loop
+
+Beyond the single-pass coupling diagnostics, the system runs a **sequential
+two-way coupled forecasting simulation** (`ml/features/coupled_loop.py`) that
+advances meteorology and chemistry together, hour by hour:
+
+```
+for each hour step h:
+    1. predict next-hour PM2.5/PM10/O3/NO2/SO2/CO from current features        (meteo -> chemistry)
+    2. derive aerosol radiative forcing from the freshly forecast PM2.5
+       (AOD, transmittance, PBL suppression, stability)                        (chemistry -> meteo)
+    3. correct PBL height, temperature, inversion strength, stability index
+    4. persist the corrected meteorology + advanced pollution lags
+       and re-enter the loop with the corrected fields                         (two-way feedback)
+```
+
+The result is a genuine online coupling simulation rather than a one-pass
+statistical forecast. The `/api/forecast/coupled` endpoint returns both the
+**coupled** series and the direct (**uncoupled**) series for skill comparison,
+plus the hour-by-hour `feedback_path` showing how the effective PBL height and
+stability index evolve as aerosol loading feeds back into the meteorology.
+
+### 7.2 Complete Criteria-Pollutant Forecast (SO2 + CO)
+
+The forecast now covers **all six CPCB criteria pollutants** — PM2.5, PM10, O3,
+NO2, SO2 and CO — each modelled across all horizons (1h–72h) and all model
+families (persistence, random forest, XGBoost). SO2/CO use their own lag,
+wind-dispersion and precipitation-washout physics in the coupled propagation.
+
+## 8. High-Resolution Spatial Forecasting
+
+`backend/app/services/grid_service.py` constructs a **~2.2 km gridded AQI
+surface** over the Delhi NCR domain (28.2–28.9°N, 76.6–77.5°E) at 0.02°
+resolution. Per-station coupled forecasts for a chosen horizon are interpolated
+by **inverse-distance weighting (IDW)**, then optionally biased downwind by the
+prevailing transport wind (`advective_shift`), so the plume surface reflects
+advection of transported pollution. The `/api/grid/forecast` endpoint returns
+GeoJSON-style cells (lat/lon/AQI/category) rendered as a colour-coded heatmap
+with the monitoring stations overlaid (`/spatial` dashboard page).
+

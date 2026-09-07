@@ -210,3 +210,76 @@ class TestCouplingFeedback:
             assert features["feedback_multiplier"] > 1.0
             assert 0.0 <= features["aod_est"] <= 2.5
         session.close()
+
+
+class TestCoupledForecastLoop:
+    def test_coupled_forecast_endpoint(self, client, db_session):
+        resp = client.post(
+            "/api/forecast/coupled",
+            json={"station_name": "Anand Vihar", "horizons": [1, 6, 12, 24, 48, 72]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["mode"] == "coupled-two-way"
+        assert len(body["coupled"]) == 6
+        assert len(body["uncoupled"]) == 6
+        assert body["feedback_path"]
+        for point in body["coupled"]:
+            assert point["horizon_hours"] in (1, 6, 12, 24, 48, 72)
+            assert point["so2_pred"] is not None or point["so2_pred"] is None
+            assert "coupling" in point
+            assert point["coupling_stability"] is not None
+
+    def test_coupled_vs_uncoupled_shapes(self, client, db_session):
+        resp = client.post(
+            "/api/forecast/coupled",
+            json={"station_name": "ITO", "horizons": [24, 72]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        coupled_ts = [p["horizon_hours"] for p in body["coupled"]]
+        uncoupled_ts = [p["horizon_hours"] for p in body["uncoupled"]]
+        assert coupled_ts == [24, 72]
+        assert uncoupled_ts == [24, 72]
+        assert len(body["feedback_path"]) == 72
+
+    def test_six_pollutants_present_in_coupled(self, client, db_session):
+        resp = client.post(
+            "/api/forecast/coupled",
+            json={"station_name": "Dwarka", "horizons": [6]},
+        )
+        assert resp.status_code == 200
+        point = resp.json()["coupled"][0]
+        for key in ("pm25_pred", "pm10_pred", "o3_pred", "no2_pred", "so2_pred", "co_pred"):
+            assert key in point
+        assert point["aqi_pred"] is not None
+
+
+class TestGridForecast:
+    def test_grid_forecast_endpoint(self, client, db_session):
+        client.post("/api/forecast/generate", json={"station_name": "Anand Vihar"})
+        resp = client.get("/api/grid/forecast?horizon_hours=24")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["horizon_hours"] == 24
+        assert body["grid_size"][0] > 0
+        assert "cells" in body
+        assert body["extent"]["lats_min"] <= body["extent"]["lats_max"]
+
+    def test_grid_overview(self, client, db_session):
+        client.post("/api/forecast/generate", json={"station_name": "Anand Vihar"})
+        resp = client.get("/api/grid/overview")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["stations"]) == 5
+        assert all(s["name"] for s in body["stations"])
+
+
+class TestForecastCompletePollutantSet:
+    def test_direct_forecast_includes_so2_co(self, client, db_session):
+        resp = client.post("/api/forecast/generate", json={"station_name": "RK Puram"})
+        assert resp.status_code == 200
+        f = resp.json()["forecasts"][0]
+        assert "so2_pred" in f and "co_pred" in f
+        assert f["so2_pred"] > 0
+        assert f["co_pred"] > 0

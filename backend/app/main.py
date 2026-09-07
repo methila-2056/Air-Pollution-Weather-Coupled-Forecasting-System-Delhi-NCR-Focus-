@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 
 from .config import get_settings
-from .database import engine, Base, SessionLocal, seed_data
-from .api import stations, forecast, weather, inversion, fire, explanation, alerts, model_metrics, coupling
+from .database import engine, Base, SessionLocal, seed_data, apply_migrations
+from .api import stations, forecast, weather, inversion, fire, explanation, alerts, model_metrics, coupling, grid
 
 logger = logging.getLogger("aerocast")
 settings = get_settings()
@@ -21,6 +21,7 @@ _refresh_stop = asyncio.Event()
 async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
+        apply_migrations()
         with SessionLocal() as db:
             seeded = seed_data(db)
             if seeded:
@@ -71,6 +72,7 @@ app.include_router(explanation.router, prefix="/api", tags=["Explanation"])
 app.include_router(alerts.router, prefix="/api", tags=["Alerts"])
 app.include_router(model_metrics.router, prefix="/api", tags=["Model Metrics"])
 app.include_router(coupling.router, prefix="/api", tags=["Coupling Feedback"])
+app.include_router(grid.router, prefix="/api", tags=["Grid Forecast"])
 
 @app.get("/health")
 def health():

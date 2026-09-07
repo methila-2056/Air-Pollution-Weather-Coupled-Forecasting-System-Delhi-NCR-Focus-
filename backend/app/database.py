@@ -29,6 +29,38 @@ def seed_data(db) -> int:
         return len(DEFAULT_STATIONS)
     return 0
 
+
+def apply_migrations():
+    """Lightweight additive schema migrations for existing SQLite databases.
+
+    `Base.metadata.create_all` only creates missing *tables*, not missing
+    *columns* on pre-existing tables. This adds any newly-introduced columns to
+    the `forecasts` table so upgraded databases stay compatible without a full
+    rebuild. Purely additive (ALTER TABLE ... ADD COLUMN); never destructive.
+    """
+    import sqlalchemy as sa
+    from sqlalchemy import inspect
+
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    inspector = inspect(engine)
+    if "forecasts" not in inspector.get_table_names():
+        return
+
+    existing_cols = {c["name"] for c in inspector.get_columns("forecasts")}
+    add_columns = {
+        "so2_pred": "FLOAT",
+        "co_pred": "FLOAT",
+        "coupling_stability": "FLOAT",
+        "coupling_mode": "VARCHAR",
+    }
+    with engine.begin() as conn:
+        for name, dtype in add_columns.items():
+            if name not in existing_cols:
+                conn.execute(sa.text(f"ALTER TABLE forecasts ADD COLUMN {name} {dtype}"))
+
+
 def get_db():
     db = SessionLocal()
     try:
