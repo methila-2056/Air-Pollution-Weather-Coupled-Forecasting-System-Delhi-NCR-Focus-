@@ -10,6 +10,24 @@ class StationResponse(BaseModel):
     longitude: float
     city: str
 
+class StationAQISummary(BaseModel):
+    name: str
+    aqi: Optional[int]
+    aqi_category: str
+    dominant_pollutant: Optional[str]
+
+class SummaryResponse(BaseModel):
+    generated_at: datetime
+    stations: int
+    stations_with_readings: int
+    ncr_avg_aqi: Optional[float]
+    worst_station: Optional[StationAQISummary]
+    best_station: Optional[StationAQISummary]
+    active_fires_24h: int
+    open_alerts: int
+    models_trained: int
+    forecast_coverage: dict
+
 class CurrentAQI(BaseModel):
     station: str
     timestamp: datetime
