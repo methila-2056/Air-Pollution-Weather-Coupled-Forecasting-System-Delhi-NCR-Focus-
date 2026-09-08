@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 from ..database import get_db
-from ..models.db_models import WeatherReading, Station
+from ..models.db_models import Station, WeatherReading
 from ..schemas.schemas import InversionResponse
 
 router = APIRouter()

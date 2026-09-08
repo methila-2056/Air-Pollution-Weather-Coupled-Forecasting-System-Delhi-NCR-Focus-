@@ -4,9 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from app.services.grid_service import (
-    ADVECTION_WEIGHT,
     GRID_STEP,
     NCR_BOUNDS,
     advective_shift,
@@ -97,6 +95,5 @@ class TestComputeGrid:
     def test_shift_blends_field_into_downwind_cells(self):
         stations = [_station("A", 28.6, 77.2)]
         forecasts = {"A": [{"horizon_hours": 24, "aqi_pred": 200}]}
-        still = compute_ncr_grid(stations, forecasts, 24)
         windy = compute_ncr_grid(stations, forecasts, 24, wind_dir=90.0, wind_speed=6.0)
         assert windy["cells"] != []

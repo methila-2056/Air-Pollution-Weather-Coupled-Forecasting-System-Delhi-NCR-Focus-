@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from datetime import datetime
 
-from ..database import get_db
-from ..models.db_models import Station, PollutionReading, WeatherReading
-from ..schemas.schemas import CouplingResponse, CouplingDiagnostics
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from ml.features.coupling import coupling_feedback_score
+
+from ..database import get_db
+from ..models.db_models import PollutionReading, Station, WeatherReading
+from ..schemas.schemas import CouplingDiagnostics, CouplingResponse
 
 router = APIRouter()
 

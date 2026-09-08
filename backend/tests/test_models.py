@@ -1,4 +1,3 @@
-import os
 
 import joblib
 import numpy as np
@@ -35,7 +34,15 @@ def synthetic_data():
 
 
 def test_db_models_import():
-    from app.models.db_models import Station, PollutionReading, WeatherReading, FireReading, Forecast, Alert, ModelMetrics
+    from app.models.db_models import (
+        Alert,
+        FireReading,
+        Forecast,
+        ModelMetrics,
+        PollutionReading,
+        Station,
+        WeatherReading,
+    )
     assert Station.__tablename__ == "stations"
     assert PollutionReading.__tablename__ == "pollution_readings"
     assert WeatherReading.__tablename__ == "weather_readings"
@@ -46,20 +53,20 @@ def test_db_models_import():
 
 
 def test_schemas_import():
-    from app.schemas.schemas import StationResponse, ForecastPoint, WeatherResponse, InversionResponse, AlertResponse
+    from app.schemas.schemas import ForecastPoint, StationResponse
     assert StationResponse is not None
     assert ForecastPoint is not None
 
 
 def test_database_import():
-    from app.database import engine, Base, SessionLocal
+    from app.database import Base, SessionLocal, engine
     assert engine is not None
     assert Base is not None
     assert SessionLocal is not None
 
 
 def test_seed_data_fixture_available(client, db_session):
-    from app.database import SessionLocal, DEFAULT_STATIONS
+    from app.database import DEFAULT_STATIONS, SessionLocal
     with SessionLocal() as session:
         from app.models.db_models import Station
         assert session.query(Station).count() == len(DEFAULT_STATIONS)
@@ -131,7 +138,7 @@ def test_predict_pollutants_fallback_without_models(monkeypatch, tmp_path):
     predictions = fs.predict_pollutants(features, horizons=[1, 6, 24, 72])
     assert len(predictions) == 4
     expected_horizons = [1, 6, 24, 72]
-    for p, h in zip(predictions, expected_horizons):
+    for p, h in zip(predictions, expected_horizons, strict=True):
         assert p["horizon_hours"] == h
         assert p["pm25_pred"] > 0
         assert p["pm10_pred"] > p["pm25_pred"]
@@ -148,7 +155,7 @@ def test_predict_pollutants_uses_saved_model(monkeypatch, tmp_path, synthetic_da
     joblib.dump(model, fp)
     monkeypatch.setattr(fs, "MODEL_DIR", str(tmp_path))
 
-    features = dict(zip(FEATURE_COLUMNS, X.iloc[0].tolist()))
+    features = dict(zip(FEATURE_COLUMNS, X.iloc[0].tolist(), strict=True))
     features.update({"pm10_lag1": 200.0, "temperature": 20.0, "pressure_msl": 1012.0,
                      "wind_direction": 315.0, "precipitation": 0.0, "cloud_cover": 40.0,
                      "fire_impact_score": 0.3, "fire_count_100km": 5, "nearest_fire_km": 100.0,

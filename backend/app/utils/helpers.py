@@ -1,6 +1,7 @@
 import math
 from datetime import datetime
 
+
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371
     dlat = math.radians(lat2 - lat1)

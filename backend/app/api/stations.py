@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from ..database import get_db, seed_data
-from ..models.db_models import Station, PollutionReading
-from ..schemas.schemas import StationResponse, CurrentAQI
-from ..services.aqi_calculator import calculate_aqi, get_dominant_pollutant
+
+from ..database import get_db
+from ..models.db_models import PollutionReading, Station
+from ..schemas.schemas import CurrentAQI, StationResponse
+from ..services.aqi_calculator import calculate_aqi
 
 router = APIRouter()
 

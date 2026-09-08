@@ -5,7 +5,6 @@ responses, verifying that machine-learning predictions flow through to the
 REST layer with consistent structure and values.
 """
 
-import pytest
 
 
 class TestForecastPipeline:
@@ -35,7 +34,7 @@ class TestForecastPipeline:
         assert resp.status_code == 200
         body = resp.json()
         assert set(body.keys()) == {"Anand Vihar", "RK Puram", "ITO", "Dwarka", "Punjabi Bagh"}
-        for station, forecasts in body.items():
+        for _station, forecasts in body.items():
             assert isinstance(forecasts, list)
 
     def test_forecast_comparison_flow(self, client, db_session):

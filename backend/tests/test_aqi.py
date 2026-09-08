@@ -1,7 +1,6 @@
 import math
 
 import pytest
-
 from app.services.aqi_calculator import (
     IAQI_BREAKPOINTS,
     calculate_aqi,

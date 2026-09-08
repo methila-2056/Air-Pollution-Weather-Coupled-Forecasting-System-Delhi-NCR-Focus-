@@ -11,8 +11,6 @@ The NCR domain is wrapped at ~0.02deg (~2.2km) resolution between
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from .aqi_calculator import get_aqi_category
@@ -98,8 +96,8 @@ def compute_ncr_grid(
     stations: list,
     forecasts_by_station: dict,
     horizon_hours: int,
-    wind_dir: Optional[float] = None,
-    wind_speed: Optional[float] = None,
+    wind_dir: float | None = None,
+    wind_speed: float | None = None,
 ) -> dict:
     """Interpolate a selected horizon's AQI across the NCR domain.
 
@@ -152,7 +150,6 @@ def compute_ncr_grid(
         field = (1 - ADVECTION_WEIGHT) * field + ADVECTION_WEIGHT * shifted
         field = np.where(np.isnan(field), np.where(np.isnan(shifted), field, shifted), field)
 
-    categories = {0: "Good", 1: "Satisfactory", 2: "Moderate", 3: "Poor", 4: "Very Poor", 5: "Severe"}
     for i in range(lats.size):
         for j in range(lons.size):
             aqi = field[i, j]

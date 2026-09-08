@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, List
+
+from pydantic import BaseModel, Field
+
 
 class StationResponse(BaseModel):
     id: int
@@ -12,17 +12,17 @@ class StationResponse(BaseModel):
 
 class StationAQISummary(BaseModel):
     name: str
-    aqi: Optional[int]
+    aqi: int | None
     aqi_category: str
-    dominant_pollutant: Optional[str]
+    dominant_pollutant: str | None
 
 class SummaryResponse(BaseModel):
     generated_at: datetime
     stations: int
     stations_with_readings: int
-    ncr_avg_aqi: Optional[float]
-    worst_station: Optional[StationAQISummary]
-    best_station: Optional[StationAQISummary]
+    ncr_avg_aqi: float | None
+    worst_station: StationAQISummary | None
+    best_station: StationAQISummary | None
     active_fires_24h: int
     open_alerts: int
     models_trained: int
@@ -31,88 +31,88 @@ class SummaryResponse(BaseModel):
 class CurrentAQI(BaseModel):
     station: str
     timestamp: datetime
-    pm25: Optional[float]
-    pm10: Optional[float]
-    o3: Optional[float]
-    no2: Optional[float]
-    so2: Optional[float]
-    co: Optional[float]
-    aqi: Optional[int]
+    pm25: float | None
+    pm10: float | None
+    o3: float | None
+    no2: float | None
+    so2: float | None
+    co: float | None
+    aqi: int | None
     aqi_category: str
     dominant_pollutant: str
 
 class ForecastPoint(BaseModel):
     timestamp: datetime
     horizon_hours: int
-    pm25_pred: Optional[float]
-    pm10_pred: Optional[float]
-    o3_pred: Optional[float]
-    no2_pred: Optional[float]
-    so2_pred: Optional[float] = None
-    co_pred: Optional[float] = None
-    aqi_pred: Optional[int]
+    pm25_pred: float | None
+    pm10_pred: float | None
+    o3_pred: float | None
+    no2_pred: float | None
+    so2_pred: float | None = None
+    co_pred: float | None = None
+    aqi_pred: int | None
     aqi_category: str
-    dominant_pollutant: Optional[str] = None
-    coupling_stability: Optional[float] = None
+    dominant_pollutant: str | None = None
+    coupling_stability: float | None = None
 
 class GridForecastPoint(BaseModel):
     timestamp: datetime
     horizon_hours: int
-    aqi_pred: Optional[int]
+    aqi_pred: int | None
     aqi_category: str
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: float | None = None
+    lon: float | None = None
 
 class ForecastGenerateRequest(BaseModel):
-    station_name: Optional[str] = None
-    horizons: List[int] = Field(default_factory=lambda: [1, 6, 12, 24, 48, 72])
+    station_name: str | None = None
+    horizons: list[int] = Field(default_factory=lambda: [1, 6, 12, 24, 48, 72])
 
 class ForecastGenerateResponse(BaseModel):
     station: str
     generated_at: datetime
-    horizons: List[int]
-    forecasts: List[ForecastPoint]
+    horizons: list[int]
+    forecasts: list[ForecastPoint]
 
 class ForecastComparisonPoint(BaseModel):
     timestamp: datetime
-    actual_aqi: Optional[int]
-    predicted_aqi: Optional[int]
-    actual_pm25: Optional[float]
-    predicted_pm25: Optional[float]
-    delta: Optional[float]
+    actual_aqi: int | None
+    predicted_aqi: int | None
+    actual_pm25: float | None
+    predicted_pm25: float | None
+    delta: float | None
 
 class ForecastComparisonResponse(BaseModel):
     station: str
-    points: List[ForecastComparisonPoint]
+    points: list[ForecastComparisonPoint]
 
 class WeatherResponse(BaseModel):
     station: str
     timestamp: datetime
-    temperature: Optional[float]
-    humidity: Optional[float]
-    pressure_msl: Optional[float]
-    wind_speed: Optional[float]
-    wind_direction: Optional[float]
-    precipitation: Optional[float]
-    cloud_cover: Optional[float]
+    temperature: float | None
+    humidity: float | None
+    pressure_msl: float | None
+    wind_speed: float | None
+    wind_direction: float | None
+    precipitation: float | None
+    cloud_cover: float | None
 
 class WeatherDetailResponse(BaseModel):
     station: str
     timestamp: datetime
-    temperature: Optional[float]
-    humidity: Optional[float]
-    pressure_msl: Optional[float]
-    surface_pressure: Optional[float]
-    wind_speed: Optional[float]
-    wind_direction: Optional[float]
-    precipitation: Optional[float]
-    cloud_cover: Optional[float]
-    pbl_height: Optional[float]
+    temperature: float | None
+    humidity: float | None
+    pressure_msl: float | None
+    surface_pressure: float | None
+    wind_speed: float | None
+    wind_direction: float | None
+    precipitation: float | None
+    cloud_cover: float | None
+    pbl_height: float | None
 
 class InversionResponse(BaseModel):
     station: str
     timestamp: datetime
-    pbl_height: Optional[float]
+    pbl_height: float | None
     inversion_detected: bool
     inversion_strength: str
     trapping_risk: str
@@ -129,11 +129,11 @@ class CouplingDiagnostics(BaseModel):
 class CouplingResponse(BaseModel):
     station: str
     timestamp: datetime
-    pm25: Optional[float]
-    pbl_height: Optional[float]
-    wind_speed: Optional[float]
+    pm25: float | None
+    pbl_height: float | None
+    wind_speed: float | None
     diag: CouplingDiagnostics
-    narrative: List[str]
+    narrative: list[str]
 
 class FireActivityResponse(BaseModel):
     total_fires: int
@@ -150,23 +150,23 @@ class PlumeRiskResponse(BaseModel):
     wind_speed: float
     distance_nearest_fire: float
     confidence: float
-    factors: List[str]
+    factors: list[str]
 
 class TransportDirectionResponse(BaseModel):
     station: str
     from_direction: str
     to_direction: str
     label: str
-    wind_speed: Optional[float]
-    wind_direction: Optional[float]
+    wind_speed: float | None
+    wind_direction: float | None
     basis: str
 
 class ExplanationResponse(BaseModel):
     station: str
     timestamp: datetime
     prediction: dict
-    top_features: List[dict]
-    natural_language: List[str]
+    top_features: list[dict]
+    natural_language: list[str]
 
 class AlertResponse(BaseModel):
     id: int
@@ -174,31 +174,31 @@ class AlertResponse(BaseModel):
     alert_level: str
     title: str
     description: str
-    forecast_horizon_hours: Optional[int]
-    factors: Optional[str]
-    recommendation: Optional[str]
+    forecast_horizon_hours: int | None
+    factors: str | None
+    recommendation: str | None
     created_at: datetime
 
 class ModelMetricCreate(BaseModel):
     model_name: str
     pollutant: str
     horizon_hours: int
-    mae: Optional[float] = None
-    rmse: Optional[float] = None
-    r2: Optional[float] = None
-    mape: Optional[float] = None
-    test_period_start: Optional[datetime] = None
-    test_period_end: Optional[datetime] = None
+    mae: float | None = None
+    rmse: float | None = None
+    r2: float | None = None
+    mape: float | None = None
+    test_period_start: datetime | None = None
+    test_period_end: datetime | None = None
 
 class ModelMetricResponse(BaseModel):
-    id: Optional[int] = None
+    id: int | None = None
     model_name: str
     pollutant: str
     horizon_hours: int
-    mae: Optional[float]
-    rmse: Optional[float]
-    r2: Optional[float]
-    mape: Optional[float]
-    test_period_start: Optional[datetime]
-    test_period_end: Optional[datetime]
-    trained_at: Optional[datetime] = None
+    mae: float | None
+    rmse: float | None
+    r2: float | None
+    mape: float | None
+    test_period_start: datetime | None
+    test_period_end: datetime | None
+    trained_at: datetime | None = None

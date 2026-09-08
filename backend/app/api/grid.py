@@ -1,9 +1,10 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
 
 from ..database import get_db
-from ..models.db_models import Station, Forecast, WeatherReading
+from ..models.db_models import Forecast, Station, WeatherReading
 from ..services.grid_service import compute_ncr_grid
 
 router = APIRouter()

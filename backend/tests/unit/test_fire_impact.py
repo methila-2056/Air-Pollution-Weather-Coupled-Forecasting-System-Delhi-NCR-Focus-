@@ -1,11 +1,9 @@
 """Unit tests for stubble-fire impact geometry (SIH26082 PS #3 fire source)."""
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from ml.features.fire_impact import (
-    DEFAULT_MAX_DISTANCE_KM,
     add_fire_features,
     compute_fire_impact,
     haversine_distance,

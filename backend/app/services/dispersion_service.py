@@ -11,16 +11,14 @@ with the aerosol field drive the hourly AQI evolution.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
-
 from sqlalchemy.orm import Session
 
-from ..models.db_models import Station, WeatherReading, FireReading, Forecast
+from ml.features.dispersion_solver import run_dispersion_forecast
+
+from ..models.db_models import FireReading, Forecast, Station, WeatherReading
 from .aqi_calculator import get_aqi_category
-from .grid_service import idw_interpolate, build_grid, NCR_BOUNDS, GRID_STEP
-from ml.features.dispersion_solver import run_dispersion_forecast, conc_to_aqi
+from .grid_service import GRID_STEP, NCR_BOUNDS, build_grid, idw_interpolate
 
 
 def _latest_weather(db: Session) -> dict:
@@ -54,7 +52,7 @@ def _latest_weather(db: Session) -> dict:
     }
 
 
-def _initial_aqi_field(db: Session, horizon_hours: int) -> Optional[np.ndarray]:
+def _initial_aqi_field(db: Session, horizon_hours: int) -> np.ndarray | None:
     """IDW-interpolate the latest horizon station forecasts into a grid field."""
     lats, lons = build_grid()
     stations = db.query(Station).order_by(Station.name).all()

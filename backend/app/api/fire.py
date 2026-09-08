@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from ..database import get_db
-from ..models.db_models import FireReading, WeatherReading, Station
-from ..schemas.schemas import FireActivityResponse, PlumeRiskResponse, TransportDirectionResponse
-from datetime import datetime
 import math
+from datetime import datetime
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models.db_models import FireReading, Station, WeatherReading
+from ..schemas.schemas import FireActivityResponse, PlumeRiskResponse, TransportDirectionResponse
 
 router = APIRouter()
 

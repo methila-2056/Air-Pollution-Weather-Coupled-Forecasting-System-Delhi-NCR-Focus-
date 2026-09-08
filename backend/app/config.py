@@ -1,7 +1,7 @@
-from pydantic_settings import BaseSettings
-from functools import lru_cache
-import os
 import pathlib
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 _ENV_CANDIDATES = [
     pathlib.Path(__file__).resolve().parents[2] / ".env",

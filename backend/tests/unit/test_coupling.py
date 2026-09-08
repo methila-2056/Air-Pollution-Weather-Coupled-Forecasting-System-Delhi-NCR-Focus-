@@ -1,6 +1,5 @@
 """Unit tests for the two-way weather-chemistry coupling module (SIH26082 PS #1)."""
 
-import numpy as np
 import pandas as pd
 import pytest
 

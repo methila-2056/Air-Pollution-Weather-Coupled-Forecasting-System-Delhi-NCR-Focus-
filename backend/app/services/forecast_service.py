@@ -1,11 +1,13 @@
-import os
 import logging
+import os
+from datetime import datetime, timedelta
+
 import joblib
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
-from ..services.aqi_calculator import calculate_aqi, get_dominant_pollutant
-from ..utils.helpers import haversine_distance, is_winter, get_season
+
+from ..services.aqi_calculator import calculate_aqi
+from ..utils.helpers import haversine_distance
 
 logger = logging.getLogger("aerocast.forecast")
 
@@ -206,7 +208,7 @@ def build_features_from_db(db, station_id: int) -> dict:
     identical feature-engineering functions used at training time, so the API
     feeds trained models the exact feature names/values they expect.
     """
-    from ..models.db_models import Station, PollutionReading, WeatherReading
+    from ..models.db_models import PollutionReading, Station, WeatherReading
 
     station = db.query(Station).filter(Station.id == station_id).first()
     station_name = station.name.replace(" ", "_") if station else "Anand_Vihar"
@@ -256,14 +258,20 @@ def build_features_from_db(db, station_id: int) -> dict:
     combined = combined.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
 
     # Small helper module import (already installed; kept local to avoid heavy top-level import)
-    from ml.features.feature_engineering import (
-        add_temporal_features, add_pollution_lags, add_rolling_means,
-        add_rolling_std, add_wind_decomposition, add_temperature_lags,
-        add_humidity_lags, add_pollution_rate_of_change, add_composite_features,
-    )
-    from ml.features.inversion import add_inversion_features
-    from ml.features.fire_impact import add_fire_features
     from ml.features.coupling import add_coupling_features
+    from ml.features.feature_engineering import (
+        add_composite_features,
+        add_humidity_lags,
+        add_pollution_lags,
+        add_pollution_rate_of_change,
+        add_rolling_means,
+        add_rolling_std,
+        add_temperature_lags,
+        add_temporal_features,
+        add_wind_decomposition,
+    )
+    from ml.features.fire_impact import add_fire_features
+    from ml.features.inversion import add_inversion_features
 
     eng = add_temporal_features(combined)
     eng = add_pollution_lags(eng)
@@ -389,8 +397,8 @@ def generate_coupled_forecast(db, station_id: int, horizons=None) -> dict:
     Returns {"coupled": [...], "uncoupled": [...], "feedback_path": [...]}.
     The coupled points are persisted (coupling_mode != None).
     """
-    from ml.features.coupling import corrected_pbl_height, coupling_feedback_score
     from ml.features.coupled_loop import run_coupled_forecast as _run_coupled
+    from ml.features.coupling import corrected_pbl_height
 
     horizons = horizons or DEFAULT_HORIZONS
     features = build_features_from_db(db, station_id)

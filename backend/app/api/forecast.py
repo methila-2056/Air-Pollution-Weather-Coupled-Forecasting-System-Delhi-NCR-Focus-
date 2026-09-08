@@ -1,16 +1,18 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
+
 from ..database import get_db
-from ..models.db_models import Forecast, Station, PollutionReading, Alert
+from ..models.db_models import Alert, Forecast, PollutionReading, Station
 from ..schemas.schemas import (
-    ForecastPoint,
-    ForecastGenerateRequest,
-    ForecastGenerateResponse,
     ForecastComparisonPoint,
     ForecastComparisonResponse,
+    ForecastGenerateRequest,
+    ForecastGenerateResponse,
+    ForecastPoint,
 )
-from ..services import forecast_service, alert_service
+from ..services import alert_service, forecast_service
 
 router = APIRouter()
 
@@ -18,7 +20,7 @@ def _round_hour(dt: datetime) -> datetime:
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        dt = dt.astimezone(UTC).replace(tzinfo=None)
     return dt.replace(minute=0, second=0, microsecond=0)
 
 def _station_or_404(db: Session, station_name: str) -> Station:

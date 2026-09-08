@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..services.dispersion_service import run_dispersion_forecast_service
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
