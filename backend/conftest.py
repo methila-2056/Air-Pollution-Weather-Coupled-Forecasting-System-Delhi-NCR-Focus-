@@ -12,7 +12,10 @@ if TEST_DB_PATH.exists():
         TEST_DB_PATH.unlink()
     except PermissionError:
         pass
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
+# Default to an ephemeral local SQLite DB, unless CI already pointed us at a
+# real database (e.g. PostgreSQL) via DATABASE_URL.
+if not os.environ.get("DATABASE_URL"):
+    os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
 
 # make the repository root importable so tests can reach `ml.*` directly
 REDIRECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
