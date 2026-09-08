@@ -8,6 +8,10 @@ node_modules/
 *.egg-info/
 .DS_Store
 
+# local environment files (real secrets never committed)
+.env
+.env.local
+
 # The 120MB row-export exceeds GitHub's 100MB push limit.
 # It is committed (byte-identical) as part1 + part2; see data/processed/SPLIT_NOTE.txt
 data/processed/featured_dataset.csv
