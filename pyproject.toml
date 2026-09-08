@@ -38,6 +38,7 @@ dev = [
 aerocast-dev = "scripts.run_dev:main"
 aerocast-env-check = "scripts.environment_check:main"
 aerocast-evaluate = "scripts.evaluate_models:main"
+aerocast-refresh = "scripts.refresh_once:main"
 
 [tool.setuptools.packages.find]
 include = ["ml*", "backend*"]
@@ -53,6 +54,12 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["E203", "E501"]
+
+# FastAPI idiom: dependency-injection `Depends(get_db)` and Pydantic request
+# models are intentionally constructed in argument defaults. B008 is a false
+# positive for these patterns, so it is scoped out for the API layer only.
+[tool.ruff.lint.per-file-ignores]
+"backend/app/api/**" = ["B008"]
 
 [tool.coverage.run]
 source = ["backend", "ml"]

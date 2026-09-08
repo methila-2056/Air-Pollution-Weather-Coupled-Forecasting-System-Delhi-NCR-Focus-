@@ -1,4 +1,4 @@
-.PHONY: install install-dev test test-unit test-integration run-api run-api-reload build discipline clean-data pip-audit
+.PHONY: install install-dev test test-unit test-integration run-api run-api-reload build discipline clean-data pip-audit refresh-data
 
 # Project: AeroCast-NCR (SIH26082). Central developer commands.
 # Detects OS differences so the same targets work on Windows + Linux/macOS.
@@ -38,3 +38,6 @@ clean-data:         ## Remove regenerable data artifacts (keep source CSVs)
 
 pip-audit:          ## Security audit of pinned dependencies
 	$(PIP) install pip-audit && $(PIP) audit
+
+refresh-data:       ## One-shot live data refresh (use --dry-run to preview)
+	$(PY) -m scripts.refresh_once --dry-run

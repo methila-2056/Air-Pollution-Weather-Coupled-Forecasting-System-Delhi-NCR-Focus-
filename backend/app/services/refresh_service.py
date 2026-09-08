@@ -112,7 +112,7 @@ def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: 
     return df
 
 
-def refresh_weather(db) -> int:
+def refresh_weather(db, dry_run: bool = False) -> int:
     """Upsert recent Open-Meteo weather readings; returns inserted row count."""
     from ..models.db_models import Station, WeatherReading
 
@@ -156,12 +156,13 @@ def refresh_weather(db) -> int:
             existing.add(ts)
         if rows:
             db.add_all(rows)
-            db.commit()
+            if not dry_run:
+                db.commit()
             inserted += len(rows)
     return inserted
 
 
-def refresh_fire(db) -> int:
+def refresh_fire(db, dry_run: bool = False) -> int:
     """Upsert recent NASA FIRMS active fires; returns inserted row count."""
     from ..models.db_models import FireReading
 
@@ -207,13 +208,14 @@ def refresh_fire(db) -> int:
         existing.add(key)
     if rows:
         db.add_all(rows)
-        db.commit()
+        if not dry_run:
+            db.commit()
     return len(rows)
 
 
-def refresh_pollution(db) -> int:
+def refresh_pollution(db, dry_run: bool = False) -> int:
     """Upsert recent CPCB pollution readings from opencity.in CKAN; returns row count."""
-    from ..models.db_models import Station, PollutionReading
+    from ..models.db_models import PollutionReading, Station
     from ..services.aqi_calculator import calculate_aqi
 
     stations = {s.name: s for s in db.query(Station).all()}
@@ -285,22 +287,29 @@ def refresh_pollution(db) -> int:
             existing.add(ts)
         if rows:
             db.add_all(rows)
-            db.commit()
+            if not dry_run:
+                db.commit()
             inserted += len(rows)
     return inserted
 
 
-def run_refresh_once(db=None) -> dict:
-    """Run one full refresh pass. Returns a summary dict."""
+def run_refresh_once(db=None, dry_run: bool = False) -> dict:
+    """Run one full refresh pass. Returns a summary dict.
+
+    When `dry_run` is True the summaries reflect what *would* be inserted but
+    nothing is committed to the database (the session is rolled back).
+    """
     from ..database import SessionLocal
 
     close = db is None
     session = db if db is not None else SessionLocal()
     summary = {"weather": 0, "fire": 0, "pollution": 0}
     try:
-        summary["weather"] = refresh_weather(session)
-        summary["fire"] = refresh_fire(session)
-        summary["pollution"] = refresh_pollution(session)
+        summary["weather"] = refresh_weather(session, dry_run=dry_run)
+        summary["fire"] = refresh_fire(session, dry_run=dry_run)
+        summary["pollution"] = refresh_pollution(session, dry_run=dry_run)
+        if dry_run:
+            session.rollback()
     except Exception as exc:
         logger.warning("live refresh failed partway: %s", exc, exc_info=True)
     finally:
