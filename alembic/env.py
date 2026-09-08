@@ -29,6 +29,7 @@ if config.attributes.get("configure_logger", True):
     pass
 
 from app.database import Base  # noqa: E402
+import app.models.db_models  # noqa: E402,F401  register tables on Base.metadata
 
 target_metadata = Base.metadata
 
