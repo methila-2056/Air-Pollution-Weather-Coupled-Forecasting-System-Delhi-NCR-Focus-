@@ -241,7 +241,7 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
         try:
             resp = requests.get(
                 CKAN_BASE,
-                params={"resource_id": resource_id, "limit": 500},
+                params={"resource_id": resource_id, "limit": 500, "sort": "Timestamp desc"},
                 timeout=HTTP_TIMEOUT,
             )
             resp.raise_for_status()
@@ -254,7 +254,7 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
         df = pd.DataFrame(records)
         if {"datetime", "site"} not in ({c for c in df.columns} , set()):
             pass
-        ts_col = next((c for c in ["datetime", "time", "From Date", "timestamp"] if c in df.columns), None)
+        ts_col = next((c for c in ["datetime", "time", "From Date", "timestamp", "Timestamp"] if c in df.columns), None)
         if not ts_col:
             continue
         existing = _existing_timestamps(db, PollutionReading, stations[display].id)
