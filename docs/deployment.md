@@ -1,27 +1,116 @@
 # Deployment
 
-Two supported paths: **Docker Compose** (self-contained) and **bare metal**
-(system Python + npm).
+Two supported paths: **Docker Compose** (self-contained, recommended) and
+**bare metal** (system Python + npm). Compose is the documented production path;
+the backend runs **Alembic migrations automatically at container start** against
+PostgreSQL.
 
 ## Docker Compose (recommended)
 
+### 1. Configure
+
 ```bash
-cp .env.example .env      # optional: set NASA_FIRMS_MAP_KEY for live fires
-docker compose up --build
+cp .env.example .env                 # local defaults (optional real FIRMS key)
+cp docs/deploy.env.example deploy.env
+```
+
+`docker-compose.yml` reads `NASA_FIRMS_MAP_KEY` from your shell/environment. For
+production, prefer passing a private env file (see "Production tips" below).
+
+### 2. Build and start
+
+```bash
+docker compose up --build -d
 ```
 
 Services:
-- `db` — PostgreSQL 16 (healthchecked), volume `pgdata`
-- `backend` — FastAPI on `:8000`; `ml/`, `models/`, `data/` mounted read-only
-- `frontend` — nginx on `:5173`(host→80) serving the SPA and proxying `/api`
 
-Notes:
-- To use Postgres, set `DATABASE_URL=postgresql://aerocast:aerocast_secret_2024@db:5432/aerocast_ncr`
-  (compose already does). The local development default is SQLite; migrations
-  are additive and run at startup.
-- First boot seeds five DEFAULT NCR stations and demo readings. Provide a real
-  FIRMS key + run `scripts/download_*.py` inside the backend container for
-  live data.
+- `db` — PostgreSQL 16 (healthchecked), volume `pgdata`
+- `backend` — FastAPI on `:8000`; `ml/`, `models/`, `data/` mounted read-only;
+  runs as an **unprivileged** user and performs migrations at boot
+- `frontend` — nginx on `:5173` (host → 80) serving the SPA and proxying `/api`
+
+All services are `restart: unless-stopped`; `backend` only starts after `db` is
+healthy, and `frontend` only after `backend` reports healthy.
+
+### 3. Migration flow
+
+On container start, `app.main.lifespan` calls `run_migrations()` which runs
+`alembic upgrade head` against `DATABASE_URL` (PostgreSQL in Compose) using the
+migration scripts baked into the image (`alembic/versions/`). A fresh deployment
+builds the full 7-table schema; an existing deployment applies only pending
+revisions. SQLite (bare-metal dev) keeps `create_all` + additive
+`apply_migrations()` as a lightweight fallback and skips Alembic.
+
+To run migrations on demand (e.g. before scaling replicas):
+
+```bash
+docker compose run --rm backend python -m alembic upgrade head
+docker compose run --rm backend python -m alembic current
+```
+
+### 4. Live data refresh
+
+Compose sets `LIVE_REFRESH_ENABLED=true` and
+`LIVE_REFRESH_INTERVAL_HOURS=3`, so the scheduler pulls weather, fire and
+pollution in the background. For a one-shot/manual refresh (e.g. after a gap or
+in dry-run to preview):
+
+```bash
+docker compose run --rm backend python -m scripts.refresh_once --dry-run   # preview
+docker compose run --rm backend python -m scripts.refresh_once              # commit
+```
+
+Provide a `NASA_FIRMS_MAP_KEY` for reliable live fire ingestion.
+
+### 5. First-boot verification
+
+```bash
+curl -fsS http://localhost:8000/health                 # {"status":"healthy",...}
+curl -fsS http://localhost:8000/api/data-quality       # per-table row counts + gaps
+curl -fsS http://localhost:8000/api/summary            # NCR KPIs
+curl -fsS http://localhost:8000/api/stations           # 5 seeded stations
+```
+
+Open the dashboard at `http://localhost:5173`. In `docker compose logs -f
+backend`, look for `Alembic migrations applied at startup` (Postgres) or
+`Seeded 5 default Delhi NCR stations`.
+
+### 6. `pgdata` backup / restore
+
+Backup the named volume (take a filesystem-level snapshot for a consistent run):
+
+```bash
+# dump to a file via the container
+docker compose exec -T db pg_dump -U aerocast -d aerocast_ncr > backup_$(date +%Y%m%d).sql
+# or snapshot the volume
+docker run --rm -v aerocast-ncr_pgdata:/data -v "$PWD":/backup alpine \
+  tar czf /backup/pgdata_$(date +%Y%m%d).tar.gz -C /data .
+```
+
+Restore:
+
+```bash
+docker compose down
+docker run --rm -v aerocast-ncr_pgdata:/data -v "$PWD":/backup alpine \
+  sh -c "rm -rf /data/* && tar xzf /backup/pgdata_YYYYMMDD.tar.gz -C /data"
+docker compose up -d
+# or from a plain SQL dump:
+cat backup_YYYYMMDD.sql | docker compose exec -T db psql -U aerocast -d aerocast_ncr
+```
+
+Stop all services before a volume-level restore. For a fresh SQL dump restore,
+drop/recreate the DB first to avoid conflicts.
+
+### Production tips
+
+- **Reverse proxy / HTTPS.** Keep `:8000`/`:5173` on the host private and put a
+  TLS-terminating reverse proxy (Caddy, nginx, Traefik) in front; set
+  `CORS_ORIGINS` to the real public origin (e.g. `https://forecast.example`).
+- **Secrets.** Do not commit `deploy.env`; rotate the development-only Postgres
+  password before exposure. Provide `NASA_FIRMS_MAP_KEY` via the env file.
+- **Sizing.** `models/` (200+ model files) and `data/` are mounted read-only, so
+  keep them on the host; bump container resources if needed.
 
 ## Bare metal
 
@@ -29,34 +118,46 @@ Notes:
 python -m pip install -e ".[dev]"
 cp .env.example .env
 
-# backend
+# backend (SQLite dev default; use Alembic for Postgres below)
 cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # frontend (separate terminal)
 cd frontend && npm ci && npm run dev
+
+# Postgres with Alembic (optional)
+export DATABASE_URL=postgresql://aerocast:pass@localhost:5432/aerocast_ncr
+python -m alembic upgrade head
 ```
 
 ## Environment reference
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DATABASE_URL` | `sqlite:///./aerocast_ncr.db` | SQLAlchemy connection string |
+| `DATABASE_URL` | `sqlite:///./aerocast_ncr.db` | SQLAlchemy connection string; Postgres triggers Alembic migrations |
 | `NASA_FIRMS_MAP_KEY` | *(empty)* | Optional FIRMS API key for live fire data |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed browser origins |
 | `ENVIRONMENT` | `development` | App runtime environment label |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
-| `LIVE_REFRESH_ENABLED` | derived | Whether the refresh scheduler runs |
+| `LIVE_REFRESH_ENABLED` | `false` | Whether the refresh scheduler runs |
 | `LIVE_REFRESH_INTERVAL_HOURS` | `3` | Scheduler cadence |
+
+See `docs/deploy.env.example` for a production template.
 
 ## Health & operations
 
 - `GET /health` — liveness (also the container HEALTHCHECK).
 - `GET /api/data-quality` — per-table row counts and missing-value audit.
-- Logs: `server.log` / `server_err.log` (backend), `vite_dev.log` /
-  `vite_dev_err.log` (frontend dev server).
+- `GET /api/summary` — NCR KPIs (station count, AQI, alerts).
+- Logs: `docker compose logs -f backend`; bare-metal `server.log` /
+  `server_err.log` (backend), `vite_dev.log` / `vite_dev_err.log` (frontend).
 
 ## Security notes
 
-- Never commit real API keys; `.env` is tracked only because the sample values
-  are placeholders. Rotate before production use.
-- Postgres credentials in `docker-compose.yml` are development-only defaults.
+- Never commit real API keys. `.env` is git-ignored and only ever holds local
+  placeholders; copy `.env.example`/`docs/deploy.env.example` and fill in real
+  values on each host. Rotate any previously-exposed values before production
+  use.
+- Postgres credentials in `docker-compose.yml` are development-only defaults;
+  change them for any shared/`production` environment.
+- The backend container runs as a non-root user; keep `ml/`, `models/`, `data/`
+  mounts read-only.
