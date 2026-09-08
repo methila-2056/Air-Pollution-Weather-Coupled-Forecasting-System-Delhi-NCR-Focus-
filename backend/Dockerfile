@@ -7,10 +7,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # runtime dependencies only (models/ml/data arrive via docker-compose volumes)
-COPY requirements.txt .
+COPY backend/requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
-COPY app ./app
+# application + Alembic migration scripts (migrations run at container start)
+COPY backend/app ./app
+COPY alembic.ini .
+COPY alembic ./alembic
+
+# run as an unprivileged user
+RUN useradd --create-home --uid 10001 aerocast \
+    && chown -R aerocast:aerocast /app
+USER aerocast
 
 EXPOSE 8000
 

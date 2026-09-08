@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: aerocast
       POSTGRES_PASSWORD: aerocast_secret_2024
@@ -16,7 +17,10 @@ services:
       retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -41,11 +45,12 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "5173:80"
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   pgdata:
