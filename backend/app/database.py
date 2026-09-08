@@ -1,8 +1,28 @@
+import pathlib
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 from .config import get_settings
 
 settings = get_settings()
+
+
+def _find_repo_root() -> pathlib.Path:
+    """Locate the directory that owns `alembic.ini` by walking up the tree.
+
+    Works from the repository layout (``backend/app/database.py``) and from the
+    container layout (``/app/app/database.py``) where alembic files live under
+    the application root.
+    """
+    start = pathlib.Path(__file__).resolve().parent
+    for parent in (start, *start.parents):
+        if (parent / "alembic.ini").exists():
+            return parent
+    return start
+
+
+_REPO_ROOT = _find_repo_root()
 
 engine_kwargs = {}
 if settings.database_url.startswith("sqlite"):
@@ -28,6 +48,29 @@ def seed_data(db) -> int:
         db.commit()
         return len(DEFAULT_STATIONS)
     return 0
+
+
+def run_migrations() -> bool:
+    """Apply Alembic migrations to the configured database.
+
+    Runs `alembic upgrade head` against the repository's migration scripts
+    (PostgreSQL production path, used by the containerised deploy at startup).
+    SQLite databases are deliberately skipped -- they keep the lightweight
+    `create_all` + `apply_migrations` path to avoid clashing with pre-existing
+    local schema. Returns True when Alembic actually ran.
+    """
+    if settings.database_url.startswith("sqlite"):
+        return False
+
+    from alembic.config import Config
+
+    from alembic import command
+
+    cfg = Config(str(_REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_REPO_ROOT / "alembic"))
+    cfg.set_main_option("db_url", settings.database_url)
+    command.upgrade(cfg, "head")
+    return True
 
 
 def apply_migrations():

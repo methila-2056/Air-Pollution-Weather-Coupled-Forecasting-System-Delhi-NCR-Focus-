@@ -7,9 +7,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 
+from .api import (
+    alerts,
+    coupling,
+    dispersion,
+    explanation,
+    export,
+    fire,
+    forecast,
+    grid,
+    inversion,
+    model_metrics,
+    stations,
+    summary,
+    weather,
+)
 from .config import get_settings
-from .database import engine, Base, SessionLocal, seed_data, apply_migrations
-from .api import stations, forecast, weather, inversion, fire, explanation, alerts, model_metrics, coupling, grid, dispersion, summary, export
+from .database import Base, SessionLocal, apply_migrations, engine, run_migrations, seed_data
 
 logger = logging.getLogger("aerocast")
 settings = get_settings()
@@ -20,12 +34,15 @@ _refresh_stop = asyncio.Event()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        Base.metadata.create_all(bind=engine)
+        migrated = run_migrations()
         apply_migrations()
+        Base.metadata.create_all(bind=engine)
         with SessionLocal() as db:
             seeded = seed_data(db)
             if seeded:
                 logger.info("Seeded %d default Delhi NCR stations", seeded)
+            if migrated:
+                logger.info("Alembic migrations applied at startup")
     except Exception as exc:
         logger.warning("Startup database initialisation skipped: %s", exc)
 
@@ -84,13 +101,13 @@ def health():
 @app.get("/api/data-quality")
 def data_quality():
     from .models.db_models import (
-        Station,
-        PollutionReading,
-        WeatherReading,
+        Alert,
         FireReading,
         Forecast,
-        Alert,
         ModelMetrics,
+        PollutionReading,
+        Station,
+        WeatherReading,
     )
 
     db = SessionLocal()
@@ -142,6 +159,6 @@ def data_quality():
             "recommendations": recommendations,
         }
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Data quality check failed: {exc}")
+        raise HTTPException(status_code=503, detail=f"Data quality check failed: {exc}") from exc
     finally:
         db.close()
