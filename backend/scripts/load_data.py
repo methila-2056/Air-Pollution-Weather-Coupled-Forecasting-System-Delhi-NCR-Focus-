@@ -6,13 +6,12 @@ Usage:
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import pandas as pd
 
-from backend.app.database import Base, SessionLocal, engine  # noqa: E402
 import backend.app.models.db_models as dbm  # noqa: E402, F401  (registers tables)
+from backend.app.database import Base, SessionLocal, engine  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CSV = PROJECT_ROOT / "data" / "processed" / "coupled_dataset.csv"
@@ -20,7 +19,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 
 
 def load_coupled_data(db, csv_path: Path) -> dict:
-    from backend.app.models.db_models import Station, PollutionReading, WeatherReading
+    from backend.app.models.db_models import PollutionReading, Station, WeatherReading
     from backend.app.services.aqi_calculator import calculate_aqi
 
     stations = {s.name: s for s in db.query(Station).all()}
@@ -44,6 +43,10 @@ def load_coupled_data(db, csv_path: Path) -> dict:
             db.flush()
             stations[name] = st
 
+    existing_ts: dict[int, set] = {}
+    for sid, ts in db.query(PollutionReading.station_id, PollutionReading.timestamp).all():
+        existing_ts.setdefault(sid, set()).add(ts)
+
     df = pd.read_csv(csv_path, parse_dates=["timestamp"])
     counts = {"pollution": 0, "weather": 0}
 
@@ -52,6 +55,9 @@ def load_coupled_data(db, csv_path: Path) -> dict:
     for _, r in df.iterrows():
         st = stations[raw_to_display.get(r["station"], r["station"])]
         ts = r["timestamp"]
+        if ts in existing_ts.get(st.id, set()):
+            continue
+        existing_ts.setdefault(st.id, set()).add(ts)
 
         pm25 = _safe(r.get("pm25"))
         pm10 = _safe(r.get("pm10"))
@@ -108,30 +114,60 @@ def load_fire_data(db, fire_csv: Path) -> int:
         return 0
     from backend.app.models.db_models import FireReading
 
-    df = pd.read_csv(fire_csv)
-    count = 0
-    for _, r in df.iterrows():
-        try:
-            ts = pd.to_datetime(r.get("acq_date"))
-            dt = pd.to_datetime(
-                f"{r['acq_date']} {str(r['acq_time']).zfill(4)}", format="%Y-%m-%d %H%M", errors="coerce"
-            )
-        except Exception:
-            dt = None
-        db.add(FireReading(
-            latitude=_safe(r.get("latitude")),
-            longitude=_safe(r.get("longitude")),
-            acq_date=dt if dt is not None else (ts if ts is not None else None),
-            confidence=str(r.get("confidence", "")),
-            frp=_safe(r.get("frp")),
-            satellite=str(r.get("satellite", "")),
-            daynight=str(r.get("daynight", "")),
-        ))
-        count += 1
-        if count % 1000 == 0:
-            db.commit()
-    db.commit()
-    return count
+    df = pd.read_csv(fire_csv, low_memory=False)
+
+    acq_time = (
+        pd.to_numeric(df.get("acq_time"), errors="coerce")
+        .fillna(0)
+        .astype(int)
+        .astype(str)
+        .str.zfill(4)
+    )
+    dt = pd.to_datetime(
+        df["acq_date"].astype(str) + " " + acq_time,
+        format="%Y-%m-%d %H%M",
+        errors="coerce",
+    )
+    dt = dt.fillna(pd.to_datetime(df["acq_date"], errors="coerce"))
+
+    lat = pd.to_numeric(df.get("latitude"), errors="coerce")
+    lon = pd.to_numeric(df.get("longitude"), errors="coerce")
+
+    existing = {
+        (r.latitude, r.longitude)
+        for r in db.query(FireReading.latitude, FireReading.longitude).all()
+    }
+
+    payloads = []
+    for ax, ny, ts, conf, frp_v, sat, dn in zip(
+        lat,
+        lon,
+        dt,
+        df.get("confidence", pd.Series(dtype="str")),
+        df.get("frp"),
+        df.get("satellite", pd.Series(dtype="str")),
+        df.get("daynight", pd.Series(dtype="str")),
+        strict=True,
+    ):
+        key = (_clean(ax), _clean(ny))
+        if key[0] is None or key[1] is None or key in existing:
+            continue
+        ts_v = None if pd.isna(ts) else ts
+        payloads.append({
+            "latitude": key[0],
+            "longitude": key[1],
+            "acq_date": ts_v,
+            "confidence": "" if conf is None else str(conf),
+            "frp": _clean(frp_v),
+            "satellite": _clean(sat),
+            "daynight": _clean(dn),
+        })
+        existing.add(key)
+
+    if payloads:
+        db.bulk_insert_mappings(FireReading, payloads)
+        db.commit()
+    return len(payloads)
 
 
 def load_metrics(db, metrics_path: Path) -> int:
@@ -139,11 +175,20 @@ def load_metrics(db, metrics_path: Path) -> int:
         return 0
     from backend.app.models.db_models import ModelMetrics
 
+    existing = {
+        (m.model_name, m.pollutant, m.horizon_hours)
+        for m in db.query(ModelMetrics.model_name, ModelMetrics.pollutant, ModelMetrics.horizon_hours).all()
+    }
+
     with open(metrics_path, encoding="utf-8") as fh:
         entries = json.load(fh)
 
     count = 0
     for e in entries:
+        key = (e["model"], e["target"], e["horizon"])
+        if key in existing:
+            continue
+        existing.add(key)
         db.add(ModelMetrics(
             model_name=e["model"],
             pollutant=e["target"],
@@ -234,6 +279,12 @@ def _safe(v):
         return f if f == f else None
     except (TypeError, ValueError):
         return None
+
+
+def _clean(v):
+    if v is None or (isinstance(v, float) and v != v):
+        return None
+    return v
 
 
 if __name__ == "__main__":
