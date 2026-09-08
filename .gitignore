@@ -12,6 +12,13 @@ node_modules/
 .env
 .env.local
 
+# runtime logs & local dev databases (regenerable local state)
+*.log
+*.db
+
+# frontend build output (produced by npm run build / inside the Docker image)
+frontend/dist/
+
 # The 120MB row-export exceeds GitHub's 100MB push limit.
 # It is committed (byte-identical) as part1 + part2; see data/processed/SPLIT_NOTE.txt
 data/processed/featured_dataset.csv

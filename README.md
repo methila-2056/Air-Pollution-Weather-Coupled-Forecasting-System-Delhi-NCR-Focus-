@@ -4,7 +4,7 @@
 
 > Problem Statement: **SIH26082** · Ministry of Earth Sciences · NCMRWF
 
-[![CI](https://github.com/aerocast-ncr/aerocast-ncr/actions/workflows/ci.yml/badge.svg)](https://github.com/aerocast-ncr/aerocast-ncr/actions/workflows/ci.yml)
+[![CI](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml/badge.svg)](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Tests](https://img.shields.io/badge/tests-208%20passed-green)
 
