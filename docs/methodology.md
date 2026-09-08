@@ -148,3 +148,55 @@ reflecting interior + open outflow boundaries, non-negativity preserving
 (pure vectorised numpy), so the `/spatial` dashboard can switch between the
 statistical grid and the live numerical field, overlaying fire plumes.
 
+### 9.1 Surrogate vs. literal WRF-Chem (honest-scope tradeoff)
+
+The PS names "WRF-Chem or similar coupled frameworks". AeroCast-NCR ships a
+physics-informed **dynamical surrogate**, not compiled WRF-Chem. This section
+makes that tradeoff explicit, states how the surrogate is validated, and lists
+exactly what a literal deployment would require.
+
+| Dimension | AeroCast-NCR surrogate | Literal WRF-Chem |
+|-----------|------------------------|------------------|
+| Transport core | Vectorised finite-difference advection–diffusion–deposition (`dispersion_solver.py`) | Compiled Fortran (WPS + real-data WRF + CHEM), GNU/Intel compilers |
+| Two-way coupling | Aerosol AOD → transmittance → PBL suppression → stability index, applied per time-step in the Python loop | Online chemistry–radiation–PBL feedback inside the WRF time-integration |
+| Chemistry | Parametric criteria-pollutant mass (PM2.5/PM10/O3/NO2/SO2/CO) with deposition + wet scavenging rates | Full gas/aerosol schemes (e.g. MOZART / GOCART), hundreds of species |
+| Emissions | FRP-based fire point sources + steady urban area rates | Full gridded inventories (e.g. EDGAR, SAFAR, GFAS biomass) with diurnal profiles |
+| Initial/BC | IDW of nearest observed station AQI | 3-D meteorological reanalysis (ERA5/GFS) interpolation + chemical IC/BC |
+| Runtime | ≈1 s per 72 h horizon on a laptop | Hourly–minutes per day-forecast on HPC / many-core clusters |
+| Footprint | Pure Python + numpy, no compilation | Fortran toolchain, WPS/WRF/CHEM builds, MPI, ≥10s GB input data |
+
+**Validation strategy (surrogate).** The surrogate is treated as a statistical–
+physical forecasting model and validated three ways:
+
+1. **Forecast skill vs. baseline.** Persistence vs. RF vs. XGBoost across all
+   six pollutants and horizons {1,6,12,24,48,72}, reported in
+   `/api/model-metrics` (MAE/RMSE/R²/MAPE) from held-out test splits
+   (`ml/training/evaluator.py`). This measures the *statistical* quality of the
+   ML layer on real CPCB/fire data.
+2. **Physical-plausibility invariants.** The dispersion solver's numerical
+   behaviour is pinned by unit tests: non-negativity, mass non-increasing under
+   pure deposition, upwind transport of a Gaussian puff, reflecting/outflow
+   boundary handling, and CFL stability (`ml/features/dispersion_solver.py`,
+   `TestDispersionForecast`).
+3. **Consistency with observational constraints.** Forecast AQI is classified
+   into CPCB AQI categories and compared against live station readings via
+   `/api/data-quality` and forecast-vs-actual deltas (`/api/forecast/comparison`).
+   Directional agreement (plume sector vs. prevailing wind, downwind retention)
+   is checked against the injected FIRMS fire locations.
+
+A literal WRF-Chem run would additionally allow quantitative process-level
+validation against, e.g., observed ozone photochemistry or aerosol optical depth
+— which the surrogate does not attempt to reproduce.
+
+**What a literal WRF-Chem deployment would require.** If the project were scaled
+to true WRF-Chem, one would need: (a) a WPS/WRF/CHEM toolchain (Fortran, MPI,
+netCDF) with domain/namelist configuration for the NCR domain; (b) ERA5/GFS
+meteorological initial/boundary conditions; (c) gridded chemical initial/boundary
+conditions and a gas/aerosol chemistry option; (d) SAFAR/EDGAR/GFAS emission
+inventories processed for the same grid; (e) HPC resources with real-time
+turnaround; and (f) an operational data-acquisition + archiving pipeline. That is
+a multi-month, HPC-scale effort outside a student hackathon — hence the honest
+surrogate, which preserves the *mechanistic outcomes* the PS asks for (plume
+dispersion prediction, meteorological interlink, 72 h AQI, NCR-wide spatial
+coverage) while remaining reproducible in minutes on commodity hardware.
+
