@@ -44,8 +44,8 @@ def test_db_models_import():
         WeatherReading,
     )
     assert Station.__tablename__ == "stations"
-    assert PollutionReading.__tablename__ == "pollution_readings"
-    assert WeatherReading.__tablename__ == "weather_readings"
+    assert PollutionReading.__tablename__ == "pollution_observations"
+    assert WeatherReading.__tablename__ == "weather_observations"
     assert FireReading.__tablename__ == "fire_readings"
     assert Forecast.__tablename__ == "forecasts"
     assert Alert.__tablename__ == "alerts"

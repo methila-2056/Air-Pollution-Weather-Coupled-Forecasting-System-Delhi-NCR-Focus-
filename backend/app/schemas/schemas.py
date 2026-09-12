@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +10,32 @@ class StationResponse(BaseModel):
     latitude: float
     longitude: float
     city: str
+    state: str | None = None
+
+class PollutionReadingResponse(BaseModel):
+    station_id: int
+    station: str
+    city: str | None = None
+    state: str | None = None
+    timestamp: datetime
+    pm25: float | None
+    pm10: float | None
+    o3: float | None
+    no2: float | None
+    so2: float | None
+    co: float | None
+    aqi: int | None
+
+class PollutionIngestResponse(BaseModel):
+    records_fetched: int
+    observations_normalized: int
+    stations_processed: int
+    inserted: int
+    updated: int
+    skipped: int
+    station_created: int
+    station_updated: int
+    errors: list[str]
 
 class StationAQISummary(BaseModel):
     name: str
@@ -85,6 +112,144 @@ class ForecastComparisonResponse(BaseModel):
     station: str
     points: list[ForecastComparisonPoint]
 
+class Pm25ForecastPoint(BaseModel):
+    timestamp: datetime
+    forecast_horizon: int
+    predicted_pm25: float
+    pm25_lower_bound: float
+    pm25_upper_bound: float
+    baseline_persistence: float | None = None
+    test_mae: float | None = None
+    test_rmse: float | None = None
+    test_r2: float | None = None
+    test_n: int | None = None
+
+class Pm25ForecastResponse(BaseModel):
+    station: str
+    station_id: int
+    model: str
+    forecast_strategy: str
+    uncertainty_method: str
+    coverage_target: float | None = None
+    feature_version: str | None = None
+    release_time: datetime
+    data_as_of: datetime | None = None
+    generated_at: datetime
+    requested_hours: int
+    served_horizons: list[int]
+    context: dict | None = None
+    forecasts: list[Pm25ForecastPoint]
+
+class Pm25ModelCardResponse(BaseModel):
+    station: str | None = None
+    model: str
+    forecast_strategy: str
+    uncertainty_method: str
+    coverage_target: float | None = None
+    n_horizons: int
+    horizons: list[int]
+    n_features: int | None = None
+    available: bool
+    message: str | None = None
+
+class ShapContribution(BaseModel):
+    feature: str
+    value: float | None = None
+    shap_value: float
+    share_of_abs_contributions_pct: float
+    direction: str
+    description: str
+
+class Pm25ForecastExplanationResponse(BaseModel):
+    station: str
+    station_id: int
+    model: str
+    explanation_method: str
+    horizon_hours: int
+    forecast_timestamp: datetime
+    forecast_pm25: float
+    base_value: float
+    summary: str
+    top_positive_drivers: list[ShapContribution]
+    top_negative_drivers: list[ShapContribution]
+    contributions_by_magnitude: list[ShapContribution]
+    n_features: int
+    feature_values_used: dict | None = None
+    data_as_of: datetime
+    generated_at: datetime
+    test_metrics: dict | None = None
+
+class ForecastExplanationResponse(Pm25ForecastExplanationResponse):
+    """SHAP explanation keyed by a stored ``forecasts`` row id.
+
+    ``forecast_pm25`` is the model-derived prediction on the exact feature row
+    being explained (forecast = base_value + sum of shap values);
+    ``stored_pm25_pred`` is the value persisted on the original forecast row.
+    """
+    forecast_id: int
+    stored_pm25_pred: float | None = None
+
+class PollutionEventFactor(BaseModel):
+    """One contributing factor of an event, with real evidence from stored data."""
+    factor: str
+    status: str
+    value: float | None = None
+    evidence: str | None = None
+    description: str | None = None
+
+class PollutionEventConfidence(BaseModel):
+    """Model-uncertainty-based confidence for an event (from conformal bounds)."""
+    label: str
+    basis: str
+    margin_ugm3: float | None = None
+    conformal_half_width_ugm3: float | None = None
+    lower_bound_ugm3: float | None = None
+    upper_bound_ugm3: float | None = None
+    test_r2: float | None = None
+    coverage_target: float | None = None
+    uncertainty_method: str | None = None
+
+class PollutionEvent(BaseModel):
+    """A detected pollution event (surge / relief / high-risk episode).
+
+    ``expected_peak``/``expected_trough`` and their timestamps are the model's
+    predicted extreme over the event window; ``severity`` labels the tier of
+    that predicted extreme vs documented CPCB/NAAQS thresholds; contributing
+    factors carry the actual stored values that triggered each classification.
+    """
+    event_type: str
+    station: str | None = None
+    status: str
+    start_time: datetime
+    end_time: datetime | None = None
+    expected_peak: float | None = None
+    expected_peak_time: datetime | None = None
+    expected_trough: float | None = None
+    expected_trough_time: datetime | None = None
+    severity: str
+    severity_label: str
+    confidence: PollutionEventConfidence
+    contributing_factors: list[PollutionEventFactor]
+
+class PollutionEventsCurrentResponse(BaseModel):
+    """Current/upcoming pollution events for one station + methodology."""
+    station: str
+    station_id: int
+    generated_at: datetime
+    release_time: datetime
+    data_as_of: datetime | None = None
+    model: str
+    forecast_strategy: str | None = None
+    uncertainty_method: str | None = None
+    coverage_target: float | None = None
+    horizon_hours: int
+    baseline_pm25_ugm3: float | None = None
+    forecast_peak_pm25_ugm3: float | None = None
+    events: list[PollutionEvent]
+    atmosphere: dict | None = None
+    methodology: dict
+    notes: list[str] | None = None
+
 class WeatherResponse(BaseModel):
     station: str
     timestamp: datetime
@@ -98,6 +263,11 @@ class WeatherResponse(BaseModel):
 
 class WeatherDetailResponse(BaseModel):
     station: str
+    station_id: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    reading_latitude: float | None = None
+    reading_longitude: float | None = None
     timestamp: datetime
     temperature: float | None
     humidity: float | None
@@ -116,6 +286,98 @@ class InversionResponse(BaseModel):
     inversion_detected: bool
     inversion_strength: str
     trapping_risk: str
+    inversion_strength_score: float | None = None
+    inversion_category: str | None = None
+    inversion_source: str | None = None
+    inversion_base_pressure: float | None = None
+    inversion_top_pressure: float | None = None
+    strongest_layer_gradient: float | None = None
+    low_pbl_flag: bool | None = None
+    pbl_category: str | None = None
+    dispersion_condition: str | None = None
+
+class WindCondition(BaseModel):
+    wind_speed_mps: float | None = None
+    wind_direction_deg: float | None = None
+    compass_from: str | None = None
+    category: str
+    label: str
+    normalized: float | None = None
+    provenance: str
+    notes: list[str] | None = None
+
+class PblCondition(BaseModel):
+    pbl_height_m: float | None = None
+    category: str
+    label: str
+    normalized: float | None = None
+    provenance: str
+    notes: list[str] | None = None
+
+class VentilationCondition(BaseModel):
+    ventilation_coefficient_m2s: float | None = None
+    category: str
+    label: str
+    normalized: float | None = None
+    provenance: str
+    notes: list[str] | None = None
+
+class InversionIndicator(BaseModel):
+    detected: bool | None = None
+    category: str
+    strength: float | None = None
+    source: str
+    provenance: str
+    base_pressure_hpa: float | None = None
+    top_pressure_hpa: float | None = None
+    strongest_gradient_k100hpa: float | None = None
+    lapse_unit: str | None = None
+    profile_available: bool | None = None
+    pbl_category: str | None = None
+    dispersion_condition: str | None = None
+    normalized: float | None = None
+    limitations: list[str] | None = None
+
+class TrappingIndicator(BaseModel):
+    score: float | None = None
+    category: str
+    label: str
+    normalized: float | None = None
+    provenance: str
+    factors: list[str] | None = None
+
+class NormalizedFeatures(BaseModel):
+    """Normalized (0..1) features for later ML use."""
+    wind: float | None = None
+    pbl: float | None = None
+    ventilation: float | None = None
+    inversion: float | None = None
+    trapping: float | None = None
+
+class StationAtmosphere(BaseModel):
+    station: str
+    station_id: int
+    analyzed_at: datetime
+    weather_timestamp: datetime | None = None
+    pollution_timestamp: datetime | None = None
+    weather_age_hours: float | None = None
+    pollution_age_hours: float | None = None
+    flags: list[str] | None = None
+    inputs: dict
+    input_basis: dict | None = None
+    wind: WindCondition
+    pbl: PblCondition
+    ventilation: VentilationCondition
+    inversion: InversionIndicator | None = None
+    trapping: TrappingIndicator
+    features: NormalizedFeatures
+
+class AtmosphereCurrentResponse(BaseModel):
+    generated_at: datetime
+    region: str
+    methodology: dict
+    summary: dict
+    stations: list[StationAtmosphere]
 
 class CouplingDiagnostics(BaseModel):
     aod_est: float
@@ -142,6 +404,53 @@ class FireActivityResponse(BaseModel):
     region: str
     date: datetime
 
+class FireHotspot(BaseModel):
+    lat: float
+    lon: float
+    frp: float | None = None
+    confidence: str | None = None
+    acq_date: datetime | None = None
+
+class FireHotspotsResponse(BaseModel):
+    region: str
+    hotspots: list[FireHotspot]
+
+class FireEvent(BaseModel):
+    """One stored FIRMS fire observation (facts only — no attribution)."""
+    id: int
+    latitude: float
+    longitude: float
+    acq_date: datetime
+    confidence: str | None = None
+    frp: float | None = None
+    brightness: float | None = None
+    satellite: str | None = None
+    instrument: str | None = None
+    daynight: str | None = None
+
+class FiresLatestResponse(BaseModel):
+    region: str
+    generated_at: datetime
+    count: int
+    fires: list[FireEvent]
+
+class TransportRiskCurrentResponse(BaseModel):
+    """Estimated Regional Pollution Transport Risk — transparent 0-100 estimate."""
+    risk_score: int | None
+    risk_level: str
+    main_contributing_factors: list[str]
+    upwind_fire_count: int
+    fire_count: int
+    dominant_wind_direction: dict
+    atmospheric_condition: dict
+    generated_at: datetime
+    region: str
+    disclaimer: str
+    inputs: dict
+    components: dict
+    methodology: dict
+    station_detail: list[dict]
+
 class PlumeRiskResponse(BaseModel):
     risk_level: str
     risk_score: float
@@ -151,6 +460,11 @@ class PlumeRiskResponse(BaseModel):
     distance_nearest_fire: float
     confidence: float
     factors: list[str]
+    wind_alignment_pct: float | None = None
+    transport_time_hours: float | None = None
+    transport_risk: float | None = None
+    transport_risk_level: str | None = None
+    stubble_impact_score: float | None = None
 
 class TransportDirectionResponse(BaseModel):
     station: str
@@ -202,3 +516,146 @@ class ModelMetricResponse(BaseModel):
     test_period_start: datetime | None
     test_period_end: datetime | None
     trained_at: datetime | None = None
+
+class SplitRangeInfo(BaseModel):
+    start: datetime | None = None
+    end: datetime | None = None
+    n_rows: int
+
+class PerformanceMetrics(BaseModel):
+    mae: float | None = None
+    rmse: float | None = None
+    r2: float | None = None
+    mape: float | None = None
+    nmae: float | None = None
+    n: int = 0
+
+class HorizonPerformance(BaseModel):
+    horizon_hours: int
+    n_train: int
+    n_val: int
+    n_test: int
+    test_period_start: datetime | None = None
+    test_period_end: datetime | None = None
+    metrics: dict[str, PerformanceMetrics]
+
+class ModelPerformanceResponse(BaseModel):
+    schema_version: int = 1
+    target: str
+    model_dir: str
+    data_source: str
+    generated_at: datetime
+    feature_count: int
+    features: list[str]
+    horizons: list[int]
+    evaluated_models: list[str]
+    split_type: str
+    split_ratios: list[float] | None = None
+    split_ranges: dict[str, SplitRangeInfo]
+    results: list[HorizonPerformance]
+
+
+class ScenarioPerturbation(BaseModel):
+    """A controlled change to a continuous environmental input.
+
+    ``absolute`` replaces the stored baseline value outright. ``relative``
+    multiplies the baseline value (2.0 = double, 0.5 = half); for
+    ``wind_direction`` only, ``relative`` adds a rotation in degrees.
+    """
+
+    mode: Literal["absolute", "relative"]
+    value: float
+
+
+class FireActivityChange(BaseModel):
+    """Regional fire-activity change expressed as an FRP intensity multiplier.
+
+    Only the FRP-weighted intensity terms are scaled; detected-fire counts and
+    geometry-derived terms are left at their real observed values.
+    """
+
+    mode: Literal["relative"] = "relative"
+    multiplier: float = Field(default=1.0, gt=0.0)
+
+
+class InversionChange(BaseModel):
+    detected: bool
+    strength: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class ScenarioChanges(BaseModel):
+    wind_speed: ScenarioPerturbation | None = None
+    wind_direction: ScenarioPerturbation | None = None
+    pbl_height: ScenarioPerturbation | None = None
+    fire_activity: FireActivityChange | None = None
+    inversion: InversionChange | None = None
+
+
+class ScenarioAnalysisRequest(BaseModel):
+    station_name: str | None = None
+    hours: int = Field(default=72, ge=1, le=72)
+    changes: ScenarioChanges = Field(
+        ...,
+        description="At least one field of ``changes`` must be set.",
+    )
+
+
+class ScenarioForecastSummary(BaseModel):
+    peak_pm25: float | None = None
+    mean_pm25: float | None = None
+    forecasts: list[Pm25ForecastPoint]
+
+
+class ScenarioDifferencePoint(BaseModel):
+    timestamp: datetime
+    forecast_horizon: int
+    baseline_pm25: float
+    scenario_pm25: float
+    difference_pm25: float
+    baseline_lower_bound: float | None = None
+    baseline_upper_bound: float | None = None
+    scenario_lower_bound: float | None = None
+    scenario_upper_bound: float | None = None
+
+
+class ScenarioDifference(BaseModel):
+    peak_difference_pm25: float | None = None
+    mean_difference_pm25: float | None = None
+    points: list[ScenarioDifferencePoint]
+
+
+class ScenarioChangeEffect(BaseModel):
+    feature: str
+    unit: str | None = None
+    baseline_value: float | None = None
+    scenario_value: float | None = None
+
+
+class ScenarioObserved(BaseModel):
+    pm25_last_observed_ugm3: float | None = None
+    pm25_lag1_anchor_ugm3: float | None = None
+    timestamp: datetime | None = None
+
+
+class ScenarioAnalysisResponse(BaseModel):
+    label: str = "SCENARIO ANALYSIS"
+    disclaimer: str
+    station: str
+    station_id: int
+    release_time: datetime
+    data_as_of: datetime | None = None
+    generated_at: datetime
+    model: str
+    forecast_strategy: str | None = None
+    uncertainty_method: str | None = None
+    coverage_target: float | None = None
+    horizon_hours: int
+    served_horizons: list[int]
+    value_kinds: dict
+    observed: ScenarioObserved
+    baseline_forecast: ScenarioForecastSummary
+    scene_forecast: ScenarioForecastSummary
+    difference: ScenarioDifference
+    input_changes: list[ScenarioChangeEffect]
+    notes: list[str]
+    data_integrity: dict

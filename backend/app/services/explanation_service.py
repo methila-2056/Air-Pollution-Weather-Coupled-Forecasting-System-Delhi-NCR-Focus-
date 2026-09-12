@@ -33,14 +33,7 @@ FEATURE_DESCRIPTIONS = {
     "feedback_multiplier": ("Two-way feedback multiplier", "Stable coupled system is retaining pollutants near surface"),
 }
 
-FALLBACK_WEIGHTS = [
-    ("pm25_lag1", 0.26, "positive"),
-    ("wind_speed", 0.22, "negative"),
-    ("pbl_height", 0.18, "negative"),
-    ("inversion_strength", 0.12, "positive"),
-    ("fire_impact_score", 0.12, "positive"),
-    ("humidity", 0.10, "positive"),
-]
+FALLBACK_WEIGHTS = []  # NOT USED: feature weights are never fabricated.
 
 def _get_feature_names(model) -> list:
     for attr in ("feature_names_", "feature_names_in_"):
@@ -54,61 +47,78 @@ def _get_feature_names(model) -> list:
             return list(names)
     return []
 
-def explain_prediction(model, features: dict) -> list[dict]:
-    try:
-        cols = _get_feature_names(model)
-        if not cols:
-            return explain_fallback(features)
-        explainer = shap.TreeExplainer(model)
-        arr = np.array([[features.get(k, 0.0) for k in cols]], dtype=float)
-        shap_values = explainer.shap_values(arr)
-        values = np.asarray(shap_values)
-        if values.ndim >= 3:
-            values = values.reshape(values.shape[0], -1)
-        values = values[0]
-        total = float(np.sum(np.abs(values)))
-        if not total:
-            return explain_fallback(features)
-        feature_importance = []
-        for i, name in enumerate(cols):
-            if i >= len(values):
-                break
-            v = float(values[i])
-            desc, hint = FEATURE_DESCRIPTIONS.get(name, (name, ""))
-            description = f"{desc}. {hint}" if hint else desc
-            feature_importance.append({
-                "feature": name,
-                "importance": round(abs(v), 4),
-                "importance_pct": round(abs(v) / total * 100, 1),
-                "direction": "positive" if v > 0 else "negative",
-                "value": features.get(name),
-                "description": description,
-            })
-        feature_importance.sort(key=lambda x: x["importance"], reverse=True)
-        return feature_importance[:6]
-    except Exception:
-        return explain_fallback(features)
+def _tree_estimator(model):
+    """Return the underlying tree estimator for SHAP.
 
-def explain_fallback(features: dict) -> list[dict]:
+    AeroCast wrappers (RandomForestModel / XGBoostModel) expose the fitted
+    scikit/xgboost estimator as ``.model``; shap.TreeExplainer needs the raw
+    estimator, not the wrapper. Falls back to ``model`` itself when it is not
+    a wrapper.
+    """
+    inner = getattr(model, "model", None)
+    if inner is not None and hasattr(inner, "predict"):
+        return inner
+    return model
+
+
+def explain_prediction(model, features: dict) -> list[dict]:
+    """Return real SHAP feature contributions for ``model`` on ``features``.
+
+    Every value is computed with ``shap.TreeExplainer`` on the actual model —
+    there are no hardcoded weights and no fabricated percentages. Raises
+    ``RuntimeError`` (never fabricates) when the model cannot be explained.
+    """
+    cols = _get_feature_names(model)
+    if not cols:
+        raise RuntimeError(
+            "no_tree_model: the loaded model exposes no feature names, so SHAP "
+            "cannot attribute feature contributions. No fabricated weights are returned."
+        )
+    explainer = shap.TreeExplainer(_tree_estimator(model))
+    arr = np.array([[features.get(k, 0.0) for k in cols]], dtype=float)
+    shap_values = explainer.shap_values(arr)
+    values = np.asarray(shap_values)
+    if values.ndim >= 3:
+        values = values.reshape(values.shape[0], -1)
+    values = values[0]
+    total = float(np.sum(np.abs(values)))
+    if not total:
+        raise RuntimeError(
+            "no_variance: all SHAP contributions are zero for this feature row; "
+            "the model attributes nothing. No fabricated weights are returned."
+        )
     feature_importance = []
-    for name, weight, direction in FALLBACK_WEIGHTS:
-        value = features.get(name)
+    for i, name in enumerate(cols):
+        if i >= len(values):
+            break
+        v = float(values[i])
         desc, hint = FEATURE_DESCRIPTIONS.get(name, (name, ""))
         description = f"{desc}. {hint}" if hint else desc
         feature_importance.append({
             "feature": name,
-            "importance": round(weight, 4),
-            "importance_pct": round(weight / sum(w for _, w, _ in FALLBACK_WEIGHTS) * 100, 1),
-            "direction": direction,
-            "value": value,
+            "importance": round(abs(v), 4),
+            "importance_pct": round(abs(v) / total * 100, 1),
+            "direction": "positive" if v > 0 else "negative",
+            "value": features.get(name),
             "description": description,
         })
     feature_importance.sort(key=lambda x: x["importance"], reverse=True)
     return feature_importance[:6]
 
+def explain_fallback(features: dict) -> list[dict]:
+    raise RuntimeError(
+        "no_model_for_explanation: no tree-based model is available, so SHAP "
+        "cannot compute feature contributions. No fabricated weights are returned."
+    )
+
 def generate_natural_language(features: dict, top_features: list[dict], prediction=None) -> list[str]:
     lines = []
     features = features or {}
+    if not top_features:
+        return [
+            "Explanation unavailable: no tree-based model could be loaded for SHAP "
+            "analysis, so no feature contributions are reported (no estimates are fabricated)."
+        ]
     if top_features:
         first = top_features[0]
         value = features.get(first["feature"])

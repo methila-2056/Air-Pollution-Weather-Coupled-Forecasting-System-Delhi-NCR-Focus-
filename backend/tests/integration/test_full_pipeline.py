@@ -114,12 +114,21 @@ class TestExplainability:
         for ft in body["top_features"]:
             assert {"feature", "importance", "direction", "description"} <= set(ft)
 
-    def test_explanation_fallback_for_other_station(self, client, db_session):
+    def test_explanation_other_station(self, client, db_session):
+        """Explanation for a station without live readings must still be either
+        real SHAP on the fired tree model (200) or an honest 503 — never
+        fabricated percentages."""
         resp = client.get("/api/explanation/RK Puram")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["station"] == "RK Puram"
-        assert len(body["top_features"]) >= 3
+        if resp.status_code == 200:
+            body = resp.json()
+            assert body["station"] == "RK Puram"
+            assert len(body["top_features"]) >= 3
+            for ft in body["top_features"]:
+                assert {"feature", "importance", "direction", "description"} <= set(ft)
+                assert ft["importance"] > 0
+        else:
+            assert resp.status_code == 503
+            assert "fabricated" not in resp.json().get("detail", "").lower()
 
 
 class TestAlerts:

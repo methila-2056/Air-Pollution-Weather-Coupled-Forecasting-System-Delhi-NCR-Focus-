@@ -13,9 +13,14 @@ def _station_or_404(db: Session, station_name: str) -> Station:
         raise HTTPException(status_code=404, detail=f"Station '{station_name}' not found")
     return station
 
-def _to_detail(station_name: str, r) -> WeatherDetailResponse:
+def _to_detail(station: Station, r) -> WeatherDetailResponse:
     return WeatherDetailResponse(
-        station=station_name,
+        station=station.name,
+        station_id=station.id,
+        latitude=station.latitude,
+        longitude=station.longitude,
+        reading_latitude=r.latitude,
+        reading_longitude=r.longitude,
         timestamp=r.timestamp,
         temperature=r.temperature,
         humidity=r.humidity,
@@ -28,6 +33,32 @@ def _to_detail(station_name: str, r) -> WeatherDetailResponse:
         pbl_height=r.pbl_height,
     )
 
+@router.get("/weather/latest", response_model=list[WeatherDetailResponse])
+def get_weather_latest(db: Session = Depends(get_db)):
+    """Latest weather observation for every station in Delhi NCR.
+
+    Serves a single NCR-wide snapshot: the most recent ``weather_observations``
+    row per station, newest observed time first. Stations without any weather
+    data simply do not appear in the result.
+    """
+    stations = {s.id: s for s in db.query(Station).all()}
+    readings = (
+        db.query(WeatherReading)
+        .order_by(WeatherReading.station_id, WeatherReading.timestamp.desc())
+        .all()
+    )
+    seen: set[int] = set()
+    latest = []
+    for reading in readings:
+        if reading.station_id in seen:
+            continue
+        seen.add(reading.station_id)
+        station = stations.get(reading.station_id)
+        if station is None:
+            continue
+        latest.append(_to_detail(station, reading))
+    return latest
+
 @router.get("/weather/{station_name}", response_model=WeatherDetailResponse)
 def get_weather(station_name: str, db: Session = Depends(get_db)):
     station = _station_or_404(db, station_name)
@@ -39,7 +70,7 @@ def get_weather(station_name: str, db: Session = Depends(get_db)):
     )
     if not reading:
         raise HTTPException(status_code=404, detail=f"No weather data for station '{station_name}'")
-    return _to_detail(station_name, reading)
+    return _to_detail(station, reading)
 
 @router.get("/weather/{station_name}/history", response_model=list[WeatherDetailResponse])
 def get_weather_history(
@@ -57,4 +88,4 @@ def get_weather_history(
     )
     if not readings:
         raise HTTPException(status_code=404, detail=f"No historical weather for station '{station_name}'")
-    return [_to_detail(station_name, r) for r in readings]
+    return [_to_detail(station, r) for r in readings]

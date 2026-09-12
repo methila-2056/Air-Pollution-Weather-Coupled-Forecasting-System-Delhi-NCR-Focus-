@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "target": "pm25",
+  "model_dir": "models\\pm25",
+  "data_source": "data\\ml\\training_dataset.csv",
+  "generated_at": "2026-09-12T17:46:28.823494+00:00",
+  "feature_count": 44,
+  "features": [
+    "temperature",
+    "humidity",
+    "pressure_msl",
+    "surface_pressure",
+    "wind_speed",
+    "wind_direction",
+    "wind_dir_sin",
+    "wind_dir_cos",
+    "pbl_height",
+    "ventilation_coefficient",
+    "inversion_detected",
+    "inversion_strength",
+    "fire_count",
+    "fire_impact_score",
+    "nearest_fire_distance",
+    "wind_aligned_fire_count",
+    "wind_alignment_pct",
+    "transport_time_hours",
+    "transport_risk",
+    "stubble_impact_score",
+    "hour_of_day",
+    "day_of_week",
+    "month",
+    "day_of_year",
+    "is_weekend",
+    "hour_sin",
+    "hour_cos",
+    "dayofweek_sin",
+    "dayofweek_cos",
+    "month_sin",
+    "month_cos",
+    "pm25_lag1",
+    "pm25_lag3",
+    "pm25_lag6",
+    "pm25_lag12",
+    "pm25_lag24",
+    "pm25_roll_mean_3h",
+    "pm25_roll_std_3h",
+    "pm25_roll_mean_6h",
+    "pm25_roll_std_6h",
+    "pm25_roll_mean_12h",
+    "pm25_roll_std_12h",
+    "pm25_roll_mean_24h",
+    "pm25_roll_std_24h"
+  ],
+  "horizons": [
+    1,
+    6,
+    12,
+    24,
+    48,
+    72
+  ],
+  "evaluated_models": [
+    "gru",
+    "persistence",
+    "random_forest",
+    "xgboost"
+  ],
+  "split_type": "chronological",
+  "split_ratios": [
+    0.6,
+    0.2,
+    0.2
+  ],
+  "split_ranges": {
+    "train": {
+      "start": "2024-01-01 00:00:00",
+      "end": "2025-03-17 09:00:00",
+      "n_rows": 51007
+    },
+    "validation": {
+      "start": "2025-03-17 09:00:00",
+      "end": "2025-08-10 02:00:00",
+      "n_rows": 17002
+    },
+    "test": {
+      "start": "2025-08-10 03:00:00",
+      "end": "2026-09-08 08:00:00",
+      "n_rows": 17002
+    }
+  },
+  "results": [
+    {
+      "horizon_hours": 1,
+      "n_train": 51002,
+      "n_val": 17002,
+      "n_test": 15767,
+      "test_period_start": "2025-08-10 03:00:00",
+      "test_period_end": "2025-12-31 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 32.3619,
+          "rmse": 53.1059,
+          "r2": 0.8204,
+          "mape": 32.5966,
+          "nmae": 0.2197,
+          "n": 15767
+        },
+        "random_forest": {
+          "mae": 26.6079,
+          "rmse": 43.502,
+          "r2": 0.8795,
+          "mape": 32.1961,
+          "nmae": 0.1806,
+          "n": 15767
+        },
+        "xgboost": {
+          "mae": 26.6794,
+          "rmse": 43.5316,
+          "r2": 0.8793,
+          "mape": 32.1734,
+          "nmae": 0.1811,
+          "n": 15767
+        },
+        "gru": {
+          "mae": 58.5216,
+          "rmse": 102.0706,
+          "r2": 0.3364,
+          "mape": 41.58,
+          "nmae": 0.3973,
+          "n": 15767
+        }
+      }
+    },
+    {
+      "horizon_hours": 6,
+      "n_train": 51002,
+      "n_val": 17002,
+      "n_test": 15767,
+      "test_period_start": "2025-08-10 03:00:00",
+      "test_period_end": "2025-12-31 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 64.5241,
+          "rmse": 102.5815,
+          "r2": 0.3341,
+          "mape": 58.5797,
+          "nmae": 0.4361,
+          "n": 15767
+        },
+        "random_forest": {
+          "mae": 42.462,
+          "rmse": 67.2098,
+          "r2": 0.7142,
+          "mape": 48.4057,
+          "nmae": 0.287,
+          "n": 15767
+        },
+        "xgboost": {
+          "mae": 40.4654,
+          "rmse": 64.1945,
+          "r2": 0.7392,
+          "mape": 47.2583,
+          "nmae": 0.2735,
+          "n": 15767
+        },
+        "gru": {
+          "mae": 66.3918,
+          "rmse": 109.6557,
+          "r2": 0.2391,
+          "mape": 54.1204,
+          "nmae": 0.4487,
+          "n": 15767
+        }
+      }
+    },
+    {
+      "horizon_hours": 12,
+      "n_train": 51002,
+      "n_val": 17002,
+      "n_test": 15767,
+      "test_period_start": "2025-08-10 03:00:00",
+      "test_period_end": "2025-12-31 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 71.9347,
+          "rmse": 111.8704,
+          "r2": 0.1998,
+          "mape": 65.8929,
+          "nmae": 0.4855,
+          "n": 15767
+        },
+        "random_forest": {
+          "mae": 49.3984,
+          "rmse": 77.98,
+          "r2": 0.6112,
+          "mape": 55.2728,
+          "nmae": 0.3334,
+          "n": 15767
+        },
+        "xgboost": {
+          "mae": 44.739,
+          "rmse": 70.4495,
+          "r2": 0.6827,
+          "mape": 52.4783,
+          "nmae": 0.302,
+          "n": 15767
+        },
+        "gru": {
+          "mae": 73.49,
+          "rmse": 117.6283,
+          "r2": 0.1153,
+          "mape": 59.8884,
+          "nmae": 0.496,
+          "n": 15767
+        }
+      }
+    },
+    {
+      "horizon_hours": 24,
+      "n_train": 51002,
+      "n_val": 17002,
+      "n_test": 15767,
+      "test_period_start": "2025-08-10 03:00:00",
+      "test_period_end": "2025-12-31 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 52.8071,
+          "rmse": 82.8919,
+          "r2": 0.5616,
+          "mape": 55.4589,
+          "nmae": 0.3539,
+          "n": 15767
+        },
+        "random_forest": {
+          "mae": 50.3686,
+          "rmse": 78.6966,
+          "r2": 0.6049,
+          "mape": 59.0327,
+          "nmae": 0.3376,
+          "n": 15767
+        },
+        "xgboost": {
+          "mae": 49.7608,
+          "rmse": 77.6635,
+          "r2": 0.6152,
+          "mape": 57.0511,
+          "nmae": 0.3335,
+          "n": 15767
+        },
+        "gru": {
+          "mae": 90.9783,
+          "rmse": 137.7362,
+          "r2": -0.2104,
+          "mape": 68.595,
+          "nmae": 0.6097,
+          "n": 15767
+        }
+      }
+    },
+    {
+      "horizon_hours": 48,
+      "n_train": 51002,
+      "n_val": 17002,
+      "n_test": 15650,
+      "test_period_start": "2025-08-10 03:00:00",
+      "test_period_end": "2025-12-30 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 60.7825,
+          "rmse": 96.2154,
+          "r2": 0.4101,
+          "mape": 60.1048,
+          "nmae": 0.4045,
+          "n": 15650
+        },
+        "random_forest": {
+          "mae": 59.6024,
+          "rmse": 90.8073,
+          "r2": 0.4745,
+          "mape": 70.572,
+          "nmae": 0.3967,
+          "n": 15650
+        },
+        "xgboost": {
+          "mae": 57.5176,
+          "rmse": 88.0054,
+          "r2": 0.5064,
+          "mape": 67.0392,
+          "nmae": 0.3828,
+          "n": 15650
+        },
+        "gru": {
+          "mae": 108.2495,
+          "rmse": 154.6058,
+          "r2": -0.5233,
+          "mape": 93.3863,
+          "nmae": 0.7205,
+          "n": 15650
+        }
+      }
+    },
+    {
+      "horizon_hours": 72,
+      "n_train": 51002,
+      "n_val": 17002,
+      "n_test": 15551,
+      "test_period_start": "2025-08-10 03:00:00",
+      "test_period_end": "2025-12-29 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 64.6004,
+          "rmse": 101.6986,
+          "r2": 0.3541,
+          "mape": 65.0568,
+          "nmae": 0.4261,
+          "n": 15551
+        },
+        "random_forest": {
+          "mae": 62.0159,
+          "rmse": 96.6355,
+          "r2": 0.4168,
+          "mape": 70.3075,
+          "nmae": 0.4091,
+          "n": 15551
+        },
+        "xgboost": {
+          "mae": 62.283,
+          "rmse": 96.003,
+          "r2": 0.4245,
+          "mape": 69.1634,
+          "nmae": 0.4108,
+          "n": 15551
+        },
+        "gru": {
+          "mae": 73.6582,
+          "rmse": 115.1719,
+          "r2": 0.1717,
+          "mape": 67.6149,
+          "nmae": 0.4858,
+          "n": 15551
+        }
+      }
+    }
+  ]
+}

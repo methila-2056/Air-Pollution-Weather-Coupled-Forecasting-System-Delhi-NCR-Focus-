@@ -7,15 +7,13 @@ Output: featured_dataset.csv
 """
 
 import os
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-from .inversion import add_inversion_features
-from .fire_impact import add_fire_features
 from .coupling import add_coupling_features
-
+from .fire_impact import add_fire_features
+from .inversion import add_inversion_features, add_lapse_rate_inversion_features
 
 POLLUTANT_COLS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
 POLLUTANT_LAGS = [1, 3, 6, 12, 24]
@@ -98,7 +96,7 @@ def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_pollution_lags(df: pd.DataFrame, cols: Optional[list] = None, lags: Optional[list] = None) -> pd.DataFrame:
+def add_pollution_lags(df: pd.DataFrame, cols: list | None = None, lags: list | None = None) -> pd.DataFrame:
     """Add lagged features for pollutant columns.
 
     For each pollutant in *cols* and each lag in *lags*, creates a column
@@ -115,7 +113,7 @@ def add_pollution_lags(df: pd.DataFrame, cols: Optional[list] = None, lags: Opti
     return df
 
 
-def add_rolling_means(df: pd.DataFrame, cols: Optional[list] = None, windows: Optional[list] = None) -> pd.DataFrame:
+def add_rolling_means(df: pd.DataFrame, cols: list | None = None, windows: list | None = None) -> pd.DataFrame:
     """Add rolling mean features for pollutant columns.
 
     For each pollutant and each window size, creates {pollutant}_roll_mean_{window}h
@@ -132,7 +130,7 @@ def add_rolling_means(df: pd.DataFrame, cols: Optional[list] = None, windows: Op
     return df
 
 
-def add_rolling_std(df: pd.DataFrame, cols: Optional[list] = None, windows: Optional[list] = None) -> pd.DataFrame:
+def add_rolling_std(df: pd.DataFrame, cols: list | None = None, windows: list | None = None) -> pd.DataFrame:
     """Add rolling standard deviation features for pollutant columns.
 
     For each pollutant and each window size, creates {pollutant}_roll_std_{window}h
@@ -164,7 +162,7 @@ def add_wind_decomposition(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_temperature_lags(df: pd.DataFrame, lags: Optional[list] = None) -> pd.DataFrame:
+def add_temperature_lags(df: pd.DataFrame, lags: list | None = None) -> pd.DataFrame:
     """Add lagged temperature features.
 
     Creates temperature_lag{h} for each lag hour h.
@@ -177,7 +175,7 @@ def add_temperature_lags(df: pd.DataFrame, lags: Optional[list] = None) -> pd.Da
     return df
 
 
-def add_humidity_lags(df: pd.DataFrame, lags: Optional[list] = None) -> pd.DataFrame:
+def add_humidity_lags(df: pd.DataFrame, lags: list | None = None) -> pd.DataFrame:
     """Add lagged humidity features.
 
     Creates humidity_lag{h} for each lag hour h.
@@ -242,8 +240,19 @@ FEATURE_DOCUMENTATION = {
     "inversion_detected": "1 if PBL < 500m indicating inversion",
     "inversion_strength": "Normalized inversion strength 0-1",
     "inversion_category": "none/weak/moderate/strong",
+    "inversion_source": "lapse_rate if vertical pressure-level temps used, else pbl_proxy",
+    "inversion_base_pressure": "Pressure (hPa) of the strongest inversion layer base",
+    "inversion_top_pressure": "Pressure (hPa) of the strongest inversion layer top",
+    "strongest_layer_gradient": "Vertical temp gradient of strongest layer (K/100 hPa)",
+    "low_pbl_flag": "1 if PBL < 300m (trapping)",
+    "pbl_category": "strong_trapping/moderate_trapping/weak_or_nil_trapping/good_dispersion/unknown",
+    "dispersion_condition": "TRAPPED/LIMITED/MODERATE/GOOD/UNKNOWN",
     "fire_impact_score": "Normalized fire impact weighted by wind alignment (0-1)",
     "wind_aligned_fire_count": "Count of fires that are upwind",
+    "wind_alignment_pct": "Percentage of nearby fires that are upwind",
+    "transport_time_hours": "Advective arrival time (nearest fire distance / wind speed)",
+    "transport_risk": "Composite transport risk 0-1 (intensity, proximity, alignment, time)",
+    "stubble_impact_score": "Smoke-driven PM2.5 fraction proxy 0-1 (stubble fires)",
     "aod_est": "Estimated aerosol optical depth from PM2.5 loading (chemistry->meteorology forcing)",
     "radiation_transmittance": "Fraction of solar radiation reaching surface after aerosol attenuation",
     "pbl_suppression_factor": "Aerosol-induced multiplier on PBL height (daytime strongest)",
@@ -259,9 +268,9 @@ def get_feature_documentation() -> dict:
 
 
 def run_feature_engineering(
-    input_path: Optional[str] = None,
-    output_path: Optional[str] = None,
-    df: Optional[pd.DataFrame] = None,
+    input_path: str | None = None,
+    output_path: str | None = None,
+    df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Run the full feature engineering pipeline.
 
@@ -310,6 +319,7 @@ def run_feature_engineering(
 
     print("  [8/9] Inversion features ...")
     df = add_inversion_features(df)
+    df = add_lapse_rate_inversion_features(df)
 
     print("  [9/9] Fire impact features ...")
     df = add_fire_features(df)

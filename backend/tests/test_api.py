@@ -1,11 +1,18 @@
 
 
 def test_health(client, db_session):
+    # /api/health is the minimal liveness contract
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    # /health is the rich probe (used by Docker healthchecks)
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "healthy"
+    assert body["status"] == "ok"
     assert body["service"] == "AeroCast-NCR API"
+    assert body["database"] == "connected"
 
 
 def test_data_quality(client, db_session):
@@ -17,7 +24,7 @@ def test_data_quality(client, db_session):
     assert "tables" in body
     assert "recommendations" in body
     assert body["tables"]["stations"]["total"] == 5
-    assert body["tables"]["pollution_readings"]["total"] == 12
+    assert body["tables"]["pollution_observations"]["total"] == 12
     assert "Anand Vihar" in body["forecast_coverage"]
 
 
@@ -172,6 +179,22 @@ def test_get_weather(client, db_session):
     assert body["pbl_height"] == 180.0
 
 
+def test_get_weather_latest_across_stations(client, db_session):
+    response = client.get("/api/weather/latest")
+    assert response.status_code == 200
+    bodies = response.json()
+    assert isinstance(bodies, list)
+    # only the seeded station has weather, but latest is still a list keyed per station
+    assert len(bodies) == 1
+    body = bodies[0]
+    assert body["station"] == "Anand Vihar"
+    assert body["station_id"] is not None
+    assert body["latitude"] == 28.6492
+    assert body["longitude"] == 77.2918
+    assert body["timestamp"] is not None
+    assert body["pbl_height"] == 180.0
+
+
 def test_get_weather_not_found(client, db_session):
     response = client.get("/api/weather/Gurugram")
     assert response.status_code == 404
@@ -217,6 +240,37 @@ def test_get_fire_activity(client, db_session):
     assert body["mean_frp"] > 0
 
 
+def test_get_latest_fires(client, db_session):
+    response = client.get("/api/fires/latest", params={"hours": 48})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] >= 5
+    assert body["region"]
+    assert body["generated_at"]
+    event = body["fires"][0]
+    assert {"id", "latitude", "longitude", "acq_date", "confidence", "frp",
+            "brightness", "satellite", "instrument", "daynight"} <= set(event)
+    assert event["acq_date"]
+    ids = [f["id"] for f in body["fires"]]
+    assert ids == sorted(ids, reverse=True)  # newest first
+
+
+def test_get_latest_fires_lookback_excludes_old(client, db_session):
+    # Seeded fires are ~2h old -> a 1h look-back window must return nothing.
+    response = client.get("/api/fires/latest", params={"hours": 1})
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+    response = client.get("/api/fires/latest", params={"hours": 7 * 24, "limit": 2})
+    assert response.status_code == 200
+    assert len(response.json()["fires"]) <= 2
+
+
+def test_get_latest_fires_query_validation(client, db_session):
+    assert client.get("/api/fires/latest", params={"hours": 0}).status_code == 422
+    assert client.get("/api/fires/latest", params={"hours": 721}).status_code == 422
+
+
 def test_get_fire_transport_direction(client, db_session):
     response = client.get("/api/fire/transport")
     assert response.status_code == 200
@@ -249,8 +303,18 @@ def test_get_explanation(client, db_session):
     assert body["prediction"]["pm25_pred"] is not None
     assert body["prediction"]["aqi_pred"] is not None
     assert len(body["top_features"]) >= 3
+    prev_importance = float("inf")
+    total_pct = 0.0
     for feature in body["top_features"]:
         assert {"feature", "importance", "direction", "description"} <= set(feature)
+        importance = feature["importance"]
+        assert isinstance(importance, (int, float)) and importance > 0
+        assert importance <= prev_importance, "top_features must be sorted by descending importance"
+        prev_importance = importance
+        pct = feature.get("importance_pct")
+        if pct is not None and isinstance(pct, (int, float)):
+            assert 0 <= pct <= 100
+            total_pct += pct
     assert len(body["natural_language"]) >= 1
 
 
@@ -326,4 +390,68 @@ def test_save_model_metrics_validation(client, db_session):
 
 def test_unknown_route(client, db_session):
     response = client.get("/api/does-not-exist")
+    assert response.status_code == 404
+
+
+def test_get_model_performance(client, db_session, monkeypatch, tmp_path):
+    # measured values (this is a recorded dataset, not recomputed at request time)
+    import json as _json
+
+    ev = {
+        "schema_version": 1,
+        "target": "pm25",
+        "model_dir": str(tmp_path),
+        "data_source": "data/ml/training_dataset.csv",
+        "generated_at": "2026-09-12T00:00:00Z",
+        "feature_count": 44,
+        "features": ["pm25_lag1", "hour_sin", "month_sin"],
+        "horizons": [1, 6],
+        "evaluated_models": ["persistence", "random_forest", "xgboost"],
+        "split_type": "chronological",
+        "split_ratios": [0.6, 0.2, 0.2],
+        "split_ranges": {
+            "train": {"start": "2024-01-01T00:00:00", "end": "2025-03-17T00:00:00", "n_rows": 51007},
+            "validation": {"start": "2025-03-17T00:00:00", "end": "2025-08-10T00:00:00", "n_rows": 17002},
+            "test": {"start": "2025-08-10T00:00:00", "end": "2026-09-08T00:00:00", "n_rows": 17002},
+        },
+        "results": [
+            {
+                "horizon_hours": h,
+                "n_train": 51007,
+                "n_val": 17002,
+                "n_test": 16999,
+                "test_period_start": "2025-08-10T00:00:00",
+                "test_period_end": "2026-09-08T00:00:00",
+                "metrics": {
+                    "persistence": {"mae": 60.0 + h, "rmse": 90.0 + h, "r2": 0.5, "n": 16999},
+                    "random_forest": {"mae": 50.0 + h, "rmse": 80.0 + h, "r2": 0.6, "n": 16999},
+                    "xgboost": {"mae": 45.0 + h, "rmse": 75.0 + h, "r2": 0.7, "n": 16999},
+                },
+            }
+            for h in (1, 6)
+        ],
+    }
+    eval_json = tmp_path / "evaluation.json"
+    eval_json.write_text(_json.dumps(ev), encoding="utf-8")
+    monkeypatch.setenv("AEROCAST_PM25_MODEL_DIR", str(tmp_path))
+
+    response = client.get("/api/model/performance")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["target"] == "pm25"
+    assert body["feature_count"] == 44
+    assert body["horizons"] == [1, 6]
+    assert body["evaluated_models"] == ["persistence", "random_forest", "xgboost"]
+    assert set(body["split_ranges"]) == {"train", "validation", "test"}
+    assert body["split_ranges"]["test"]["n_rows"] == 17002
+    assert len(body["results"]) == 2
+    h1 = next(r for r in body["results"] if r["horizon_hours"] == 1)
+    assert h1["metrics"]["xgboost"]["mae"] == 46.0
+    assert h1["metrics"]["persistence"]["n"] == 16999
+
+
+def test_model_performance_missing_returns_404(client, db_session, monkeypatch, tmp_path):
+    monkeypatch.setenv("AEROCAST_PM25_MODEL_DIR", str(tmp_path))
+    response = client.get("/api/model/performance")
     assert response.status_code == 404

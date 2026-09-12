@@ -1,17 +1,22 @@
-"""Temperature inversion detection from PBL height data.
+"""Temperature inversion detection.
 
-Uses planetary boundary layer (PBL) height as a proxy for atmospheric
-inversion conditions. Lower PBL indicates stronger trapping of pollutants.
+Two complementary methods are provided:
 
-Inversion categories:
-  - PBL < 150m:  Strong inversion
-  - PBL 150-300m: Moderate inversion
-  - PBL 300-500m: Weak inversion
-  - PBL > 500m:  No inversion
+* **Vertical lapse-rate inversion** (:mod:`ml.features.atmospheric_profile`) —
+  the scientifically defensible method required by SIH26082: compute the
+  vertical temperature gradient from standard pressure-level temperatures
+  (1000/925/850/700 hPa) and detect layers where temperature *increases* with
+  height. This is the authoritative method when vertical data is present.
 
-inversion_strength is normalized 0-1 where 1 = strongest inversion.
-Diurnal tendency makes inversions stronger at night/early morning.
+* **PBL-height proxy** (legacy, kept backward compatible) — infers inversion
+  from planetary boundary layer height (lower PBL => stronger trapping). This
+  remains the documented fallback when no vertical profile is available.
+
+Both are described in ``docs/SIH_GAP_AUDIT.md`` §E and used consistently at
+training time and in the live API.
 """
+
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
@@ -115,5 +120,84 @@ def add_inversion_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if hour_col == "_tmp_hour":
         df.drop(columns=[hour_col], inplace=True)
+
+    return df
+
+
+# --------------------------------------------------------------------------
+# Lapse-rate + PBL-classification features (SIH26082 §4)
+# --------------------------------------------------------------------------
+
+#: Column names for the vertical temperature profile. When present (as e.g.
+#: ``temperature_925hPa``, ``temperature_850hPa``), lapse-rate inversion is used.
+PRESSURE_LEVEL_COL_PREFIX = "temperature_{}hPa"
+PRESSURE_LEVELS = [1000, 925, 850, 700]
+
+#: Column names for geopotential heights (used for inversion_base/top reporting).
+GEOPOTENTIAL_COL_PREFIX = "geopotential_height_{}hPa"
+
+
+def _extract_temp_by_level(df_row) -> dict:
+    """Pull {pressure_hPa: temperature} from a DataFrame row when available."""
+    temps = {}
+    for p in PRESSURE_LEVELS:
+        col = PRESSURE_LEVEL_COL_PREFIX.format(p)
+        if col in df_row.index:
+            val = df_row.get(col)
+            if pd.notna(val):
+                try:
+                    temps[p] = float(val)
+                except (TypeError, ValueError):
+                    continue
+    return temps
+
+
+def add_lapse_rate_inversion_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add lapse-rate inversion features from vertical temperature columns.
+
+    Expected optional input columns: ``temperature_{1000,925,850,700}hPa``
+    (degC) from the Open-Meteo pressure-level feed. When none are present the
+    existing PBL-proxy columns are returned unchanged.
+
+    Adds:
+      - inversion_source            : "lapse_rate" | "pbl_proxy"
+      - inversion_base_pressure     : hPa (strongest layer base) or None
+      - inversion_top_pressure      : hPa (strongest layer top) or None
+      - strongest_layer_gradient    : K/100 hPa or None
+      - low_pbl_flag                : bool
+      - pbl_category                : strong_trapping/.../good_dispersion/unknown
+      - dispersion_condition        : TRAPPED/LIMITED/MODERATE/GOOD/UNKNOWN
+    """
+    from .atmospheric_profile import combine_inversion
+
+    df = df.copy()
+
+    def _row_analysis(row):
+        temps = _extract_temp_by_level(row)
+        pbl = row.get("pbl_height")
+        if pd.notna(pbl):
+            try:
+                pbl = float(pbl)
+            except (TypeError, ValueError):
+                pbl = None
+        return combine_inversion(pbl, temps if temps else None)
+
+    analyses = df.apply(_row_analysis, axis=1)
+
+    for key in (
+        "inversion_source",
+        "inversion_base_pressure",
+        "inversion_top_pressure",
+        "strongest_layer_gradient",
+        "low_pbl_flag",
+        "pbl_category",
+        "dispersion_condition",
+    ):
+        df[key] = analyses.apply(lambda a, k=key: a.get(k))
+
+    # Refresh the base inversion columns from the (possibly lapse-rate) analysis.
+    df["inversion_detected"] = analyses.apply(lambda a: int(bool(a.get("inversion_detected"))))
+    df["inversion_strength"] = analyses.apply(lambda a: float(a.get("inversion_strength", 0.0)))
+    df["inversion_category"] = analyses.apply(lambda a: str(a.get("inversion_category", "none")))
 
     return df

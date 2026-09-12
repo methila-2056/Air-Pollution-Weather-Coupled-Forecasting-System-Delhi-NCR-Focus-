@@ -34,6 +34,24 @@ export default function StubblePlume({ data }: { data: PlumeRisk | null }) {
             <p className="text-gray-400">Confidence</p>
             <p className="text-lg font-bold">{(data.confidence * 100).toFixed(0)}%</p>
           </div>
+          {data.wind_alignment_pct != null && (
+            <div>
+              <p className="text-gray-400">Winds Aligned</p>
+              <p className="text-lg font-bold">{data.wind_alignment_pct.toFixed(0)}%</p>
+            </div>
+          )}
+          {data.transport_time_hours != null && (
+            <div>
+              <p className="text-gray-400">Smoke Arrival</p>
+              <p className="text-lg font-bold">{data.transport_time_hours.toFixed(1)}h</p>
+            </div>
+          )}
+          {data.stubble_impact_score != null && (
+            <div>
+              <p className="text-gray-400">Stubble Smoke Proxy</p>
+              <p className="text-lg font-bold">{data.stubble_impact_score.toFixed(2)}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

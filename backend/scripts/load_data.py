@@ -48,65 +48,58 @@ def load_coupled_data(db, csv_path: Path) -> dict:
         existing_ts.setdefault(sid, set()).add(ts)
 
     df = pd.read_csv(csv_path, parse_dates=["timestamp"])
-    counts = {"pollution": 0, "weather": 0}
+    df["station_name"] = df["station"].map(raw_to_display).fillna(df["station"])
+    df["station_id"] = df["station_name"].map({s.name: s.id for s in stations.values()})
+    df = df[df["station_id"].notna()].copy()
+    if df.empty:
+        return {"pollution": 0, "weather": 0}
 
-    batch_size = 5000
-    rows = []
-    for _, r in df.iterrows():
-        st = stations[raw_to_display.get(r["station"], r["station"])]
-        ts = r["timestamp"]
-        if ts in existing_ts.get(st.id, set()):
-            continue
-        existing_ts.setdefault(st.id, set()).add(ts)
+    df = df[~df.apply(lambda r: r["timestamp"] in existing_ts.get(int(r["station_id"]), set()), axis=1)]
+    if df.empty:
+        return {"pollution": 0, "weather": 0}
 
-        pm25 = _safe(r.get("pm25"))
-        pm10 = _safe(r.get("pm10"))
-        o3 = _safe(r.get("o3"))
-        no2 = _safe(r.get("no2"))
-        so2 = _safe(r.get("so2"))
-        co = _safe(r.get("co"))
-        aqi_val = calculate_aqi(pm25, pm10, o3, no2, so2, co)[0]
+    for col in ("pm25", "pm10", "o3", "no2", "so2", "co"):
+        df[col] = pd.to_numeric(df.get(col), errors="coerce")
 
-        poll = PollutionReading(
-            station_id=st.id,
-            timestamp=ts,
-            pm25=pm25,
-            pm10=pm10,
-            o3=o3,
-            no2=no2,
-            so2=so2,
-            co=co,
-            aqi=aqi_val,
-        )
-        rows.append(poll)
-        counts["pollution"] += 1
+    aqi = [
+        calculate_aqi(head.pm25, head.pm10, head.o3, head.no2, head.so2, head.co)[0]
+        for head in df.itertuples(index=False)
+    ]
 
-        weather = WeatherReading(
-            station_id=st.id,
-            timestamp=ts,
-            temperature=_safe(r.get("temperature_2m")),
-            humidity=_safe(r.get("relative_humidity_2m")),
-            pressure_msl=_safe(r.get("pressure_msl")),
-            surface_pressure=_safe(r.get("surface_pressure")),
-            wind_speed=_safe(r.get("wind_speed_10m")),
-            wind_direction=_safe(r.get("wind_direction_10m")),
-            precipitation=_safe(r.get("precipitation")),
-            cloud_cover=_safe(r.get("cloud_cover")),
-            pbl_height=_safe(r.get("boundary_layer_height")),
-        )
-        rows.append(weather)
-        counts["weather"] += 1
+    poll_payloads = []
+    weather_payloads = []
+    for i, head in enumerate(df.itertuples(index=False)):
+        sid = int(head.station_id)
+        poll_payloads.append({
+            "station_id": sid,
+            "timestamp": head.timestamp,
+            "pm25": _clean(head.pm25),
+            "pm10": _clean(head.pm10),
+            "o3": _clean(head.o3),
+            "no2": _clean(head.no2),
+            "so2": _clean(head.so2),
+            "co": _clean(head.co),
+            "aqi": aqi[i],
+        })
+        weather_payloads.append({
+            "station_id": sid,
+            "timestamp": head.timestamp,
+            "temperature": _clean(getattr(head, "temperature_2m", None)),
+            "humidity": _clean(getattr(head, "relative_humidity_2m", None)),
+            "pressure_msl": _clean(getattr(head, "pressure_msl", None)),
+            "surface_pressure": _clean(getattr(head, "surface_pressure", None)),
+            "wind_speed": _clean(getattr(head, "wind_speed_10m", None)),
+            "wind_direction": _clean(getattr(head, "wind_direction_10m", None)),
+            "precipitation": _clean(getattr(head, "precipitation", None)),
+            "cloud_cover": _clean(getattr(head, "cloud_cover", None)),
+            "pbl_height": _clean(getattr(head, "boundary_layer_height", None)),
+        })
 
-        if len(rows) >= batch_size:
-            db.add_all(rows)
-            db.commit()
-            rows = []
+    db.bulk_insert_mappings(PollutionReading, poll_payloads)
+    db.bulk_insert_mappings(WeatherReading, weather_payloads)
+    db.commit()
 
-    if rows:
-        db.add_all(rows)
-        db.commit()
-
-    return counts
+    return {"pollution": len(poll_payloads), "weather": len(weather_payloads)}
 
 
 def load_fire_data(db, fire_csv: Path) -> int:
@@ -269,16 +262,6 @@ def main():
         db.close()
 
     print("\nBackend database load complete.")
-
-
-def _safe(v):
-    try:
-        if v is None:
-            return None
-        f = float(v)
-        return f if f == f else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _clean(v):

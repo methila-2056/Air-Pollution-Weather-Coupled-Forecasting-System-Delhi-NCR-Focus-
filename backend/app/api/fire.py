@@ -1,12 +1,20 @@
 import math
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.db_models import FireReading, Station, WeatherReading
-from ..schemas.schemas import FireActivityResponse, PlumeRiskResponse, TransportDirectionResponse
+from ..schemas.schemas import (
+    FireActivityResponse,
+    FireEvent,
+    FireHotspot,
+    FireHotspotsResponse,
+    FiresLatestResponse,
+    PlumeRiskResponse,
+    TransportDirectionResponse,
+)
 
 router = APIRouter()
 
@@ -93,15 +101,25 @@ def get_plume_risk(db: Session = Depends(get_db)):
             factors=["No fire data available"],
         )
 
-    fire_count = len(fires)
-    distances = [haversine(DELHI_LAT, DELHI_LON, f.latitude, f.longitude) for f in fires]
-    min_dist = min(distances)
-
     reading, wind_speed, wind_deg = _latest_wind(db)
     est = estimate_transport_direction(wind_deg)
     if wind_deg is None:
         est = {"source": "NW", "target": "SE", "label": "NW \u2192 SE"}
     transport_direction = est["label"]
+
+    # Real fire-impact / transport features (FRP-weighted, wind-aligned)
+    from ml.features.fire_impact import compute_fire_impact
+
+    fires_df = __import__("pandas").DataFrame([{
+        "lat": f.latitude, "lon": f.longitude, "frp": f.frp or 1.0,
+    } for f in fires])
+    impact = compute_fire_impact(
+        fires_df, DELHI_LAT, DELHI_LON,
+        wind_dir=wind_deg if wind_deg is not None else 0.0,
+        wind_speed=wind_speed or 0.0,
+    )
+    fire_count = impact["fire_count"]
+    min_dist = impact["nearest_fire_distance"]
 
     base = (fire_count / 100) * (1 / max(min_dist / 100, 0.1))
     alignment = 1.0 if est["source"] in UPWIND_SOURCES else 0.9
@@ -114,6 +132,14 @@ def get_plume_risk(db: Session = Depends(get_db)):
     else:
         risk_level = "LOW"
 
+    # Merge ML transport risk into the headline risk level (additive, honest:
+    # both derive from real fires + wind).
+    transport_risk = impact["transport_risk"]
+    if transport_risk and transport_risk >= 0.7 and risk_level == "LOW":
+        risk_level = "MODERATE"
+    if transport_risk and transport_risk >= 0.4 and risk_level == "LOW":
+        risk_level = "MODERATE"
+
     factors = []
     if fire_count > 50:
         factors.append(f"High fire activity: {fire_count} active hotspots")
@@ -123,6 +149,12 @@ def get_plume_risk(db: Session = Depends(get_db)):
         factors.append(f"Wind {wind_speed:.1f} m/s from {est['source']}; plume transport toward {est['target']}")
     else:
         factors.append("Wind data unavailable; assuming climatological NW \u2192 SE transport")
+    if impact["wind_alignment_pct"]:
+        factors.append(f"{impact['wind_alignment_pct']:.0f}% of nearby fires upwind (winds from {est['source']})")
+    if impact["transport_time_hours"]:
+        factors.append(f"Nearest fire smoke advective arrival ~{impact['transport_time_hours']:.1f}h at current wind")
+    if impact["stubble_impact_score"]:
+        factors.append(f"Stubble-smoke PM impact proxy: {impact['stubble_impact_score']:.2f}")
 
     return PlumeRiskResponse(
         risk_level=risk_level,
@@ -133,4 +165,75 @@ def get_plume_risk(db: Session = Depends(get_db)):
         distance_nearest_fire=round(min_dist, 1),
         confidence=round(min(risk_score, 0.95), 2),
         factors=factors,
+        wind_alignment_pct=round(impact["wind_alignment_pct"], 1),
+        transport_time_hours=impact["transport_time_hours"],
+        transport_risk=transport_risk,
+        transport_risk_level=impact["transport_risk_level"],
+        stubble_impact_score=round(impact["stubble_impact_score"], 3),
+    )
+
+
+@router.get("/fire/hotspots", response_model=FireHotspotsResponse)
+def get_fire_hotspots(db: Session = Depends(get_db)):
+    """Recent FIRMS active-fire locations for map overlay (SIH26082)."""
+    fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(1000).all()
+    hotspots = [
+        FireHotspot(
+            lat=f.latitude,
+            lon=f.longitude,
+            frp=f.frp,
+            confidence=f.confidence,
+            acq_date=f.acq_date,
+        )
+        for f in fires
+    ]
+    return FireHotspotsResponse(region="Punjab/Haryana/Rajasthan", hotspots=hotspots)
+
+
+@router.get("/fires/latest", response_model=FiresLatestResponse)
+def get_latest_fires(
+    hours: int = Query(default=48, ge=1, le=24 * 30, description="Look-back window in hours"),
+    limit: int = Query(default=1000, ge=1, le=5000, description="Max hotspot rows to return"),
+    db: Session = Depends(get_db),
+):
+    """Latest stored NASA FIRMS fire observations for the NCR + upwind region.
+
+    Purely observational: returns what was detected (time, location, FRP,
+    confidence, satellite/instrument). It states only that a fire was observed
+    at that location/time — it does not assert that any fire caused or
+    contributed to Delhi pollution.
+    """
+    from ..config import get_settings
+
+    now = datetime.now(UTC)
+    since = now - timedelta(hours=hours)
+    # SQLite stores naive datetimes; PostgreSQL (timezone=True) can hold aware.
+    if get_settings().database_url.startswith("sqlite"):
+        since = since.replace(tzinfo=None)
+    fires = (
+        db.query(FireReading)
+        .filter(FireReading.acq_date >= since)
+        .order_by(FireReading.acq_date.desc(), FireReading.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return FiresLatestResponse(
+        region="Delhi NCR + upwind tract (Punjab/Haryana/north Rajasthan)",
+        generated_at=now,
+        count=len(fires),
+        fires=[
+            FireEvent(
+                id=f.id,
+                latitude=f.latitude,
+                longitude=f.longitude,
+                acq_date=f.acq_date,
+                confidence=f.confidence,
+                frp=f.frp,
+                brightness=f.brightness,
+                satellite=f.satellite,
+                instrument=f.instrument,
+                daynight=f.daynight,
+            )
+            for f in fires
+        ],
     )

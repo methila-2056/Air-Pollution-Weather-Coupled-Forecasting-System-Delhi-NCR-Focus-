@@ -50,19 +50,43 @@ Authoritative definitions live in `backend/app/api/*.py` and
 ## Fire & plume
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/fire-activity` | Latest FIRMS fire aggregate |
-| GET | `/api/fire/transport?station_name=…` | Transport direction to a station |
-| GET | `/api/plume-risk` | Composite plume-risk score |
+| GET | `/api/fire/hotspots` | Current NASA FIRMS hotspot aggregate (count, FRP, nearest station, upwind share) |
+| GET | `/api/fires/latest` | Latest per-fire activity rows (satellite, FRP, confidence, day/night) |
+| GET | `/api/fire/transport?station_name=…` | FIRMS → station advective transport estimate (alignment, transport time, transport risk, stubble impact) |
+| GET | `/api/plume-risk` | Composite plume-risk score + contributors |
+| GET | `/api/fire-activity` | Latest FIRMS fire-aggregation summary |
 | GET | `/api/fire/{station_name}` | Fire context for a station |
 
-## Explainability, coupling, alerts, metrics
+## Inversion / atmosphere (vertical, pressure-level)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/inversion/{station_name}` | Lapse-rate-based inversion detection, strength, base/top pressure, category + PBL/dispersion conditions |
+| GET | `/api/atmosphere/current` | Current vertical-atmosphere profile summary (pressure levels, inversion, PBL, dispersion) |
+| GET | `/api/transport-risk/current` | Current transport-risk aggregate per station |
+| GET | `/api/coupling/{station_name}` | Two-way weather–chemistry coupling diagnostics + narrative |
+
+## Events & scenarios
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/events/current` | Pollution events (surge / relief / sustained high-risk episode) with confidence + atmospheric contributors |
+| POST | `/api/scenario/analysis` | Read-only what-if scenario engine (wind / PBL / fire / inversion perturbations) |
+
+## Explainability, alerts, metrics
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/explanation/{station_name}` | Top features + natural-language explanation |
-| GET | `/api/coupling/{station_name}` | Two-way coupling diagnostics + narrative |
-| GET | `/api/alerts` | Generated alert feed |
+| GET | `/api/forecast/pm25/explanation?station_name=…` | PM2.5-specific feature explanation |
+| GET | `/api/model/performance` | Latest persisted model-performance comparison |
 | GET | `/api/model/metrics` | Persisted MAE/RMSE/R² per model |
 | POST | `/api/model/metrics` | Save a model metric row |
+| GET | `/api/alerts` | Generated alert feed |
+
+## PM2.5 forecast engine (Phase-3)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/forecast/pm25?station_name=…&hours=…` | Direct multi-horizon PM2.5 forecast (serving model: XGBoost + conformal intervals; hours ∈ {1,6,12,24,48,72}, default 72) |
+| GET | `/api/forecast/pm25/model-card` | Deployed model card (features, horizons, uncertainty metadata) |
+| GET | `/api/forecast/{forecast_id}/explanation` | Forecast-specific SHAP explanation |
 
 ## Notes
 - Horizon values: `[1, 6, 12, 24, 48, 72]` hours.

@@ -30,8 +30,8 @@ OPTIONAL_IMPORTS = ["xgboost", "shap", "alembic"]
 
 EXPECTED_TABLES = [
     "stations",
-    "pollution_readings",
-    "weather_readings",
+    "pollution_observations",
+    "weather_observations",
     "fire_readings",
     "forecasts",
     "alerts",

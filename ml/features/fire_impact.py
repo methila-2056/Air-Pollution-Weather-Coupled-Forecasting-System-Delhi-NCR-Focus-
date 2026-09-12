@@ -1,21 +1,25 @@
 """Stubble-burning fire impact scoring for AeroCast-NCR.
 
 Computes per-station, per-time-step fire impact features using
-geographic proximity, FRP intensity, and wind alignment.
+geographic proximity, FRP intensity, wind alignment, and advective
+transport time.
 
 For each station-time pair:
   - fire_count: Number of fires within 500km radius
   - fire_impact_score: Normalized weighted sum (0-1)
   - nearest_fire_distance: Distance to closest fire in km
-  - wind_aligned_fire_count: Count of fires that are upwind
+  - wind_aligned_fire_count / wind_alignment_pct: upwind fires (and %)
+  - transport_time_hours: advective arrival time of nearest fire smoke
+    (nearest distance / surface wind speed) — a transparent estimate,
+    NOT a dispersion model
+  - transport_risk (0-1) + transport_risk_level: intensity + proximity +
+    alignment + time composite
+  - stubble_impact_score (0-1): smoke-driven PM2.5 fraction proxy
 """
 
 import math
-from typing import Optional
 
-import numpy as np
 import pandas as pd
-
 
 DELHI_CENTER_LAT = 28.6139
 DELHI_CENTER_LON = 77.2090
@@ -110,6 +114,11 @@ def compute_fire_impact(
         "fire_impact_score": 0.0,
         "nearest_fire_distance": max_distance_km + 1.0,
         "wind_aligned_fire_count": 0,
+        "wind_alignment_pct": 0.0,
+        "transport_time_hours": None,
+        "transport_risk": 0.0,
+        "transport_risk_level": "none",
+        "stubble_impact_score": 0.0,
     }
 
     if fires_df is None or fires_df.empty:
@@ -155,7 +164,44 @@ def compute_fire_impact(
 
     if count > 0:
         raw_score = sum(scores)
-        result["fire_impact_score"] = _normalize_impact(raw_score)
+        impact_score = _normalize_impact(raw_score)
+        result["fire_impact_score"] = impact_score
+
+        alignment_pct = aligned_count / count * 100.0
+        result["wind_alignment_pct"] = round(alignment_pct, 1)
+
+        # Transport time: how soon nearest (aligned) fire smoke can reach the
+        # station, assuming advection at the surface wind speed. Transparent
+        # advective estimate (not a dispersion model).
+        reach_km = min_dist
+        if wind_speed and wind_speed > 0.5:
+            result["transport_time_hours"] = round(reach_km / (wind_speed * 3.6), 2)
+            t_time = result["transport_time_hours"]
+        else:
+            t_time = None
+
+        # Transport risk combines fire intensity, proximity, and wind
+        # alignment of the nearest fire cluster.
+        proximity = 1.0 - min(1.0, min_dist / max_distance_km)
+        alignment_term = alignment_pct / 100.0
+        if t_time is not None:
+            time_term = 1.0 - min(1.0, t_time / 24.0)
+        else:
+            time_term = 0.0
+        risk = 0.4 * impact_score + 0.3 * proximity + 0.2 * alignment_term + 0.1 * time_term
+        result["transport_risk"] = round(min(1.0, max(0.0, risk)), 3)
+        result["transport_risk_level"] = (
+            "severe" if result["transport_risk"] >= 0.7
+            else "high" if result["transport_risk"] >= 0.4
+            else "moderate" if result["transport_risk"] >= 0.15
+            else "low"
+        )
+
+        # Stubble-impact score: smoke-driven PM2.5 fraction proxy. Uses the
+        # weighted fire impact score (FRP-weighted, wind-aligned) scaled by
+        # alignment so widespread aligned burning yields the highest values.
+        stubble_score = impact_score * (0.5 + 0.5 * alignment_term)
+        result["stubble_impact_score"] = round(min(1.0, max(0.0, stubble_score)), 3)
     else:
         result["fire_impact_score"] = 0.0
 
@@ -164,7 +210,7 @@ def compute_fire_impact(
 
 def add_fire_features(
     df: pd.DataFrame,
-    fires_df: Optional[pd.DataFrame] = None,
+    fires_df: pd.DataFrame | None = None,
     max_distance_km: float = DEFAULT_MAX_DISTANCE_KM,
 ) -> pd.DataFrame:
     """Add fire impact features to the main dataframe.
@@ -190,10 +236,21 @@ def add_fire_features(
         df["nearest_fire_distance"] = float(max_distance_km + 1.0)
     if "wind_aligned_fire_count" not in df.columns:
         df["wind_aligned_fire_count"] = 0
+    if "wind_alignment_pct" not in df.columns:
+        df["wind_alignment_pct"] = 0.0
+    if "transport_time_hours" not in df.columns:
+        df["transport_time_hours"] = None
+    if "transport_risk" not in df.columns:
+        df["transport_risk"] = 0.0
+    if "stubble_impact_score" not in df.columns:
+        df["stubble_impact_score"] = 0.0
     df["fire_impact_score"] = df["fire_impact_score"].astype(float)
     df["nearest_fire_distance"] = df["nearest_fire_distance"].astype(float)
     df["fire_count"] = df["fire_count"].astype(int)
     df["wind_aligned_fire_count"] = df["wind_aligned_fire_count"].astype(int)
+    df["wind_alignment_pct"] = df["wind_alignment_pct"].astype(float)
+    df["transport_risk"] = df["transport_risk"].astype(float)
+    df["stubble_impact_score"] = df["stubble_impact_score"].astype(float)
 
     if fires_df is None or fires_df.empty:
         return df
@@ -241,5 +298,9 @@ def add_fire_features(
         df.loc[idx, "fire_impact_score"] = impact["fire_impact_score"]
         df.loc[idx, "nearest_fire_distance"] = impact["nearest_fire_distance"]
         df.loc[idx, "wind_aligned_fire_count"] = impact["wind_aligned_fire_count"]
+        df.loc[idx, "wind_alignment_pct"] = impact["wind_alignment_pct"]
+        df.loc[idx, "transport_time_hours"] = impact["transport_time_hours"]
+        df.loc[idx, "transport_risk"] = impact["transport_risk"]
+        df.loc[idx, "stubble_impact_score"] = impact["stubble_impact_score"]
 
     return df

@@ -1,8 +1,9 @@
 """Live data refresh service for AeroCast-NCR.
 
-Fetches the latest weather (Open-Meteo), active fires (NASA FIRMS public CSV),
-and CPCB pollution (opencity.in CKAN) readings and upserts them into the
-backend database so forecasts always run on the most recent observations.
+Fetches the latest weather (Open-Meteo), active fires (NASA FIRMS),
+and CPCB pollution (data.gov.in / opencity CKAN) readings and upserts them
+into the backend database so forecasts always run on the most recent
+observations.
 """
 
 import asyncio
@@ -11,6 +12,14 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
+
+from .firms_service import (
+    FIRMS_REGION,
+    PUBLIC_CSV_URLS,
+    fetch_fire_records,
+    resolve_api_key,
+    upsert_fire_records,
+)
 
 logger = logging.getLogger("aerocast.refresh")
 
@@ -22,12 +31,9 @@ STATIONS = {
     "Punjabi_Bagh": (28.6692, 77.1285),
 }
 
-REGION = {"min_lon": 73.5, "min_lat": 27.5, "max_lon": 78.5, "max_lat": 33.0}
-
-FIRMS_CSV = (
-    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2"
-    "/csv/SUOMI_VIIRS_C2_Global_24h.csv"
-)
+# Legacy aliases kept for callers/tests that referenced the old constants.
+REGION = dict(FIRMS_REGION)
+FIRMS_CSV = PUBLIC_CSV_URLS[0]
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -45,6 +51,14 @@ HOURLY_VARS = (
     "temperature_2m,relative_humidity_2m,pressure_msl,surface_pressure,"
     "wind_speed_10m,wind_direction_10m,precipitation,cloud_cover,"
     "boundary_layer_height"
+)
+
+# Vertical pressure-level variables (SIH26082 inversion analysis). Temperatures
+# in degC at standard levels; geopotential height at 925/850 hPa for
+# inversion-base reporting.
+PRESSURE_LEVEL_VARS = (
+    "temperature_1000hPa,temperature_925hPa,temperature_850hPa,temperature_700hPa,"
+    "geopotential_height_925hPa,geopotential_height_850hPa"
 )
 
 DEFAULT_LOOKBACK_DAYS = 3
@@ -76,8 +90,8 @@ def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: 
         "longitude": lon,
         "start_date": start,
         "end_date": end,
-        "hourly": HOURLY_VARS,
-        "timezone": "Asia/Kolkata",
+        "hourly": f"{HOURLY_VARS},{PRESSURE_LEVEL_VARS}",
+        "timezone": "UTC",
     }
     try:
         resp = requests.get(ARCHIVE_URL, params=params, timeout=HTTP_TIMEOUT)
@@ -90,8 +104,8 @@ def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: 
             "latitude": lat,
             "longitude": lon,
             "forecast_days": 2,
-            "hourly": "temperature_2m,relative_humidity_2m,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,precipitation,cloud_cover,boundary_layer_height",
-            "timezone": "Asia/Kolkata",
+            "hourly": f"{HOURLY_VARS},{PRESSURE_LEVEL_VARS}",
+            "timezone": "UTC",
         }
         resp = requests.get(FORECAST_URL, params=f_params, timeout=HTTP_TIMEOUT)
         resp.raise_for_status()
@@ -100,7 +114,42 @@ def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: 
     if not hourly or "time" not in hourly:
         return pd.DataFrame()
     df = pd.DataFrame(hourly)
-    df["time"] = pd.to_datetime(df["time"])
+    # Normalize timestamps to naive UTC: Open-Meteo returns ISO datetimes in the
+    # requested timezone (we request UTC); a naive datetime has no offset, so all
+    # wall-clock ambiguity is removed and stored values are UTC by convention.
+    df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_localize(None)
+
+    # Archive pressure-level data for recent dates can be all-NULL (variable
+    # latency). When that happens, supplement with the live forecast window so
+    # lapse-rate analysis still has real vertical data (SIH26082).
+    pl_cols = [f"temperature_{int(p)}hPa" for p in (1000, 925, 850, 700)]
+    pl_present = [c for c in pl_cols if c in df.columns]
+    if pl_present and not df[pl_present].notna().any().any():
+        try:
+            f_params = {
+                "latitude": lat,
+                "longitude": lon,
+                "forecast_days": 3,
+                "hourly": PRESSURE_LEVEL_VARS,
+                "timezone": "UTC",
+            }
+            fresp = requests.get(FORECAST_URL, params=f_params, timeout=HTTP_TIMEOUT)
+            fresp.raise_for_status()
+            fdata = fresp.json().get("hourly", {})
+            if fdata and "time" in fdata:
+                fdf = pd.DataFrame(fdata)
+                fdf["time"] = pd.to_datetime(fdf["time"], utc=True).dt.tz_localize(None)
+                for col in pl_present:
+                    if col not in fdf.columns:
+                        fdf[col] = None
+                fdf = fdf[["time"] + pl_present]
+                df = df.set_index("time")
+                fdf = fdf.set_index("time")
+                df.update(fdf)  # fill vertical temps where archive is NULL
+                df = df.reset_index()
+        except Exception as ferr:
+            logger.warning("supplemental forecast pressure-level fetch failed: %s", ferr)
+
     raw_to_display = {
         "Anand_Vihar": "Anand Vihar",
         "RK_Puram": "RK Puram",
@@ -152,6 +201,12 @@ def refresh_weather(db, dry_run: bool = False) -> int:
                 precipitation=_to_float(r.get("precipitation")),
                 cloud_cover=_to_float(r.get("cloud_cover")),
                 pbl_height=_to_float(r.get("boundary_layer_height")),
+                temperature_1000hPa=_to_float(r.get("temperature_1000hPa")),
+                temperature_925hPa=_to_float(r.get("temperature_925hPa")),
+                temperature_850hPa=_to_float(r.get("temperature_850hPa")),
+                temperature_700hPa=_to_float(r.get("temperature_700hPa")),
+                geopotential_height_925hPa=_to_float(r.get("geopotential_height_925hPa")),
+                geopotential_height_850hPa=_to_float(r.get("geopotential_height_850hPa")),
             ))
             existing.add(ts)
         if rows:
@@ -159,58 +214,64 @@ def refresh_weather(db, dry_run: bool = False) -> int:
             if not dry_run:
                 db.commit()
             inserted += len(rows)
+
+        # Backfill vertical profile onto existing rows in this window that are
+        # missing pressure-level temperatures (e.g. rows created before the
+        # supplemental forecast fetch existed, while their timestamp already
+        # existed so the insert path above skipped them).
+        try:
+            stale = (
+                db.query(WeatherReading)
+                .filter(
+                    WeatherReading.station_id == stations[display].id,
+                    WeatherReading.temperature_925hPa.is_(None),
+                    WeatherReading.timestamp >= pd.Timestamp(start).to_pydatetime(),
+                    WeatherReading.timestamp < pd.Timestamp(end).to_pydatetime()
+                    + pd.Timedelta(days=1),
+                )
+                .all()
+            )
+            by_ts = {r["time"]: r for _, r in df.iterrows()}
+            updated = 0
+            for rec in stale:
+                src = by_ts.get(pd.Timestamp(rec.timestamp))
+                if src is None:
+                    continue
+                rec.temperature_1000hPa = _to_float(src.get("temperature_1000hPa"))
+                rec.temperature_925hPa = _to_float(src.get("temperature_925hPa"))
+                rec.temperature_850hPa = _to_float(src.get("temperature_850hPa"))
+                rec.temperature_700hPa = _to_float(src.get("temperature_700hPa"))
+                rec.geopotential_height_925hPa = _to_float(src.get("geopotential_height_925hPa"))
+                rec.geopotential_height_850hPa = _to_float(src.get("geopotential_height_850hPa"))
+                updated += 1
+            if updated and not dry_run:
+                db.commit()
+        except Exception as exc:
+            logger.warning("vertical backfill skipped: %s", exc)
     return inserted
 
 
 def refresh_fire(db, dry_run: bool = False) -> int:
-    """Upsert recent NASA FIRMS active fires; returns inserted row count."""
-    from ..models.db_models import FireReading
+    """Fetch + upsert live NASA FIRMS hotspots; returns rows inserted.
 
-    resp = requests.get(FIRMS_CSV, timeout=HTTP_TIMEOUT)
-    resp.raise_for_status()
-    df = pd.read_csv(pd.io.common.StringIO(resp.text))
-    hits = (
-        (df["longitude"] >= REGION["min_lon"])
-        & (df["longitude"] <= REGION["max_lon"])
-        & (df["latitude"] >= REGION["min_lat"])
-        & (df["latitude"] <= REGION["max_lat"])
-    )
-    region = df[hits]
-    if region.empty:
+    Uses the official FIRMS area API when ``NASA_FIRMS_MAP_KEY`` is set,
+    otherwise falls back to the public FIRMS 24h CSVs (both are real NASA
+    data). Observations are validated, normalised to naive-UTC, filtered to
+    the NCR + upwind region and deduplicated against the DB before insert.
+    """
+    records, source = fetch_fire_records(api_key=resolve_api_key())
+    if not records:
+        logger.info("fire refresh: no records available (source=%s)", source)
         return 0
-
-    existing = {
-        (r.latitude, r.longitude)
-        for r in db.query(FireReading.latitude, FireReading.longitude).all()
-    }
-    rows = []
-    for _, r in region.iterrows():
-        key = (_to_float(r.get("latitude")), _to_float(r.get("longitude")))
-        if key in existing:
-            continue
-        try:
-            ts = pd.to_datetime(
-                f"{r.get('acq_date')} {str(r.get('acq_time')).zfill(4)}",
-                format="%Y-%m-%d %H%M",
-                errors="coerce",
-            )
-        except Exception:
-            ts = pd.to_datetime(r.get("acq_date"), errors="coerce")
-        rows.append(FireReading(
-            latitude=_to_float(r.get("latitude")),
-            longitude=_to_float(r.get("longitude")),
-            acq_date=ts if ts is not None and pd.notna(ts) else None,
-            confidence=str(r.get("confidence", "")),
-            frp=_to_float(r.get("frp")),
-            satellite=str(r.get("satellite", "")),
-            daynight=str(r.get("daynight", "")),
-        ))
-        existing.add(key)
-    if rows:
-        db.add_all(rows)
-        if not dry_run:
-            db.commit()
-    return len(rows)
+    result = upsert_fire_records(db, records, dry_run=dry_run)
+    logger.info(
+        "fire refresh source=%s retrieved=%d inserted=%d duplicates=%d",
+        source,
+        result["retrieved"],
+        result["inserted"],
+        result["duplicates_skipped"],
+    )
+    return result["inserted"]
 
 
 def refresh_pollution(db, dry_run: bool = False) -> int:

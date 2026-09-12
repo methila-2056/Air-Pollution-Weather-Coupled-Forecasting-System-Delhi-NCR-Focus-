@@ -2,11 +2,13 @@
 
 ## Data Sources
 
-### 1. Pollution (CPCB / data.gov.in)
+### 1. Pollution (CPCB / data.gov.in — official)
 - **Parameters:** PM2.5, PM10, O3, NO2, SO2, CO, AQI
 - **Stations:** Key Delhi NCR monitors (Anand Vihar, ITO, Punjabi Bagh, Dwarka, etc.)
 - **Frequency:** Hourly, refreshed
-- **Access:** CPCB real-time API / historical CSV dumps via data.gov.in
+- **Access:** Official Government of India "Real time Air Quality Index from
+  various locations" API (`api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69`).
+  Ingestion via `POST /api/pollution/ingest` → `backend/app/services/cpcb_service.py`.
 
 ### 2. Weather (Open-Meteo)
 - **Parameters:** Temperature, relative humidity, MSL pressure, surface pressure, 10m wind speed & direction, precipitation, cloud cover, planetary boundary layer height

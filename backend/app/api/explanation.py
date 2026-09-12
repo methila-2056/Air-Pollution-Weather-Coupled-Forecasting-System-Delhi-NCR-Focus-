@@ -20,10 +20,15 @@ def get_explanation(station_name: str, db: Session = Depends(get_db)):
     model = forecast_service.load_pollutant_model("pm25", 24)
     prediction = forecast_service.predict_pollutants(features, horizons=[24])[0]
 
-    if model is not None:
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot explain: no trained model found for PM2.5. No fabricated weights are returned.",
+        )
+    try:
         top_features = explanation_service.explain_prediction(model, features)
-    else:
-        top_features = explanation_service.explain_fallback(features)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     natural_language = explanation_service.generate_natural_language(features, top_features, prediction)
 

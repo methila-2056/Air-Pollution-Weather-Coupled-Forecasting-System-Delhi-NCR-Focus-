@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.sql import func
 
 from ..database import Base
@@ -11,11 +11,12 @@ class Station(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     city = Column(String, default="Delhi NCR")
+    state = Column(String)
 
 class PollutionReading(Base):
-    __tablename__ = "pollution_readings"
+    __tablename__ = "pollution_observations"
     id = Column(Integer, primary_key=True, index=True)
-    station_id = Column(Integer, nullable=False)
+    station_id = Column(Integer, ForeignKey("stations.id"), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False)
     pm25 = Column(Float)
     pm10 = Column(Float)
@@ -25,16 +26,20 @@ class PollutionReading(Base):
     co = Column(Float)
     aqi = Column(Integer)
     __table_args__ = (
+        UniqueConstraint("station_id", "timestamp", name="uq_pollution_station_ts"),
         Index("idx_pollution_station_time", "station_id", "timestamp"),
     )
 
 class WeatherReading(Base):
-    __tablename__ = "weather_readings"
+    __tablename__ = "weather_observations"
     id = Column(Integer, primary_key=True, index=True)
     station_id = Column(Integer, nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False)
+    latitude = Column(Float)
+    longitude = Column(Float)
     temperature = Column(Float)
     humidity = Column(Float)
+    pressure = Column(Float)
     pressure_msl = Column(Float)
     surface_pressure = Column(Float)
     wind_speed = Column(Float)
@@ -42,20 +47,42 @@ class WeatherReading(Base):
     precipitation = Column(Float)
     cloud_cover = Column(Float)
     pbl_height = Column(Float)
+    # Vertical pressure-level temperature (degC) used for lapse-rate inversion
+    # (SIH26082). Open-Meteo / ERA5 style: temperature at standard pressure
+    # levels. All optional — when NULL the PBL-height proxy is used.
+    temperature_1000hPa = Column(Float)
+    temperature_925hPa = Column(Float)
+    temperature_850hPa = Column(Float)
+    temperature_700hPa = Column(Float)
+    geopotential_height_925hPa = Column(Float)
+    geopotential_height_850hPa = Column(Float)
     __table_args__ = (
         Index("idx_weather_station_time", "station_id", "timestamp"),
     )
 
 class FireReading(Base):
+    """A single NASA FIRMS active-fire observation (hotspot event).
+
+    Stores the raw fire *observation* only — no attribution to pollution is
+    implied here. ``acq_date`` is kept as naive-UTC (matching the weather
+    convention) and the row key (satellite, latitude, longitude, acq_date)
+    prevents duplicate ingestion of the same hotspot detection.
+    """
     __tablename__ = "fire_readings"
     id = Column(Integer, primary_key=True, index=True)
+    satellite = Column(String)
+    instrument = Column(String)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     acq_date = Column(DateTime(timezone=True), nullable=False)
     confidence = Column(String)
     frp = Column(Float)
-    satellite = Column(String)
+    brightness = Column(Float)
     daynight = Column(String)
+    __table_args__ = (
+        UniqueConstraint("satellite", "latitude", "longitude", "acq_date", name="uq_fire_lat_lon_time"),
+        Index("idx_fire_lat_lon_time", "latitude", "longitude", "acq_date"),
+    )
 
 class Forecast(Base):
     __tablename__ = "forecasts"

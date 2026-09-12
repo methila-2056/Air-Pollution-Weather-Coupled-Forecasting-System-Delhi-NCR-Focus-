@@ -240,6 +240,10 @@ def build_features_from_db(db, station_id: int) -> dict:
         "surface_pressure": w.surface_pressure, "wind_speed": w.wind_speed,
         "wind_direction": w.wind_direction, "precipitation": w.precipitation,
         "cloud_cover": w.cloud_cover, "pbl_height": w.pbl_height,
+        "temperature_1000hPa": getattr(w, "temperature_1000hPa", None),
+        "temperature_925hPa": getattr(w, "temperature_925hPa", None),
+        "temperature_850hPa": getattr(w, "temperature_850hPa", None),
+        "temperature_700hPa": getattr(w, "temperature_700hPa", None),
     } for w in wx_rows])
 
     combined = poll
@@ -271,7 +275,7 @@ def build_features_from_db(db, station_id: int) -> dict:
         add_wind_decomposition,
     )
     from ml.features.fire_impact import add_fire_features
-    from ml.features.inversion import add_inversion_features
+    from ml.features.inversion import add_inversion_features, add_lapse_rate_inversion_features
 
     eng = add_temporal_features(combined)
     eng = add_pollution_lags(eng)
@@ -281,6 +285,7 @@ def build_features_from_db(db, station_id: int) -> dict:
     eng = add_temperature_lags(eng)
     eng = add_humidity_lags(eng)
     eng = add_inversion_features(eng)
+    eng = add_lapse_rate_inversion_features(eng)
 
     # Real fire features from the FIRMS records stored in the DB
     from ..models.db_models import FireReading

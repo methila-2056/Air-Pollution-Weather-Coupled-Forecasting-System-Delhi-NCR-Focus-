@@ -4,6 +4,34 @@ export interface Station {
   latitude: number
   longitude: number
   city: string
+  state?: string | null
+}
+
+export interface PollutionReading {
+  station_id: number
+  station: string
+  city: string | null
+  state: string | null
+  timestamp: string
+  pm25: number | null
+  pm10: number | null
+  o3: number | null
+  no2: number | null
+  so2: number | null
+  co: number | null
+  aqi: number | null
+}
+
+export interface PollutionIngestSummary {
+  records_fetched: number
+  observations_normalized: number
+  stations_processed: number
+  inserted: number
+  updated: number
+  skipped: number
+  station_created: number
+  station_updated: number
+  errors: string[]
 }
 
 export interface CurrentAQI {
@@ -139,6 +167,15 @@ export interface InversionData {
   inversion_detected: boolean
   inversion_strength: string
   trapping_risk: string
+  inversion_strength_score?: number | null
+  inversion_category?: string | null
+  inversion_source?: string | null
+  inversion_base_pressure?: number | null
+  inversion_top_pressure?: number | null
+  strongest_layer_gradient?: number | null
+  low_pbl_flag?: boolean | null
+  pbl_category?: string | null
+  dispersion_condition?: string | null
 }
 
 export interface CouplingDiagnostics {
@@ -169,6 +206,19 @@ export interface FireActivity {
   date: string
 }
 
+export interface FireHotspot {
+  lat: number
+  lon: number
+  frp?: number | null
+  confidence?: string | null
+  acq_date?: string | null
+}
+
+export interface FireHotspotsResponse {
+  region: string
+  hotspots: FireHotspot[]
+}
+
 export interface PlumeRisk {
   risk_level: string
   risk_score: number
@@ -178,6 +228,11 @@ export interface PlumeRisk {
   distance_nearest_fire: number
   confidence: number
   factors: string[]
+  wind_alignment_pct?: number | null
+  transport_time_hours?: number | null
+  transport_risk?: number | null
+  transport_risk_level?: string | null
+  stubble_impact_score?: number | null
 }
 
 export interface Explanation {
@@ -191,6 +246,37 @@ export interface Explanation {
     description: string
   }>
   natural_language: string[]
+}
+
+export interface ShapContribution {
+  feature: string
+  value: number | null
+  shap_value: number
+  share_of_abs_contributions_pct: number
+  direction: 'positive' | 'negative' | 'zero'
+  description: string
+}
+
+export interface ForecastExplanation {
+  forecast_id: number
+  station: string
+  station_id: number
+  model: string
+  explanation_method: string
+  horizon_hours: number
+  forecast_timestamp: string
+  forecast_pm25: number
+  stored_pm25_pred: number | null
+  base_value: number
+  summary: string
+  top_positive_drivers: ShapContribution[]
+  top_negative_drivers: ShapContribution[]
+  contributions_by_magnitude: ShapContribution[]
+  n_features: number
+  feature_values_used: Record<string, any> | null
+  data_as_of: string
+  generated_at: string
+  test_metrics: Record<string, any> | null
 }
 
 export interface Alert {
@@ -238,4 +324,45 @@ export interface SummaryResponse {
     stations_with_forecast: number
     latest_forecast_at: string | null
   }
+}
+
+export interface ModelPerformanceSplitRange {
+  start: string | null
+  end: string | null
+  n_rows: number
+}
+
+export interface ModelPerformanceMetrics {
+  mae: number | null
+  rmse: number | null
+  r2: number | null
+  mape?: number | null
+  nmae?: number | null
+  n: number
+}
+
+export interface ModelHorizonPerformance {
+  horizon_hours: number
+  n_train: number
+  n_val: number
+  n_test: number
+  test_period_start: string | null
+  test_period_end: string | null
+  metrics: Record<string, ModelPerformanceMetrics>
+}
+
+export interface ModelPerformanceResponse {
+  schema_version: number
+  target: string
+  model_dir: string
+  data_source: string
+  generated_at: string
+  feature_count: number
+  features: string[]
+  horizons: number[]
+  evaluated_models: string[]
+  split_type: string
+  split_ratios: number[] | null
+  split_ranges: Record<string, ModelPerformanceSplitRange>
+  results: ModelHorizonPerformance[]
 }

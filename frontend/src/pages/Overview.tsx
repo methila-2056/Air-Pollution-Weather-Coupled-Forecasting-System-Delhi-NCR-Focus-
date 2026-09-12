@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getStations, getCurrentAQI, getForecast, getWeather, getInversion, getFireActivity, getPlumeRisk, getExplanation, getCoupling, getSummary, getForecastExportUrl } from '../api/client'
+import { getStations, getPollutionLatest, getForecast, getWeather, getInversion, getFireActivity, getPlumeRisk, getExplanation, getCoupling, getSummary, getForecastExportUrl } from '../api/client'
 import AQICard from '../components/AQICard'
 import AQIBadge from '../components/AQIBadge'
 import StatCard from '../components/StatCard'
@@ -9,12 +9,22 @@ import CouplingPanel from '../components/CouplingPanel'
 import StubblePlume from '../components/StubblePlume'
 import ExplainabilityPanel from '../components/ExplainabilityPanel'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, CouplingData, SummaryResponse } from '../types'
+import type { Station, PollutionReading, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, CouplingData, SummaryResponse } from '../types'
+
+function aqiCategory(aqi?: number | null): string {
+  if (aqi == null) return '--'
+  if (aqi <= 50) return 'Good'
+  if (aqi <= 100) return 'Satisfactory'
+  if (aqi <= 200) return 'Moderate'
+  if (aqi <= 300) return 'Poor'
+  if (aqi <= 400) return 'Very Poor'
+  return 'Severe'
+}
 
 export default function Overview() {
   const [stations, setStations] = useState<Station[]>([])
   const [selectedStation, setSelectedStation] = useState('Anand Vihar')
-  const [aqi, setAqi] = useState<CurrentAQI | null>(null)
+  const [pollution, setPollution] = useState<PollutionReading[]>([])
   const [forecast, setForecast] = useState<ForecastPoint[]>([])
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [inversion, setInversion] = useState<InversionData | null>(null)
@@ -36,7 +46,7 @@ export default function Overview() {
   const refreshAll = (): Promise<void> => {
     setError(null)
     return Promise.allSettled([
-      getCurrentAQI(selectedStation).then(r => setAqi(r.data)),
+      getPollutionLatest().then(r => setPollution(r.data)),
       getForecast(selectedStation).then(r => setForecast(r.data)),
       getWeather(selectedStation).then(r => setWeather(r.data)),
       getInversion(selectedStation).then(r => setInversion(r.data)),
@@ -57,6 +67,16 @@ export default function Overview() {
     setLoading(true)
     refreshAll().finally(() => setLoading(false))
   }, [selectedStation])
+
+  const latestByStation = new Map<string, PollutionReading>()
+  pollution.forEach(p => {
+    latestByStation.set(String(p.station_id), p)
+    latestByStation.set(p.station, p)
+  })
+  const selectedReading =
+    latestByStation.get(String(stations.find(s => s.name === selectedStation)?.id ?? '')) ??
+    latestByStation.get(selectedStation) ??
+    null
 
   useIntervalRefresh(refreshAll, 60_000, autoRefresh)
 
@@ -117,18 +137,46 @@ export default function Overview() {
       )}
 
       {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">
-          {error}
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button
+            onClick={() => refreshAll()}
+            className="bg-red-700 hover:bg-red-600 rounded px-3 py-1 text-xs whitespace-nowrap"
+          >
+            Retry
+          </button>
         </div>
       )}
 
       {loading && <div className="text-center py-12 text-gray-400">Loading data...</div>}
 
+      {!loading && !error && !selectedReading && (
+        <div className="bg-navy-800 border border-navy-700 rounded-lg p-4 text-sm text-gray-400">
+          No pollution data available for {selectedStation} yet. Run the official CPCB ingestion once the backend
+          has a data.gov.in API key, then refresh this page.
+        </div>
+      )}
+
+      <div className="flex items-center justify-between text-sm text-gray-400">
+        <h2 className="text-base font-semibold text-white">Latest observation</h2>
+        {selectedReading ? (
+          <span>
+            {selectedReading.station} · {selectedReading.timestamp.slice(0, 16)}Z
+          </span>
+        ) : (
+          <span>CPCB live network</span>
+        )}
+      </div>
+
       <div className="grid grid-cols-4 gap-4">
-        <AQICard label="AQI" value={aqi?.aqi} />
-        <AQICard label="PM2.5" value={aqi?.pm25} unit="μg/m³" />
-        <AQICard label="PM10" value={aqi?.pm10} unit="μg/m³" />
-        <AQICard label="Category" value={aqi?.aqi_category ?? '--'} />
+        <AQICard label="AQI" value={selectedReading?.aqi} />
+        <AQICard label="PM2.5" value={selectedReading?.pm25} unit="μg/m³" />
+        <AQICard label="PM10" value={selectedReading?.pm10} unit="μg/m³" />
+        <AQICard label="O₃" value={selectedReading?.o3} unit="μg/m³" />
+        <AQICard label="NO₂" value={selectedReading?.no2} unit="μg/m³" />
+        <AQICard label="SO₂" value={selectedReading?.so2} unit="μg/m³" />
+        <AQICard label="CO" value={selectedReading?.co} unit="mg/m³" />
+        <AQICard label="Category" value={selectedReading ? aqiCategory(selectedReading.aqi) : '--'} />
       </div>
 
       <div className="grid grid-cols-3 gap-4">

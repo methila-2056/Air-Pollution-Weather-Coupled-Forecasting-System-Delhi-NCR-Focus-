@@ -22,3 +22,11 @@ frontend/dist/
 # The 120MB row-export exceeds GitHub's 100MB push limit.
 # It is committed (byte-identical) as part1 + part2; see data/processed/SPLIT_NOTE.txt
 data/processed/featured_dataset.csv
+
+# local virtualenv & dev-server pid files
+.venv/
+*.pid
+
+# regenerable ML byproducts (available via ml/training/train_pm25.py + build_training_dataset.py)
+models/pm25/training_predictions.csv
+data/ml/

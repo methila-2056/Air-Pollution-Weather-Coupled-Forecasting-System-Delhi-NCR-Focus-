@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from unittest import mock
 
+import pandas as pd
 from app.models.db_models import (
     FireReading,
     PollutionReading,
@@ -70,6 +71,33 @@ class TestRefreshWeather:
         assert (base + timedelta(hours=1)) in present
         assert (base + timedelta(hours=2)) in present
 
+    def test_timestamps_normalized_to_naive_utc(self, db_session):
+        # Simulate a raw response that carries an explicit +05:30 offset (older
+        # Asia/Kolkata fetch). The service must request UTC and normalise stored
+        # datetimes to naive UTC (no tzinfo, wall clock == UTC).
+        hourly = {
+            "time": ["2026-09-12T05:30:00+05:30", "2026-09-12T06:30:00+05:30"],
+            "temperature_2m": [27.3, 27.2],
+            "relative_humidity_2m": [90.0, 91.0],
+            "pressure_msl": [1009.5, 1009.9],
+            "surface_pressure": [989.0, 989.4],
+            "wind_speed_10m": [6.4, 7.8],
+            "wind_direction_10m": [72.0, 61.0],
+            "precipitation": [0.3, 0.3],
+            "cloud_cover": [40.0, 40.0],
+            "boundary_layer_height": [245.0, 285.0],
+        }
+        with mock.patch.object(rs.requests, "get", return_value=FakeResp(json_data={"hourly": hourly})) as mocker:
+            df = rs._get_weather_df("Anand_Vihar", 28.6492, 77.2918, "2026-09-01", "2026-09-13")
+
+        # open-meteo was called with timezone=UTC
+        args, kwargs = mocker.call_args
+        assert kwargs["params"]["timezone"] == "UTC"
+
+        times = pd.to_datetime(df["time"]).tolist() if not df.empty else []
+        assert times == [pd.Timestamp("2026-09-12 00:00:00"), pd.Timestamp("2026-09-12 01:00:00")]
+        assert all(t.tzinfo is None for t in times)  # naive UTC by convention
+
     def test_second_batch_does_not_duplicate(self, db_session):
         base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
         hourly = _fresh_hourly(base, n=2)
@@ -83,11 +111,20 @@ class TestRefreshWeather:
 
 class TestRefreshFire:
     def test_filters_to_region_and_dedups(self, db_session):
+        seeded = (
+            db_session.query(FireReading)
+            .filter(FireReading.latitude == 30.5, FireReading.longitude == 76.1)
+            .first()
+        )
+        # Re-emit the seeded hotspot with its exact acquisition time so the
+        # dedup key (satellite, lat, lon, acq_time) matches and it is skipped.
+        dup_date = seeded.acq_date.strftime("%Y-%m-%d")
+        dup_time = seeded.acq_date.strftime("%H%M")
         csv_text = (
             "latitude,longitude,acq_date,acq_time,confidence,frp,satellite,daynight\n"
-            "30.5,76.1,2026-09-07,1231,high,90.0,SNPP,D\n"   # in-region, already stored
-            "29.0,75.0,2026-09-07,1000,nominal,50.0,SNPP,D\n"  # in-region, new
-            "20.0,80.0,2026-09-07,0900,low,5.0,SNPP,D\n"       # outside region
+            f"30.5,76.1,{dup_date},{dup_time},high,90.0,SNPP,D\n"     # duplicate of seed
+            "29.0,75.0,2026-09-07,1000,nominal,50.0,SNPP,D\n"          # in-region, new
+            "20.0,80.0,2026-09-07,0900,low,5.0,SNPP,D\n"               # outside region
         )
         with mock.patch.object(rs.requests, "get", return_value=FakeResp(text=csv_text)):
             count = rs.refresh_fire(db_session)

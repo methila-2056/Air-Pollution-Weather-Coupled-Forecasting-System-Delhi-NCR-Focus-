@@ -22,18 +22,19 @@ REDIRECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(REDIRECT_ROOT) not in sys.path:
     sys.path.insert(0, str(REDIRECT_ROOT))
 
+from app.database import Base, SessionLocal, engine, seed_data
 from app.main import app
-from app.database import engine, Base, SessionLocal, seed_data
 from app.models.db_models import (
-    Station,
-    PollutionReading,
-    WeatherReading,
+    Alert,
     FireReading,
     Forecast,
-    Alert,
     ModelMetrics,
+    PollutionReading,
+    Station,
+    WeatherReading,
 )
 from app.services.aqi_calculator import calculate_aqi
+
 
 @pytest.fixture(scope="session")
 def client():

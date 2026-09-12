@@ -3,6 +3,38 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.1.0] - 2026-09
+
+### Added
+- **GRU deep-learning model** — custom NumPy 2-layer GRU (`ml/training/train_gru.py`,
+  `ml/models/gru_model.py`) trained at all 6 horizons for all 6 pollutants
+  (no PyTorch/TensorFlow dependency). Honestly underperforms XGBoost
+  (h-1 R² 0.336 vs 0.879); retained as a candidate ensemble member while the
+  live PM2.5 endpoint serves the higher-accuracy XGBoost direct models.
+- **Direct PM2.5 forecast engine** — dedicated multi-horizon XGBoost with
+  conformal prediction intervals, model-card and feature explanation
+  endpoints (`GET /api/forecast/pm25`, `/api/forecast/pm25/model-card`,
+  `/api/forecast/pm25/explanation`).
+- **4-model evaluation** — persistence / RF / XGBoost / GRU across all
+  horizons written to `models/pm25/evaluation.json` + `.csv`.
+- **Pollution event detection** — surge / relief / sustained high-risk
+  episodes with confidence and atmospheric contributors
+  (`GET /api/events/current`, `docs/events.md`).
+- **Scenario (what-if) analysis engine** — read-only perturbation of wind /
+  PBL / fire / inversion propagated through the coupled model
+  (`POST /api/scenario/analysis`, `docs/scenario_analysis.md`).
+- **Cross-model performance dashboard** — `GET /api/model/performance` and
+  a frontend page comparing MAE/RMSE/R² across models and horizons.
+- **Fire hotspots endpoint** — `GET /api/fire/hotspots` feeding the Leaflet
+  map overlay with FRP-sized markers, plus `GET /api/transport-risk/current`.
+
+### Changed
+- `docs/api.md` covers all new endpoints (PM2.5 engine, events, scenario,
+  model performance, transport risk, atmosphere/current, fire hotspots).
+
+### Fixed
+- (none)
+
 ## [1.0.0] - 2026-09
 
 ### Added

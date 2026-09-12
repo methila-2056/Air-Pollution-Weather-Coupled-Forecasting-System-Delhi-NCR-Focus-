@@ -6,14 +6,15 @@
 
 [![CI](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml/badge.svg)](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-208%20passed-green)
+![Tests](https://img.shields.io/badge/tests-419%20passed-green)
 
-AeroCast-NCR fuses **real CPCB monitoring, Open-Meteo weather, NASA FIRMS active
-fires and ERA5 meteorology** into a machine-learning 72-hour pollutant forecast
-for every station in the Delhi NCR belt — with an explicit **two-way
-weather–chemistry coupling** module, a **high-resolution gridded spatial
-surface**, and a **numerical advection–diffusion dispersion core** that models
-how stubble-burning plumes disperse under prevailing weather.
+AeroCast-NCR fuses **official CPCB real-time monitoring (data.gov.in),
+Open-Meteo weather, NASA FIRMS active fires and ERA5 meteorology** into a
+machine-learning 72-hour pollutant forecast for every station in the Delhi NCR
+belt — with an explicit **two-way weather–chemistry coupling** module, a
+**high-resolution gridded spatial surface**, and a **numerical
+advection–diffusion dispersion core** that models how stubble-burning plumes
+disperse under prevailing weather.
 
 ---
 
@@ -39,7 +40,11 @@ how stubble-burning plumes disperse under prevailing weather.
 | Capability | How it works | Verify |
 |------------|--------------|--------|
 | **Two-way weather–chemistry coupling** | Aerosol AOD → solar attenuation → PBL suppression → stability feedback (`ml/features/coupling.py`, `coupled_loop.py`) | `GET /api/coupling/{station}`, `POST /api/forecast/coupled` |
-| **72-hour AQI forecast** | Persistence / Random Forest / XGBoost, all **six criteria pollutants** × horizons {1,6,12,24,48,72} | `POST /api/forecast/generate`, `GET /api/forecast/{station}` |
+| **72-hour AQI forecast** | Persistence / Random Forest / XGBoost (GRU trained & evaluated), all **six criteria pollutants** × horizons {1,6,12,24,48,72} | `POST /api/forecast/generate`, `GET /api/forecast/{station}` |
+| **Direct PM2.5 forecast engine** | Dedicated multi-horizon XGBoost with conformal prediction intervals (GRU trained & evaluated as candidate ensemble member) | `GET /api/forecast/pm25` + model-card + explanation |
+| **Pollution event detection** | Statistical anomaly / surge / relief / sustained high-risk episode detection | `GET /api/events/current`, `docs/events.md` |
+| **Scenario (what-if) analysis** | Read-only perturbation engine across wind / PBL / fire / inversion | `POST /api/scenario/analysis`, `docs/scenario_analysis.md` |
+| **Cross-model performance dashboard** | 4-model evaluation (persistence / RF / XGBoost / GRU) with MAE/RMSE/R² | `GET /api/model/performance`, `/model-performance` page |
 | **Stubble-plume dispersion** | Finite-difference advection–diffusion–deposition solver with FRP fire point sources, wind/PBL/rain forcing | `GET /api/dispersion/forecast`, `ml/features/dispersion_solver.py` |
 | **Inversion trapping** | Stability index couples inversion directly to PBL height | `GET /api/inversion/{station}` |
 | **NCR-wide spatial mapping** | ~2.2 km gridded AQI surface (IDW + downwind advection) plus live numerical field | `GET /api/grid/forecast`, `/spatial` page |
@@ -75,15 +80,42 @@ Recharts, Leaflet. *ML:* XGBoost, Scikit-learn, SHAP, NumPy, Pandas.
 
 ## Data Pipeline
 
-1. **Acquire** — real data via `scripts/download_*.py` (CPCB poll, Open-Meteo
-   weather, NASA FIRMS fire, Copernicus ERA5 atmosphere) or the live refresh
-   service (`backend/app/services/refresh_service.py`).
+1. **Acquire** — real data via the official Government of India CPCB feed
+   (`POST /api/pollution/ingest`, backed by `backend/app/services/cpcb_service.py`,
+   resource [`3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69`](https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69)),
+   Open-Meteo weather, NASA FIRMS fire, Copernicus ERA5 atmosphere, or the live
+   refresh service (`backend/app/services/refresh_service.py`).
 2. **Build** — `scripts/build_dataset.py` fuses raw readings into time-aligned
    station series with engineered features.
 3. **Train** — `python -m ml.training.trainer` fits per-pollutant, per-horizon
    models; `scripts/evaluate_models.py` re-scores them.
 4. **Serve** — FastAPI loads the persisted `.joblib` models and forecasts on
    demand, feeding AQI, alerts, coupling, grid and dispersion endpoints.
+
+### Official CPCB pollution feed (data.gov.in)
+
+The pollution cursor now points at the **official** Government dataset "Real
+time Air Quality Index from various locations" (`CPCB/DPCC`), not a third-party
+mirror. Readings land directly in the `stations` / `pollution_readings` tables
+(stations gained a `state` column; readings are deduplicated per
+station+timestamp).
+
+```bash
+# 1. Get a free API key: https://api.data.gov.in → register → MyAccount
+# 2. Put it in backend/.env (or the environment):
+DATA_GOV_API_KEY=your_key_here
+# 3. Trigger the official CPCB ingestion:
+curl -X POST http://localhost:8000/api/pollution/ingest
+# 4. Verify:
+curl http://localhost:8000/api/pollution/latest
+```
+
+Ingestion fetches paginated, per-city records for
+`Delhi, Gurugram, Noida, Ghaziabad, Faridabad` (configurable via
+`DATA_GOV_NCR_CITIES`), normalizes one row per pollutant per timestamp into
+single observations, and upserts them idempotently. Without a key the ingest
+endpoint returns `400` (`DATA_GOV_API_KEY is not set`) rather than inventing
+data.
 
 ## Quick Start — Docker
 
@@ -129,12 +161,16 @@ All endpoints live under `/api` (interactive docs at `/docs`):
 | Area | Endpoints |
 |------|-----------|
 | Station & current AQI | `GET /stations`, `GET /stations/{station}`, `GET /current/{station}` |
+| Official CPCB pollution | `POST /pollution/ingest`, `GET /pollution/latest`, `GET /pollution/stations`, `GET /pollution/{station_id}/history` |
 | Forecast | `POST /forecast/generate`, `GET /forecast/{station}`, `GET /forecast/ncr`, `GET /forecast/comparison/{station}`, `POST /forecast/coupled` |
 | Weather | `GET /weather/{station}`, `GET /weather/{station}/history` |
-| Inversion / Fire | `GET /inversion/{station}`, `GET /fire-activity`, `GET /fire/transport`, `GET /plume-risk` |
+| Inversion / Fire | `GET /inversion/{station}`, `GET /fire-activity`, `GET /fire/transport`, `GET /plume-risk`, `GET /fire/hotspots`, `GET /fires/latest`, `GET /transport-risk/current` |
 | Spatial | `GET /grid/forecast`, `GET /grid/overview`, `GET /dispersion/forecast` |
+| Atmosphere & coupling | `GET /atmosphere/current`, `GET /coupling/{station}` |
+| PM2.5 forecast engine | `GET /forecast/pm25`, `GET /forecast/pm25/model-card`, `GET /forecast/pm25/explanation` |
+| Events & scenarios | `GET /events/current`, `POST /scenario/analysis` |
 | Coupling & explainability | `GET /coupling/{station}`, `GET /explanation/{station}` |
-| Alerts & metrics | `GET /alerts`, `GET/ POST /model/metrics` |
+| Alerts & metrics | `GET /alerts`, `GET/ POST /model/metrics`, `GET /model/performance` |
 | Summary & export | `GET /summary`, `GET /export/forecast.csv`, `GET /health` |
 
 Request/response schemas are described in
@@ -142,15 +178,15 @@ Request/response schemas are described in
 
 ## Frontend Pages
 
-`/overview` (NCR KPIs) · `/forecast-72h` (multi-horizon charts) · `/ncr-map`
-(Leaflet station map) · `/spatial` (grid + dispersion heatmap) ·
-`/atmosphere` · `/alerts` · `/ai-explanation` (SHAP) · `/model-performance` ·
-`/stubble-plume`
+`/overview` (NCR KPIs) · `/forecast-72h` (multi-horizon charts) · `/map`
+(Leaflet station map + FIRMS hotspots + plume transport) · `/spatial` (grid +
+dispersion heatmap) · `/atmosphere` · `/alerts` · `/explanation` (SHAP) ·
+`/performance` (4-model comparison) · `/stubble`
 
 ## Testing
 
 ```bash
-python -m pytest backend/tests -q      # 200+ unit + integration tests
+python -m pytest backend/tests -q      # 419 unit + integration tests
 python -m ruff check backend/app backend/tests   # lint (scoped)
 cd frontend && npm run build           # type-check + production build
 ```
@@ -174,7 +210,9 @@ cd frontend && npm run build           # type-check + production build
 | [`docs/architecture.md`](docs/architecture.md) | System layers & component diagram |
 | [`docs/ps_mapping.md`](docs/ps_mapping.md) | Requirement → implementation mapping |
 | [`docs/deployment.md`](docs/deployment.md) | Deploy runbook & environment reference |
-| [`docs/api.md`](docs/api.md) | API reference |
+| [`docs/api.md`](docs/api.md) | API reference (incl. PM2.5 engine, events, scenario) |
+| [`docs/events.md`](docs/events.md) | Pollution event detection specification |
+| [`docs/scenario_analysis.md`](docs/scenario_analysis.md) | What-if scenario engine methodology |
 | [`docs/dataset.md`](docs/dataset.md) | Data sources & schema |
 | [`docs/reproducibility.md`](docs/reproducibility.md) | Reproducible build/train pipeline |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
