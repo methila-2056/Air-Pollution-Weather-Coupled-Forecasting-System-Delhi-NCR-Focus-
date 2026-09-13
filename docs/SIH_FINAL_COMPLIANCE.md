@@ -90,7 +90,7 @@ These are **advective transport estimates**, not dispersion simulations. The 2D 
 
 | Check | Command | Result |
 |-------|---------|--------|
-| Full backend test suite | `python -m pytest backend/tests -q` | **225 passed** |
+| Full backend test suite | `python -m pytest backend/tests -q` | **422 passed** |
 | Lint (changed files) | `python -m ruff check <files> --config pyproject.toml` | **All checks passed** |
 | Frontend TypeScript + build | `cd frontend && npm run build` | **build succeeds** (tsc + vite) |
 | Live pressure-level fetch | Open-Meteo `temperature_{1000,925,850,700}hPa` + `geopotential_height_{925,850}hPa` | HTTP 200, real values |
