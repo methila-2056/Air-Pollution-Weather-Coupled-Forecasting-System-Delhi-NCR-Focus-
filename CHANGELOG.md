@@ -3,6 +3,20 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.2.0] - 2026-09
+
+### Added
+- **Graded Response Action Plan (GRAP)** — CAQM stage matrix (Oct-2024
+  revision: Stage I ≥201, Stage II ≥301, Stage III ≥401, Stage IV >450) as a
+  pure service (`grap_service.py`), three API endpoints, and a dashboard panel.
+  - `GET /api/grap/stages` — full referential matrix (incl. not-invoked).
+  - `GET /api/grap/current` — live NCR assessment from persisted 24-hour
+    average AQI, shallowest-PBL inversion proxy and FIRMS mean FRP, with
+    rationale and an actionable measures list.
+  - `GET /api/grap/{station}` — per-station assessment.
+- Dashboard section 4 "Graded Response Action Plan" with stage badge, advisory,
+  measures and why-this-stage rationale (`GrapPanel`).
+
 ## [1.1.1] - 2026-09
 
 ### Added

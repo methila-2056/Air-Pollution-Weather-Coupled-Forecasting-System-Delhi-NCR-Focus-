@@ -84,6 +84,7 @@ that:
 | **NCR-wide spatial mapping** | ~2.2 km gridded AQI surface (IDW + downwind advection) + live numerical field | `GET /api/grid/forecast`, `/spatial` page |
 | **All criteria pollutants** | PM2.5, PM10, O₃, NO₂, SO₂, CO | `predict_pollutants`; `TestForecastCompletePollutantSet` |
 | **Actionable alerts & explainability** | Alert engine + SHAP feature attribution + natural-language explanations | `GET /api/alerts`, `GET /api/explanation/{station}` |
+| **Graded Response Action Plan** | CAQM stage matrix (I-IV) with live NCR assessment from AQI + inversion + fire context | `GET /api/grap/current` |
 | **Live data refresh** | Scheduler + one-shot CLI pulls weather / fire / pollution idempotently (tz-aware dedup + DB-unique guards) | `make refresh-data`, `LIVE_REFRESH_ENABLED=true` |
 | **Official CPCB ingestion** | data.gov.in-backed idempotent upsert with per-station+timestamp uniqueness | `POST /api/pollution/ingest`, `docs/api.md` |
 
@@ -266,6 +267,7 @@ All endpoints live under `/api` (interactive docs at `/docs`):
 | Explainability | `GET /explanation/{station}` |
 | Alerts & metrics | `GET /alerts`, `GET / POST /model/metrics`, `GET /model/performance` |
 | Summary & export | `GET /summary`, `GET /export/forecast.csv`, `GET /health` |
+| Graded Response Action Plan | `GET /grap/stages`, `GET /grap/current`, `GET /grap/{station}` |
 
 Request/response schemas are described in [`docs/api.md`](docs/api.md) and are
 introspectable at `/docs`.
