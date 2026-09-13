@@ -196,7 +196,7 @@ export default function SpatialForecastPage() {
                 </div>
               </div>
               {disp.horizon_hours > 0 && (
-                <p className="text-[11px] text-gray-500 mt-3">
+                <p className="text-[11px] text-gray-400 mt-3">
                   Numerical core: dC/dt = -u·grad(C) + K·laplacian(C) - (deposition + washout)·C + E. Fire plumes (orange dots) advect
                   downwind while aerosols suppress PBL and deepen stability — an explicit two-way meteorological interlink.
                 </p>

@@ -21,6 +21,12 @@
   .btn-primary {
     @apply bg-accent-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors;
   }
+  .select {
+    @apply bg-navy-700 border border-navy-600 text-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent-blue;
+  }
+  .select option {
+    @apply bg-navy-700 text-gray-200;
+  }
 }
 
 /* Leaflet map overrides */
