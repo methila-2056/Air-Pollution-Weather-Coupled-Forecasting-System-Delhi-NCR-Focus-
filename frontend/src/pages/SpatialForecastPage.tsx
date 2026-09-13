@@ -190,14 +190,14 @@ export default function SpatialForecastPage() {
                     <span className="font-semibold text-gray-200">{dispFrame.coupling.corrected_pbl_height.toFixed(0)}m</span>
                   </div>
                   <div className="bg-gray-800/60 rounded p-2">
-                    <span className="text-gray-400">Mean PM₂.₅ </span>
+                    <span className="text-gray-400">Mean PM2.5 </span>
                     <span className="font-semibold text-gray-200">{dispFrame.coupling.mean_pm25.toFixed(1)} µg/m³</span>
                   </div>
                 </div>
               </div>
               {disp.horizon_hours > 0 && (
                 <p className="text-[11px] text-gray-500 mt-3">
-                  Numerical core: ∂C/∂t = −u·∇C + K∇²C − (λ_dep + washout)·C + E. Fire plumes (orange dots) advect
+                  Numerical core: dC/dt = -u·grad(C) + K·laplacian(C) - (deposition + washout)·C + E. Fire plumes (orange dots) advect
                   downwind while aerosols suppress PBL and deepen stability — an explicit two-way meteorological interlink.
                 </p>
               )}
@@ -215,7 +215,7 @@ export default function SpatialForecastPage() {
                       <p className="text-xs text-gray-400">t+{p.horizon_hours}h</p>
                       <p className="font-semibold">AQI {p.aqi_pred}</p>
                       <p className="text-xs text-gray-400">{p.aqi_category}</p>
-                      <p className="text-[10px] text-gray-500">SO₂ {p.so2_pred} · CO {p.co_pred}</p>
+                      <p className="text-[10px] text-gray-500">SO2 {p.so2_pred} · CO {p.co_pred}</p>
                     </div>
                   ))}
                 </div>
@@ -224,7 +224,7 @@ export default function SpatialForecastPage() {
                   {coupled.feedback_path.slice(0, 12).map(pt => (
                     <div key={pt.t_plus} className="flex justify-between text-xs border-b border-gray-800 py-1">
                       <span>t+{pt.t_plus}h</span>
-                      <span>PM₂.₅ {pt.pm25}</span>
+                      <span>PM2.5 {pt.pm25}</span>
                       <span>PBL {pt.pbl_effective}m</span>
                       <span>stab {pt.stability}</span>
                     </div>

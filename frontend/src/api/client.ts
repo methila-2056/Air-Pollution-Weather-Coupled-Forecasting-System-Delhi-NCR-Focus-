@@ -27,7 +27,7 @@ export const getPm25ForecastExplanation = (station: string, horizon = 24) =>
   api.get<ForecastExplanation>('/forecast/pm25/explanation', { params: { station_name: station, horizon } })
 export const getCoupling = (station: string) => api.get<CouplingData>(`/coupling/${station}`)
 export const generateCoupledForecast = (station: string, horizons?: number[]) =>
-  api.post<CoupledForecastResult>('/forecast/coupled', { station_name: station, horizons: horizons ?? [1, 6, 12, 24, 48, 72] })
+  api.post<CoupledForecastResult>('/forecast/coupled', { station_name: station, horizons: horizons ?? [1, 6, 12, 24, 48, 72] }, { timeout: 120000 })
 export const getGridForecast = (horizon = 24) => api.get<GridForecast>('/grid/forecast', { params: { horizon_hours: horizon } })
 export const getDispersionForecast = (horizon = 72, startHour = 8) =>
   api.get<DispersionForecast>('/dispersion/forecast', { params: { horizon_hours: horizon, start_hour: startHour } })
