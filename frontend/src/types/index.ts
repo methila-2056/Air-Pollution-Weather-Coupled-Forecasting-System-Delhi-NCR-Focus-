@@ -366,3 +366,140 @@ export interface ModelPerformanceResponse {
   split_ranges: Record<string, ModelPerformanceSplitRange>
   results: ModelHorizonPerformance[]
 }
+
+export interface Pm25ForecastPoint {
+  timestamp: string
+  forecast_horizon: number
+  predicted_pm25: number
+  pm25_lower_bound: number
+  pm25_upper_bound: number
+  baseline_persistence: number | null
+  test_mae: number | null
+  test_rmse: number | null
+  test_r2: number | null
+  test_n: number | null
+}
+
+export interface Pm25ForecastResponse {
+  station: string
+  station_id: number
+  model: string
+  forecast_strategy: string
+  uncertainty_method: string
+  coverage_target: number | null
+  feature_version: string | null
+  release_time: string
+  data_as_of: string | null
+  generated_at: string
+  requested_hours: number
+  served_horizons: number[]
+  context: Record<string, unknown> | null
+  forecasts: Pm25ForecastPoint[]
+}
+
+export interface WindCondition {
+  wind_speed_mps: number | null
+  wind_direction_deg: number | null
+  compass_from: string | null
+  category: string
+  label: string
+  normalized: number | null
+  provenance: string
+  notes: string[] | null
+}
+
+export interface PblCondition {
+  pbl_height_m: number | null
+  category: string
+  label: string
+  normalized: number | null
+  provenance: string
+  notes: string[] | null
+}
+
+export interface VentilationCondition {
+  ventilation_coefficient_m2s: number | null
+  category: string
+  label: string
+  normalized: number | null
+  provenance: string
+  notes: string[] | null
+}
+
+export interface InversionIndicator {
+  detected: boolean | null
+  category: string
+  strength: number | null
+  source: string
+  provenance: string
+  base_pressure_hpa: number | null
+  top_pressure_hpa: number | null
+  strongest_gradient_k100hpa: number | null
+  lapse_unit: string | null
+  profile_available: boolean | null
+  pbl_category: string | null
+  dispersion_condition: string | null
+  normalized: number | null
+  limitations: string[] | null
+}
+
+export interface TrappingIndicator {
+  score: number | null
+  category: string
+  label: string
+  normalized: number | null
+  provenance: string
+  factors: string[] | null
+}
+
+export interface AtmosphereFeatures {
+  wind: number | null
+  pbl: number | null
+  ventilation: number | null
+  inversion: number | null
+  trapping: number | null
+}
+
+export interface StationAtmosphere {
+  station: string
+  station_id: number
+  analyzed_at: string
+  weather_timestamp: string | null
+  pollution_timestamp: string | null
+  weather_age_hours: number | null
+  pollution_age_hours: number | null
+  flags: string[] | null
+  inputs: Record<string, unknown>
+  input_basis: Record<string, unknown> | null
+  wind: WindCondition
+  pbl: PblCondition
+  ventilation: VentilationCondition
+  inversion: InversionIndicator | null
+  trapping: TrappingIndicator
+  features: AtmosphereFeatures
+}
+
+export interface AtmosphereCurrentResponse {
+  generated_at: string
+  region: string
+  methodology: Record<string, unknown>
+  summary: Record<string, unknown>
+  stations: StationAtmosphere[]
+}
+
+export interface TransportRiskResponse {
+  risk_score: number | null
+  risk_level: string
+  main_contributing_factors: string[]
+  upwind_fire_count: number
+  fire_count: number
+  dominant_wind_direction: Record<string, unknown>
+  atmospheric_condition: Record<string, unknown>
+  generated_at: string
+  region: string
+  disclaimer: string
+  inputs: Record<string, unknown>
+  components: Record<string, unknown>
+  methodology: Record<string, unknown>
+  station_detail: Array<Record<string, unknown>>
+}

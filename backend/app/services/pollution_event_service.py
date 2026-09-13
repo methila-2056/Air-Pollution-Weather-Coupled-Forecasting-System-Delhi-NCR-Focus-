@@ -506,10 +506,33 @@ def _dispersion_supported(atmosphere: dict[str, Any], drop_pct: float) -> bool:
     return False
 
 
+def _parse_ts(v) -> datetime | None:
+    """Normalise a forecast timestamp to a naive-UTC datetime.
+
+    The PM2.5 forecaster serialises ``timestamp`` as an ISO-8601 string
+    (e.g. ``2026-09-08T09:00:00Z``); the event rules require real datetimes
+    for run-gap arithmetic and status comparisons. Accepts datetime objects,
+    ISO strings with/without ``Z``, and returns ``None`` on unparsable input.
+    """
+    from datetime import datetime as _dt
+
+    if v is None:
+        return None
+    if isinstance(v, _dt):
+        return v.replace(tzinfo=None) if v.tzinfo else v
+    if isinstance(v, str):
+        try:
+            dt = _dt.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return dt.replace(tzinfo=None)
+    return None
+
+
 def _to_series(forecasts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
-            "timestamp": f["timestamp"],
+            "timestamp": _parse_ts(f["timestamp"]),
             "forecast_horizon": f["forecast_horizon"],
             "predicted_pm25": _float(f.get("predicted_pm25")),
             "pm25_lower_bound": _float(f.get("pm25_lower_bound")),

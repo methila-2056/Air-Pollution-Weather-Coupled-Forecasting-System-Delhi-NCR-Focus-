@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, ModelPerformanceResponse } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse } from '../types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -34,6 +34,12 @@ export const getDispersionForecast = (horizon = 72, startHour = 8) =>
 export const getAlerts = () => api.get<Alert[]>('/alerts')
 export const getModelMetrics = () => api.get<ModelMetric[]>('/model/metrics')
 export const getModelPerformance = () => api.get<ModelPerformanceResponse>('/model/performance')
+export const getPm25Forecast = (station: string, hours = 72) =>
+  api.get<Pm25ForecastResponse>('/forecast/pm25', { params: { station_name: station, hours } })
+export const getAtmosphereCurrent = (station?: string) =>
+  api.get<AtmosphereCurrentResponse>('/atmosphere/current', { params: station ? { station_name: station } : {} })
+export const getTransportRisk = (hours = 72) =>
+  api.get<TransportRiskResponse>('/transport-risk/current', { params: { hours } })
 export const getSummary = () => api.get<SummaryResponse>('/summary')
 
 export const getForecastExportUrl = (station: string, hours = 72) =>

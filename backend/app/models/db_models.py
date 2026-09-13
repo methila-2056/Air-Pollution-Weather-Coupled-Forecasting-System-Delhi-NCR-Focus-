@@ -57,6 +57,7 @@ class WeatherReading(Base):
     geopotential_height_925hPa = Column(Float)
     geopotential_height_850hPa = Column(Float)
     __table_args__ = (
+        UniqueConstraint("station_id", "timestamp", name="uq_weather_station_ts"),
         Index("idx_weather_station_time", "station_id", "timestamp"),
     )
 

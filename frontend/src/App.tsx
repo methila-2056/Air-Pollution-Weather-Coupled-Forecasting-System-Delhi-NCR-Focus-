@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import Dashboard from './pages/Dashboard'
 import Overview from './pages/Overview'
 import Forecast72h from './pages/Forecast72h'
 import NCRMap from './pages/NCRMap'
@@ -14,7 +15,8 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Overview />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/overview" element={<Overview />} />
         <Route path="/forecast" element={<Forecast72h />} />
         <Route path="/map" element={<NCRMap />} />
         <Route path="/atmosphere" element={<Atmosphere />} />

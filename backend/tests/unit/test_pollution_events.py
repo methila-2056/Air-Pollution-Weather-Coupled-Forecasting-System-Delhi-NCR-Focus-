@@ -187,6 +187,58 @@ class TestMethodology:
         assert svc.detect_events_from_series([], None, _atm()) == []
 
 
+class TestStringIsoTimestamps:
+    """Regression: the forecaster serialises timestamps as ISO strings; the rule
+    engine must normalise them to datetimes or run-gap arithmetic (str - str)
+    raises TypeError and the endpoint 500s (was: live PG 500 on every station)."""
+
+    def test_to_series_normalises_iso_z_strings(self):
+        forecasts = [
+            {
+                "timestamp": "2026-09-08T09:00:00Z",
+                "forecast_horizon": 1,
+                "predicted_pm25": 100.0,
+                "pm25_lower_bound": 90.0,
+                "pm25_upper_bound": 110.0,
+            },
+            {
+                "timestamp": "2026-09-08T10:00:00Z",
+                "forecast_horizon": 2,
+                "predicted_pm25": 110.0,
+                "pm25_lower_bound": 98.0,
+                "pm25_upper_bound": 122.0,
+            },
+        ]
+        series = svc._to_series(forecasts)
+        for p in series:
+            assert isinstance(p["timestamp"], datetime)
+            assert p["timestamp"].tzinfo is None
+        assert (series[1]["timestamp"] - series[0]["timestamp"]) == timedelta(hours=1)
+
+    def test_to_series_handles_naive_strings_and_datetimes(self):
+        forecasts = [
+            {"timestamp": "2026-09-08T09:00:00", "forecast_horizon": 1, "predicted_pm25": 80.0},
+            {"timestamp": datetime(2026, 9, 8, 10, 0), "forecast_horizon": 2, "predicted_pm25": 90.0},
+        ]
+        series = svc._to_series(forecasts)
+        assert isinstance(series[0]["timestamp"], datetime)
+        assert series[1]["timestamp"] == datetime(2026, 9, 8, 10, 0)
+
+    def test_rule_engine_accepts_iso_string_timestamps_without_raising(self):
+        values = [40] * 12 + [100] * 12 + [40] * 12
+        points = []
+        for i, v in enumerate(values):
+            points.append({
+                "timestamp": (datetime(2026, 9, 12, 0, 0) + timedelta(hours=i)).isoformat() + "Z",
+                "forecast_horizon": 1 + i,
+                "predicted_pm25": v,
+                "pm25_lower_bound": v - 5.0,
+                "pm25_upper_bound": v + 5.0,
+            })
+        events = _run(svc._to_series(points), baseline=50.0)
+        assert any(e["event_type"] == "pollution_surge" for e in events)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # API layer
 # ─────────────────────────────────────────────────────────────────────────────

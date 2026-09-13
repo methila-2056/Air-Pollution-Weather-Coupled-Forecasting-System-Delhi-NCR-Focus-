@@ -166,6 +166,18 @@ def apply_migrations():
             for name, dtype in wx_add.items():
                 if name not in wx_cols:
                     conn.execute(sa.text(f"ALTER TABLE weather_observations ADD COLUMN {name} {dtype}"))
+        # weather_observations UNIQUE(station_id, timestamp) — mirrors the
+        # PostgreSQL alembic migration f6a2e7b3c8d9.
+        with engine.begin() as conn:
+            conn.execute(sa.text(
+                "DELETE FROM weather_observations WHERE id NOT IN ("
+                "  SELECT MAX(id) FROM weather_observations"
+                "  GROUP BY station_id, timestamp)"
+            ))
+            conn.execute(sa.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_weather_station_ts"
+                " ON weather_observations (station_id, timestamp)"
+            ))
 
     # fire_readings: instrument + brightness source attributes and the
     # hotspot uniqueness key (satellite, latitude, longitude, acq_date)

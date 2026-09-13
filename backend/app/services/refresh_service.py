@@ -76,8 +76,18 @@ def _to_float(v):
 
 
 def _existing_timestamps(db, model_cls, station_id) -> set:
+    """Return stored timestamps for a station as *naive UTC* datetimes.
+
+    PostgreSQL ``DateTime(timezone=True)`` columns return timezone-aware
+    datetimes (``+00:00``) while the refresh pipeline normalises incoming
+    source timestamps to naive UTC (no tzinfo). Comparing aware vs naive
+    datetimes in Python is always ``False``, which previously defeated the
+    pre-insert dedup and caused duplicate weather rows (and UniqueViolation
+    aborts for pollution). Stripping the timezone makes the comparison
+    correct under the project's "naive-UTC" storage convention.
+    """
     return {
-        ts
+        ts.replace(tzinfo=None) if ts.tzinfo else ts
         for (ts,) in db.query(model_cls.timestamp)
         .filter(model_cls.station_id == station_id)
         .all()
@@ -325,11 +335,16 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
             if ts is None or pd.isna(ts):
                 continue
             ts = ts.tz_localize(None) if ts.tzinfo else ts
-            if ts in existing:
-                continue
             vals = {}
             for src, dst in pmap.items():
                 vals[dst] = _to_float(r.get(src))
+            # Skip placeholder/junk rows that carry no pollutant measurements
+            # (the CKAN feed occasionally returns rows with a valid timestamp
+            # but every sensor value NULL).
+            if all(v is None for v in vals.values()):
+                continue
+            if ts in existing:
+                continue
             aqi_val, _, _ = calculate_aqi(
                 vals.get("pm25"), vals.get("pm10"), vals.get("o3"),
                 vals.get("no2"), vals.get("so2"), vals.get("co"),
