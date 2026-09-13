@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 import pandas as pd
+from app.database import DEFAULT_STATIONS
 from app.models.db_models import (
     FireReading,
     PollutionReading,
@@ -51,7 +52,8 @@ def _stations(session):
     return {s.name: s for s in session.query(Station).all()}
 
 
-NUM_STATIONS = 5  # DEFAULT_STATIONS in app.database
+NUM_STATIONS = len(DEFAULT_STATIONS)  # DEFAULT_STATIONS in app.database
+NUM_POLLUTION_STATIONS = len(rs.CKAN_RESOURCES)  # pollution feeds cover the original monitors
 
 
 class TestRefreshWeather:
@@ -160,7 +162,7 @@ class TestRefreshPollution:
         resp = FakeResp(json_data={"result": {"records": records}})
         with mock.patch.object(rs.requests, "get", return_value=resp):
             count = rs.refresh_pollution(db_session)
-        assert count == NUM_STATIONS
+        assert count == NUM_POLLUTION_STATIONS
 
         station = _stations(db_session)["Anand Vihar"]
         row = (
@@ -209,7 +211,7 @@ class TestRunRefreshOnce:
         assert set(summary) == {"weather", "fire", "pollution"}
         assert summary["weather"] == NUM_STATIONS
         assert summary["fire"] == 1
-        assert summary["pollution"] == NUM_STATIONS
+        assert summary["pollution"] == NUM_POLLUTION_STATIONS
 
         assert db_session.query(WeatherReading).count() == weather_before
         assert db_session.query(FireReading).count() == fire_before

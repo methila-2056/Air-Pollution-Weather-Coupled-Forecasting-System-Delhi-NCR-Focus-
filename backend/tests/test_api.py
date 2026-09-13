@@ -1,5 +1,8 @@
 
 
+from app.database import DEFAULT_STATIONS
+
+
 def test_health(client, db_session):
     # /api/health is the minimal liveness contract
     response = client.get("/api/health")
@@ -20,10 +23,10 @@ def test_data_quality(client, db_session):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["station_count"] == 5
+    assert body["station_count"] == len(DEFAULT_STATIONS)
     assert "tables" in body
     assert "recommendations" in body
-    assert body["tables"]["stations"]["total"] == 5
+    assert body["tables"]["stations"]["total"] == len(DEFAULT_STATIONS)
     assert body["tables"]["pollution_observations"]["total"] == 12
     assert "Anand Vihar" in body["forecast_coverage"]
 
@@ -33,9 +36,9 @@ def test_get_stations(client, db_session):
     assert response.status_code == 200
     bodies = response.json()
     assert isinstance(bodies, list)
-    assert len(bodies) == 5
+    assert len(bodies) == len(DEFAULT_STATIONS)
     names = {b["name"] for b in bodies}
-    assert names == {"Anand Vihar", "RK Puram", "ITO", "Dwarka", "Punjabi Bagh"}
+    assert names == {s["name"] for s in DEFAULT_STATIONS}
     for b in bodies:
         assert {"id", "name", "latitude", "longitude", "city"} <= set(b)
         assert isinstance(b["latitude"], float)
@@ -95,7 +98,7 @@ def test_get_forecast_ncr(client, db_session):
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body, dict)
-    assert set(body.keys()) == {"Anand Vihar", "RK Puram", "ITO", "Dwarka", "Punjabi Bagh"}
+    assert set(body.keys()) == {s["name"] for s in DEFAULT_STATIONS}
     assert isinstance(body["Anand Vihar"], list)
 
 

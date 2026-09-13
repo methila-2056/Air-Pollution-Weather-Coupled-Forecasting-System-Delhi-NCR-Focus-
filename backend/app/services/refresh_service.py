@@ -29,6 +29,18 @@ STATIONS = {
     "ITO": (28.6290, 77.2410),
     "Dwarka": (28.5921, 77.0460),
     "Punjabi_Bagh": (28.6692, 77.1285),
+    "Lodhi_Road": (28.5866, 77.2268),
+    "Sirifort": (28.5528, 77.2190),
+    "Shadipur": (28.6542, 77.1489),
+    "Okhla_Phase-2": (28.5230, 77.2680),
+    "Ashok_Vihar": (28.6974, 77.1756),
+    "Mundka": (28.6796, 77.0189),
+    "Jahangirpuri": (28.7256, 77.1556),
+    "Aya_Nagar": (28.4771, 77.1148),
+    "Vivek_Vihar": (28.6727, 77.3169),
+    "Teri_Gram": (28.4422, 77.0115),
+    "Noida_Sector-62": (28.6227, 77.3615),
+    "Faridabad": (28.4089, 77.3178),
 }
 
 # Legacy aliases kept for callers/tests that referenced the old constants.
@@ -181,13 +193,7 @@ def refresh_weather(db, dry_run: bool = False) -> int:
 
     inserted = 0
     for raw_name, (lat, lon) in STATIONS.items():
-        display = {
-            "Anand_Vihar": "Anand Vihar",
-            "RK_Puram": "RK Puram",
-            "ITO": "ITO",
-            "Dwarka": "Dwarka",
-            "Punjabi_Bagh": "Punjabi Bagh",
-        }[raw_name]
+        display = raw_name.replace("_", " ")
         if display not in stations:
             continue
         df = _get_weather_df(raw_name, lat, lon, start, end)

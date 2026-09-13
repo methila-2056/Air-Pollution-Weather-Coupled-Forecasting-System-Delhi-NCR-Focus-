@@ -3,6 +3,36 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.3.0] - 2026-09
+
+### Added
+- **Expanded monitoring network: 5 → 17 stations.** Added Delhi sites (Lodhi
+  Road, Sirifort, Shadipur, Okhla Phase-2, Ashok Vihar, Mundka, Jahangirpuri,
+  Aya Nagar, Vivek Vihar), Gurugram (Teri Gram), Noida (Sector-62) and
+  Faridabad — wired across `DEFAULT_STATIONS`, the live refresh service
+  (`refresh_service.STATIONS`), `scripts/download_weather.py` and
+  `backend/scripts/load_data.py`.
+- **Historic weather for all new stations** — full Open-Meteo archive history
+  (2023-01-01 → present) downloaded and loaded into the running database.
+- **`scripts/seed_stations.py`** — idempotent seeding of stations + historic
+  weather CSVs (`data/weather/*_weather.csv`), skipping already-loaded
+  timestamps.
+
+### Changed
+- The `/api/forecast/ncr` aggregate, station list, grid overview, summary and
+  data-quality reports now span all 17 stations; tests assert counts against
+  `DEFAULT_STATIONS` instead of hard-coded five.
+- **Live CPCB pollution now covers all 17 stations.** The data.gov.in ingestion
+  maps the platform's monitor display names onto the curated canonical stations
+  (`_STATION_ALIASES`: e.g. `IMD Lodhi Road` -> `Lodhi Road`, `R K Puram` ->
+  `RK Puram`, `Dwarka-Sector 8` -> `Dwarka`, `Sector - 62` ->
+  `Noida Sector-62`, `Sector 11` -> `Faridabad`). Ingestion no longer
+  auto-creates ad-hoc stations — unknown monitors are skipped and counted as
+  `station_skipped`, keeping the network exactly at the curated 17.
+- `DATA_GOV_API_KEY` is configured with the shared public demo key; for stable
+  scheduled ingestion register a free personal key at data.gov.in and replace
+  it in `.env` (the demo key is rate-limited and intermittently returns 429s).
+
 ## [1.2.0] - 2026-09
 
 ### Added

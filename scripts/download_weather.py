@@ -15,6 +15,18 @@ STATIONS = {
     "ITO": {"lat": 28.6290, "lon": 77.2410},
     "Dwarka": {"lat": 28.5921, "lon": 77.0460},
     "Punjabi_Bagh": {"lat": 28.6692, "lon": 77.1285},
+    "Lodhi_Road": {"lat": 28.5866, "lon": 77.2268},
+    "Sirifort": {"lat": 28.5528, "lon": 77.2190},
+    "Shadipur": {"lat": 28.6542, "lon": 77.1489},
+    "Okhla_Phase-2": {"lat": 28.5230, "lon": 77.2680},
+    "Ashok_Vihar": {"lat": 28.6974, "lon": 77.1756},
+    "Mundka": {"lat": 28.6796, "lon": 77.0189},
+    "Jahangirpuri": {"lat": 28.7256, "lon": 77.1556},
+    "Aya_Nagar": {"lat": 28.4771, "lon": 77.1148},
+    "Vivek_Vihar": {"lat": 28.6727, "lon": 77.3169},
+    "Teri_Gram": {"lat": 28.4422, "lon": 77.0115},
+    "Noida_Sector-62": {"lat": 28.6227, "lon": 77.3615},
+    "Faridabad": {"lat": 28.4089, "lon": 77.3178},
 }
 
 HOURLY_VARS = (

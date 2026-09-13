@@ -5,6 +5,7 @@ responses, verifying that machine-learning predictions flow through to the
 REST layer with consistent structure and values.
 """
 
+from app.database import DEFAULT_STATIONS
 
 
 class TestForecastPipeline:
@@ -33,7 +34,7 @@ class TestForecastPipeline:
         resp = client.get("/api/forecast/ncr")
         assert resp.status_code == 200
         body = resp.json()
-        assert set(body.keys()) == {"Anand Vihar", "RK Puram", "ITO", "Dwarka", "Punjabi Bagh"}
+        assert set(body.keys()) == {s["name"] for s in DEFAULT_STATIONS}
         for _station, forecasts in body.items():
             assert isinstance(forecasts, list)
 
@@ -178,7 +179,7 @@ class TestDataQuality:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        assert body["station_count"] == 5
+        assert body["station_count"] == len(DEFAULT_STATIONS)
         assert "tables" in body
         assert "recommendations" in body
 
@@ -279,7 +280,7 @@ class TestGridForecast:
         resp = client.get("/api/grid/overview")
         assert resp.status_code == 200
         body = resp.json()
-        assert len(body["stations"]) == 5
+        assert len(body["stations"]) == len(DEFAULT_STATIONS)
         assert all(s["name"] for s in body["stations"])
 
 
@@ -337,7 +338,7 @@ class TestSummaryEndpoint:
         resp = client.get("/api/summary")
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["stations"] == 5
+        assert body["stations"] == len(DEFAULT_STATIONS)
         assert body["stations_with_readings"] >= 1
         assert body["ncr_avg_aqi"] is not None
         assert body["worst_station"]["name"] == "Anand Vihar"

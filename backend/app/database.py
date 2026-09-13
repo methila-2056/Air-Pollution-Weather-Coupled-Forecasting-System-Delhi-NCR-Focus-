@@ -71,6 +71,18 @@ DEFAULT_STATIONS = [
     {"name": "ITO", "latitude": 28.6290, "longitude": 77.2410, "city": "Delhi NCR"},
     {"name": "Dwarka", "latitude": 28.5921, "longitude": 77.0460, "city": "Delhi NCR"},
     {"name": "Punjabi Bagh", "latitude": 28.6692, "longitude": 77.1285, "city": "Delhi NCR"},
+    {"name": "Lodhi Road", "latitude": 28.5866, "longitude": 77.2268, "city": "Delhi NCR"},
+    {"name": "Sirifort", "latitude": 28.5528, "longitude": 77.2190, "city": "Delhi NCR"},
+    {"name": "Shadipur", "latitude": 28.6542, "longitude": 77.1489, "city": "Delhi NCR"},
+    {"name": "Okhla Phase-2", "latitude": 28.5230, "longitude": 77.2680, "city": "Delhi NCR"},
+    {"name": "Ashok Vihar", "latitude": 28.6974, "longitude": 77.1756, "city": "Delhi NCR"},
+    {"name": "Mundka", "latitude": 28.6796, "longitude": 77.0189, "city": "Delhi NCR"},
+    {"name": "Jahangirpuri", "latitude": 28.7256, "longitude": 77.1556, "city": "Delhi NCR"},
+    {"name": "Aya Nagar", "latitude": 28.4771, "longitude": 77.1148, "city": "Delhi NCR"},
+    {"name": "Vivek Vihar", "latitude": 28.6727, "longitude": 77.3169, "city": "Delhi NCR"},
+    {"name": "Teri Gram", "latitude": 28.4422, "longitude": 77.0115, "city": "Gurugram"},
+    {"name": "Noida Sector-62", "latitude": 28.6227, "longitude": 77.3615, "city": "Noida"},
+    {"name": "Faridabad", "latitude": 28.4089, "longitude": 77.3178, "city": "Faridabad"},
 ]
 
 def seed_data(db) -> int:
