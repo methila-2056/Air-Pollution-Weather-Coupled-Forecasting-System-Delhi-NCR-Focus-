@@ -3,6 +3,33 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.1.1] - 2026-09
+
+### Added
+- **Command dashboard** — new `/` route (`frontend/src/pages/Dashboard.tsx`)
+  aggregating the direct PM2.5 forecast with conformal bands, atmospheric
+  conditions, regional fire intelligence + transport risk, SHAP
+  explainability, cross-model performance and a wind-arrow station map.
+- **Client + types wiring** — `getPm25Forecast`, `getAtmosphereCurrent`,
+  `getTransportRisk` in `frontend/src/api/client.ts` with full response
+  typings; `StationMap` renders flow-direction wind arrows.
+
+### Fixed
+- **Weather-ingestion dedup** — the pre-insert lookup compared tz-aware
+  PostgreSQL datetimes against naive-UTC source timestamps (always unequal),
+  so duplicate weather rows accumulated. Existing timestamps are now normalized
+  to naive-UTC before the set-membership check.
+- **Weather uniqueness enforced** — Alembic migration
+  `f6a2e7b3c8d9_weather_unique_ts` adds `(station_id, timestamp)` on
+  `weather_observations` after deduplicating pre-existing rows; the same dedup +
+  unique index is applied to SQLite dev DBs via `apply_migrations()`.
+- **Junk pollution rows** — the CKAN feed occasionally returns rows with a
+  valid timestamp but every sensor value NULL; these are now skipped instead of
+  inserting empty observations.
+- **Pollution-events 500** — the forecaster serialises timestamps as ISO-8601
+  strings, which broke run-gap arithmetic (`str - str`) in the event rules;
+  `_parse_ts` normalises them to naive-UTC datetimes (regression tests added).
+
 ## [1.1.0] - 2026-09
 
 ### Added
