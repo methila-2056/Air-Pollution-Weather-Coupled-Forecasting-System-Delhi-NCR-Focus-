@@ -503,3 +503,37 @@ export interface TransportRiskResponse {
   methodology: Record<string, unknown>
   station_detail: Array<Record<string, unknown>>
 }
+
+export interface GrapStage {
+  stage: number
+  title: string
+  aqi_range_low: number | null
+  aqi_range_high: number | null
+  categories: string[]
+  color: string
+  summary: string
+  measures: string[]
+}
+
+export interface GrapStagesResponse {
+  stages: GrapStage[]
+}
+
+export interface GrapAssessment {
+  assessed_at: string
+  stage: number
+  status: 'ACTIVE' | 'NOT_INVOKED'
+  title: string
+  color: string
+  aqi: number | null
+  aqi_category: string | null
+  dominant_pollutant: string | null
+  inversion_strength: number | null
+  inversion_note: string | null
+  fire_mean_frp_mw: number | null
+  fire_note: string | null
+  advisory: string
+  rationale: string[]
+  measures: string[]
+  source: string
+}

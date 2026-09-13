@@ -11,10 +11,12 @@ import {
   getPm25ForecastExplanation,
   getModelPerformance,
   getPollutionLatest,
+  getGrapCurrent,
 } from '../api/client'
 import AQICard from '../components/AQICard'
 import AQIBadge from '../components/AQIBadge'
 import ForecastChart from '../components/ForecastChart'
+import GrapPanel from '../components/GrapPanel'
 import ExplainabilityPanel from '../components/ExplainabilityPanel'
 import StationMap from '../components/StationMap'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
@@ -43,6 +45,7 @@ import type {
   ForecastExplanation,
   ModelPerformanceResponse,
   PollutionReading,
+  GrapAssessment,
 } from '../types'
 
 function fmt(v: number | null | undefined, digits = 0): string {
@@ -146,6 +149,7 @@ export default function Dashboard() {
   const [hotspots, setHotspots] = useState<FireHotspot[]>([])
   const [transport, setTransport] = useState<TransportRiskResponse | null>(null)
   const [explanation, setExplanation] = useState<ForecastExplanation | null>(null)
+  const [grap, setGrap] = useState<GrapAssessment | null>(null)
   const [modelPerf, setModelPerf] = useState<ModelPerformanceResponse | null>(null)
   const [pollution, setPollution] = useState<PollutionReading[]>([])
   const [loading, setLoading] = useState(true)
@@ -169,6 +173,7 @@ export default function Dashboard() {
       getPm25ForecastExplanation(selected, 24).then(r => setExplanation(r.data)).catch(() => setExplanation(null)),
       getModelPerformance().then(r => setModelPerf(r.data)),
       getPollutionLatest().then(r => setPollution(r.data)),
+      getGrapCurrent().then(r => setGrap(r.data)).catch(() => setGrap(null)),
     ]).then(results => {
       const failures = results.filter(r => r.status === 'rejected')
       if (failures.length === results.length) {
@@ -326,7 +331,13 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* ============ 4. REGIONAL FIRE INTELLIGENCE ============ */}
+      {/* ============ 4. GRADED RESPONSE ACTION PLAN ============ */}
+      <section className="card">
+        <SectionTitle icon="⚖️" title="Graded Response Action Plan (GRAP)" chips={['DERIVED', 'ESTIMATED']} />
+        <GrapPanel data={grap} />
+      </section>
+
+      {/* ============ 5. REGIONAL FIRE INTELLIGENCE ============ */}
       <section className="card">
         <SectionTitle icon="🔥" title="Regional Fire Intelligence & Transport Risk" chips={['OBSERVED', 'ESTIMATED']} />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
@@ -373,7 +384,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ============ 5. EXPLAINABILITY ============ */}
+      {/* ============ 6. EXPLAINABILITY ============ */}
       <section className="card">
         <SectionTitle icon="🧠" title="Explainability — Why is it expected to change?" chips={['MODEL', 'DERIVED']} />
         <div className="mt-4">
@@ -387,7 +398,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ============ 6. MODEL PERFORMANCE ============ */}
+      {/* ============ 7. MODEL PERFORMANCE ============ */}
       <section className="card">
         <SectionTitle icon="🎯" title="Model Performance (held-out test set)" chips={['MEASURED']} />
         {modelPerf?.results?.length ? (
@@ -432,7 +443,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* ============ 7. MAP ============ */}
+      {/* ============ 8. MAP ============ */}
       <section className="card p-0 overflow-hidden">
         <div className="p-6 pb-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
