@@ -18,6 +18,7 @@ from .api import (
     export,
     fire,
     forecast,
+    grap,
     grid,
     inversion,
     model_metrics,
@@ -150,6 +151,7 @@ app.include_router(export.router, prefix="/api", tags=["Export"])
 app.include_router(transport_risk.router, prefix="/api", tags=["Transport Risk"])
 app.include_router(events.router, prefix="/api", tags=["Pollution Events"])
 app.include_router(scenario.router, prefix="/api", tags=["Scenario Analysis"])
+app.include_router(grap.router, prefix="/api", tags=["Graded Response Action Plan"])
 
 @app.get("/api/health")
 def health():
