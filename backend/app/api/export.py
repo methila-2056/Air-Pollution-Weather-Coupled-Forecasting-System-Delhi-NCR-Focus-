@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.db_models import Forecast, Station
+from ..models.db_models import Forecast, PollutionReading, Station, WeatherReading
 
 router = APIRouter()
 
@@ -76,3 +76,98 @@ def _num(value) -> str:
     if isinstance(value, float):
         return f"{value:.4f}".rstrip("0").rstrip(".")
     return str(value)
+
+
+@router.get("/export/weather.csv")
+def export_weather_csv(
+    station_name: str = Query(default=...),
+    hours: int = Query(default=72, ge=1, le=720),
+    db: Session = Depends(get_db),
+):
+    """Download persisted weather observations for a station as CSV.
+
+    Applies the open-meteo / data/weather column names, matching the format
+    consumed by ``POST /api/import/weather`` so exports round-trip cleanly.
+    """
+    station = _station_or_404(db, station_name)
+    start = datetime.utcnow() - timedelta(hours=hours)
+    rows = (
+        db.query(WeatherReading)
+        .filter(
+            WeatherReading.station_id == station.id,
+            WeatherReading.timestamp >= start,
+        )
+        .order_by(WeatherReading.timestamp)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No weather in the requested window for '{station_name}'")
+
+    header = (
+        "station,time,temperature_2m,relative_humidity_2m,pressure_msl,"
+        "surface_pressure,wind_speed_10m,wind_direction_10m,precipitation,"
+        "cloud_cover,boundary_layer_height"
+    )
+    lines = [header]
+    for r in rows:
+        lines.append(",".join([
+            station_name,
+            str(r.timestamp.isoformat()),
+            _num(r.temperature), _num(r.humidity), _num(r.pressure_msl),
+            _num(r.surface_pressure), _num(r.wind_speed), _num(r.wind_direction),
+            _num(r.precipitation), _num(r.cloud_cover), _num(r.pbl_height),
+        ]))
+
+    safe_name = station_name.replace(" ", "_").lower()
+    return Response(
+        content="\n".join(lines),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="weather_{safe_name}_{hours}h.csv"',
+        },
+    )
+
+
+@router.get("/export/pollution.csv")
+def export_pollution_csv(
+    station_name: str = Query(default=...),
+    hours: int = Query(default=72, ge=1, le=720),
+    db: Session = Depends(get_db),
+):
+    """Download persisted CPCB pollution observations for a station as CSV.
+
+    Matches the format consumed by ``POST /api/import/pollution`` so exports
+    round-trip cleanly (``aqi`` is recomputed when absent on import).
+    """
+    station = _station_or_404(db, station_name)
+    start = datetime.utcnow() - timedelta(hours=hours)
+    rows = (
+        db.query(PollutionReading)
+        .filter(
+            PollutionReading.station_id == station.id,
+            PollutionReading.timestamp >= start,
+        )
+        .order_by(PollutionReading.timestamp)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No pollution in the requested window for '{station_name}'")
+
+    header = "station,timestamp,pm25,pm10,o3,no2,so2,co,aqi"
+    lines = [header]
+    for r in rows:
+        lines.append(",".join([
+            station_name,
+            str(r.timestamp.isoformat()),
+            _num(r.pm25), _num(r.pm10), _num(r.o3), _num(r.no2),
+            _num(r.so2), _num(r.co), _num(r.aqi),
+        ]))
+
+    safe_name = station_name.replace(" ", "_").lower()
+    return Response(
+        content="\n".join(lines),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="pollution_{safe_name}_{hours}h.csv"',
+        },
+    )

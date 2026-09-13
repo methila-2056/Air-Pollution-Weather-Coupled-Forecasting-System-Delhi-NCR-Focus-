@@ -10,6 +10,7 @@ import AIExplanation from './pages/AIExplanation'
 import Alerts from './pages/Alerts'
 import ModelPerformancePage from './pages/ModelPerformancePage'
 import SpatialForecastPage from './pages/SpatialForecastPage'
+import DataTools from './pages/DataTools'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/performance" element={<ModelPerformancePage />} />
         <Route path="/spatial" element={<SpatialForecastPage />} />
+        <Route path="/data" element={<DataTools />} />
       </Routes>
     </Layout>
   )

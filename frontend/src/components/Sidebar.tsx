@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, TrendingUp, Map, Wind, Flame, Brain, Bell, BarChart3, Grid3x3 } from 'lucide-react'
+import { LayoutDashboard, TrendingUp, Map, Wind, Flame, Brain, Bell, BarChart3, Grid3x3, Database } from 'lucide-react'
 
 const links = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -12,6 +12,7 @@ const links = [
   { to: '/explanation', icon: Brain, label: 'AI Explanation' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/performance', icon: BarChart3, label: 'Model Performance' },
+  { to: '/data', icon: Database, label: 'Data Tools' },
 ]
 
 export default function Sidebar() {

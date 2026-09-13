@@ -20,6 +20,7 @@ from .api import (
     forecast,
     grap,
     grid,
+    import_,
     inversion,
     model_metrics,
     model_performance,
@@ -148,6 +149,7 @@ app.include_router(grid.router, prefix="/api", tags=["Grid Forecast"])
 app.include_router(dispersion.router, prefix="/api", tags=["Dispersion Forecast"])
 app.include_router(summary.router, prefix="/api", tags=["Summary"])
 app.include_router(export.router, prefix="/api", tags=["Export"])
+app.include_router(import_.router, prefix="/api", tags=["Import"])
 app.include_router(transport_risk.router, prefix="/api", tags=["Transport Risk"])
 app.include_router(events.router, prefix="/api", tags=["Pollution Events"])
 app.include_router(scenario.router, prefix="/api", tags=["Scenario Analysis"])

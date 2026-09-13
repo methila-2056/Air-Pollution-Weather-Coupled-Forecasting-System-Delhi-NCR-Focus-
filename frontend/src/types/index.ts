@@ -34,6 +34,16 @@ export interface PollutionIngestSummary {
   errors: string[]
 }
 
+export interface DataImportSummary {
+  dataset: 'weather' | 'pollution'
+  rows: number
+  inserted: number
+  updated: number
+  unchanged: number
+  unknown_stations: string[]
+  errors: string[]
+}
+
 export interface CurrentAQI {
   station: string
   timestamp: string

@@ -17,6 +17,16 @@ All notable changes to **AeroCast-NCR** are documented here. Format follows
 - **`scripts/seed_stations.py`** — idempotent seeding of stations + historic
   weather CSVs (`data/weather/*_weather.csv`), skipping already-loaded
   timestamps.
+- **CSV import / export ("Data Tools").** New `GET /api/export/weather.csv` and
+  `GET /api/export/pollution.csv` (alongside the existing
+  `GET /api/export/forecast.csv`) download persisted observations per station,
+  and new `POST /api/import/weather` / `POST /api/import/pollution` accept the
+  same formats back as `text/csv`, so series round-trip cleanly. Imports are
+  idempotent (keyed on `(station, timestamp)`, existing rows updated only when
+  they changed), timestamps are stored per the app-wide IST-naive convention,
+  blank `aqi` is recomputed from the six criteria pollutants, and unknown (non
+  curated) stations are skipped and reported. New `frontend DataTools` page
+  (`/data`) provides export buttons, CSV upload, templates and import summaries.
 
 ### Changed
 - The `/api/forecast/ncr` aggregate, station list, grid overview, summary and

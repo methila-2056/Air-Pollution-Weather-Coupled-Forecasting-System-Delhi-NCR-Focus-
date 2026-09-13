@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse } from '../types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -46,3 +46,13 @@ export const getGrapStages = () => api.get<GrapStagesResponse>('/grap/stages')
 
 export const getForecastExportUrl = (station: string, hours = 72) =>
   `/api/export/forecast.csv?station_name=${encodeURIComponent(station)}&hours=${hours}`
+export const getWeatherExportUrl = (station: string, hours = 72) =>
+  `/api/export/weather.csv?station_name=${encodeURIComponent(station)}&hours=${hours}`
+export const getPollutionExportUrl = (station: string, hours = 72) =>
+  `/api/export/pollution.csv?station_name=${encodeURIComponent(station)}&hours=${hours}`
+
+const csvHeaders = { 'Content-Type': 'text/csv' }
+export const importWeatherCsv = (csv: string) =>
+  api.post<DataImportSummary>('/import/weather', csv, { headers: csvHeaders })
+export const importPollutionCsv = (csv: string) =>
+  api.post<DataImportSummary>('/import/pollution', csv, { headers: csvHeaders })
