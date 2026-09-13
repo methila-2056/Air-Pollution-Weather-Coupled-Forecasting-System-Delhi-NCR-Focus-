@@ -62,6 +62,22 @@ _VALUE_COLUMNS: tuple[tuple[str, ...], ...] = (
     ("min_value", "pollutant_min"),
 )
 
+# Monitor display names published by CPCB differ from the canonical station
+# names in the database. Lower-cased source short name -> canonical DB name.
+_STATION_ALIASES = {
+    "imd lodhi road": "Lodhi Road",
+    "r k puram": "RK Puram",
+    "dwarka-sector 8": "Dwarka",
+    "sector - 62": "Noida Sector-62",
+    "sector-62": "Noida Sector-62",
+    "sector 11": "Faridabad",  # Sector 11 monitor represents the Faridabad city point
+}
+
+
+def _canonical_station_name(short: str) -> str:
+    """Map a CPCB monitor short name onto the canonical database station name."""
+    return _STATION_ALIASES.get(short.strip().lower(), short)
+
 
 class CpcbError(Exception):
     """Typed error raised by the CPCB service.
@@ -323,7 +339,10 @@ def normalize_records(records: list[dict[str, Any]]) -> list[NormalizedObservati
 def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, int]:
     """Upsert NCR stations + pollution observations. Returns usage counters.
 
-    Station identity is the canonical short name. Observation identity is
+    Station identity is the canonical short name, aliased onto the curated
+    ``Station`` rows (see ``_STATION_ALIASES``). Observations for monitors that
+    are neither an existing station nor an alias are skipped — the station set
+    is curated, ingestion never creates ad-hoc stations. Observation identity is
     ``(station_id, timestamp)`` — protected by the unique constraint
     ``uq_pollution_station_ts``; duplicates are never created.
     """
@@ -331,45 +350,40 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
     from ..services.aqi_calculator import calculate_aqi
 
     stations = {s.name: s for s in db.query(Station).all()}
-    counters = {"inserted": 0, "updated": 0, "skipped": 0, "station_created": 0, "station_updated": 0}
+    counters = {
+        "inserted": 0, "updated": 0, "skipped": 0,
+        "station_created": 0, "station_updated": 0, "station_skipped": 0,
+    }
 
+    matched: list[tuple[Station, NormalizedObservation]] = []
     for obs in observations:
-        station = stations.get(obs.station_name)
+        name = _canonical_station_name(obs.station_name)
+        station = stations.get(name)
         if station is None:
-            station = Station(
-                name=obs.station_name,
-                latitude=obs.latitude if obs.latitude is not None else 28.6139,
-                longitude=obs.longitude if obs.longitude is not None else 77.2090,
-                city=obs.city,
-                state=obs.state or None,
-            )
-            db.add(station)
-            db.flush()
-            stations[obs.station_name] = station
-            counters["station_created"] += 1
-        else:
-            changed = False
-            if obs.latitude is not None and station.latitude != obs.latitude:
-                station.latitude = obs.latitude
-                changed = True
-            if obs.longitude is not None and station.longitude != obs.longitude:
-                station.longitude = obs.longitude
-                changed = True
-            if obs.city and station.city != obs.city:
-                station.city = obs.city
-                changed = True
-            if obs.state and station.state != obs.state:
-                station.state = obs.state
-                changed = True
-            if changed:
-                counters["station_updated"] += 1
+            counters["station_skipped"] += 1
+            continue
+        changed = False
+        if obs.latitude is not None and station.latitude != obs.latitude:
+            station.latitude = obs.latitude
+            changed = True
+        if obs.longitude is not None and station.longitude != obs.longitude:
+            station.longitude = obs.longitude
+            changed = True
+        if obs.city and station.city != obs.city:
+            station.city = obs.city
+            changed = True
+        if obs.state and station.state != obs.state:
+            station.state = obs.state
+            changed = True
+        if changed:
+            counters["station_updated"] += 1
+        matched.append((station, obs))
 
     if observations:
         db.flush()
 
     _SIX = ("pm25", "pm10", "o3", "no2", "so2", "co")
-    for obs in observations:
-        station = stations[obs.station_name]
+    for station, obs in matched:
         ts = obs.timestamp.replace(tzinfo=None)  # store IST wall-clock (matches app convention)
         existing = (
             db.query(PollutionReading)
@@ -408,18 +422,23 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
 
 def run_ingestion(db, api_key: str | None = None) -> dict[str, Any]:
     """Full pipeline: fetch official data -> normalize -> persist. Returns a summary."""
+    from ..models.db_models import Station
+
     records = fetch_ncr_records(api_key=api_key)
     observations = normalize_records(records)
     counters = upsert_ncr_data(db, observations)
-    stations_processed = len({o.station_name for o in observations})
+    existing_names = {s.name for s in db.query(Station).all()}
     return {
         "records_fetched": len(records),
         "observations_normalized": len(observations),
-        "stations_processed": stations_processed,
+        "stations_processed": sum(
+            1 for o in observations if _canonical_station_name(o.station_name) in existing_names
+        ),
         "inserted": counters["inserted"],
         "updated": counters["updated"],
         "skipped": counters["skipped"],
         "station_created": counters["station_created"],
         "station_updated": counters["station_updated"],
+        "station_skipped": counters["station_skipped"],
         "errors": [],
     }

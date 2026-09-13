@@ -1,4 +1,5 @@
 
+from app.database import DEFAULT_STATIONS
 from app.services import cpcb_service
 from app.services.cpcb_service import CpcbError
 
@@ -41,7 +42,7 @@ def test_pollution_stations(client, db_session):
     response = client.get("/api/pollution/stations")
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 5
+    assert len(body) == len(DEFAULT_STATIONS)
     for station in body:
         assert "state" in station
 
@@ -74,8 +75,8 @@ def test_pollution_ingest_mocked(client, db_session, monkeypatch):
     latest = client.get("/api/pollution/latest").json()
     assert len(latest) == 3
     names = {row["station"] for row in latest}
-    assert names == {"Anand Vihar", "ITO", "Sector-62"}
-    noida = next(row for row in latest if row["station"] == "Sector-62")
+    assert names == {"Anand Vihar", "ITO", "Noida Sector-62"}
+    noida = next(row for row in latest if row["station"] == "Noida Sector-62")
     assert noida["state"] == "Uttar Pradesh"
     assert noida["co"] == 1.8
 

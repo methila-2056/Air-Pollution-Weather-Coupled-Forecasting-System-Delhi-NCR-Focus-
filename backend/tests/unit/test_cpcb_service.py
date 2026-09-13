@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pytest
 import requests
+from app.database import DEFAULT_STATIONS
 from app.services import cpcb_service
 from app.services.cpcb_service import (
     CpcbError,
@@ -314,7 +315,8 @@ def test_upsert_is_idempotent_no_duplicates(db_session):
     assert count == 1
 
 
-def test_upsert_creates_new_station_when_missing(db_session):
+def test_upsert_skips_unknown_station(db_session):
+    # The station set is curated; unknown monitors are skipped, never created.
     obs = NormalizedObservation(
         station_name="Sector-62, Noida",
         city="Noida",
@@ -325,9 +327,37 @@ def test_upsert_creates_new_station_when_missing(db_session):
         values={"pm25": 55.0},
     )
     counters = upsert_ncr_data(db_session, [obs])
-    assert counters["station_created"] == 1
-    assert counters["inserted"] == 1
+    assert counters["station_skipped"] == 1
+    assert counters["inserted"] == 0
     from app.models.db_models import Station
-    new_station = db_session.query(Station).filter(Station.name == "Sector-62, Noida").first()
-    assert new_station is not None
-    assert new_station.state == "Uttar Pradesh"
+    assert db_session.query(Station).count() == len(DEFAULT_STATIONS)
+
+
+def test_upsert_maps_dataset_monitor_names_to_curated_stations(db_session):
+    from app.models.db_models import PollutionReading, Station
+
+    aliases = {
+        "IMD Lodhi Road": "Lodhi Road",
+        "R K Puram": "RK Puram",
+        "Dwarka-Sector 8": "Dwarka",
+        "Sector - 62": "Noida Sector-62",
+        "Sector 11": "Faridabad",
+    }
+    for source, canonical in aliases.items():
+        obs = NormalizedObservation(
+            station_name=source,
+            city="Delhi",
+            state="Delhi",
+            latitude=28.0,
+            longitude=77.0,
+            timestamp=_parse_timestamp("09-09-2026 14:00:00"),
+            values={"pm25": 40.0},
+        )
+        counters = upsert_ncr_data(db_session, [obs])
+        assert counters["inserted"] == 1, source
+        target = db_session.query(Station).filter(Station.name == canonical).first()
+        assert target is not None, canonical
+        row = db_session.query(PollutionReading).filter(PollutionReading.station_id == target.id).first()
+        assert row is not None and row.pm25 == 40.0
+        db_session.query(PollutionReading).filter(PollutionReading.station_id == target.id).delete()
+        db_session.commit()
