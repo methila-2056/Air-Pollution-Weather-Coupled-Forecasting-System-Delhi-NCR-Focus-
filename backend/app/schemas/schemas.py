@@ -659,3 +659,37 @@ class ScenarioAnalysisResponse(BaseModel):
     input_changes: list[ScenarioChangeEffect]
     notes: list[str]
     data_integrity: dict
+
+
+class GrapStageOut(BaseModel):
+    stage: int
+    title: str
+    aqi_range_low: int | None
+    aqi_range_high: int | None
+    categories: list[str]
+    color: str
+    summary: str
+    measures: list[str]
+
+
+class GrapStagesResponse(BaseModel):
+    stages: list[GrapStageOut]
+
+
+class GrapAssessment(BaseModel):
+    assessed_at: datetime
+    stage: int
+    status: Literal["ACTIVE", "NOT_INVOKED"]
+    title: str
+    color: str
+    aqi: int | None
+    aqi_category: str | None
+    dominant_pollutant: str | None
+    inversion_strength: float | None
+    inversion_note: str | None
+    fire_mean_frp_mw: float | None
+    fire_note: str | None
+    advisory: str
+    rationale: list[str]
+    measures: list[str]
+    source: str
