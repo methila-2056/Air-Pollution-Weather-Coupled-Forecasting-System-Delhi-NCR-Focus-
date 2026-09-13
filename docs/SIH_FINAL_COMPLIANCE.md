@@ -28,12 +28,13 @@
 | R11 | **Indian AQI (CPCB breakpoints)** | Breakpoint AQI calculator produces `aqi`, `aqi_category`, `dominant_pollutant` on current + forecast data. | `backend/app/services/aqi_calculator.py`, `backend/app/api/current.py` | ✅ | — |
 | R12 | **Explainability** | Real `shap.TreeExplainer` when a tree model is loaded; honest fallback when not. | `backend/app/services/explanation_service.py`, `frontend/src/pages/AIExplanation.tsx` | ✅ | SHAP on tree models only (not persistence). |
 | R13 | **Alerts (INFO→WATCH→WARNING→SEVERE)** | Alerts computed from actual forecast/weather/fire AQI and hazard values: `INFO`, `WATCH`, `WARNING`, `SEVERE`. | `backend/app/services/alert_service.py`, `backend/app/api/alerts.py`, `frontend/src/pages/Alerts.tsx` | ✅ | Alert thresholds are configurable constants. |
-| R14 | **Dashboard with map layers (FIRMS hotspots, wind, transport)** | Leaflet NCR map now renders FIRMS hotspots (FRP-sized/colored circles) + stations, with live plume-transport summary card (headline risk, wind-aligned %, smoke arrival time). Wind vector shown via transport-direction labeling; standalone Inversion/PBL panel added. | `frontend/src/pages/NCRMap.tsx`, `frontend/src/components/StationMap.tsx`, `frontend/src/components/StubblePlume.tsx`, `frontend/src/pages/Atmosphere.tsx` | ✅ | Wind *vectors* (per-station arrows) not yet drawn; direction labels + hotspot overlay provided. |
+| R14 | **Dashboard with map layers (FIRMS hotspots, wind, transport)** | Leaflet NCR map now renders FIRMS hotspots (FRP-sized/colored circles) + stations, with live plume-transport summary card (headline risk, wind-aligned %, smoke arrival time). Flow-direction wind arrows drawn per station (TO = FROM + 180°); standalone Inversion/PBL panel added. | `frontend/src/pages/NCRMap.tsx`, `frontend/src/components/StationMap.tsx` (wind-arrow vectors), `frontend/src/components/StubblePlume.tsx`, `frontend/src/pages/Atmosphere.tsx` | ✅ | Wind arrows show flow direction (not speed-scaled vectors); hotspot overlay provided. |
 | R15 | **Direct PM2.5 forecast engine (multi-horizon, conformal intervals)** | XGBoost model trained per pollutant per horizon with conformal prediction intervals; GRU available as optional model variant. Endpoints: `/api/forecast/pm25`, `/api/forecast/pm25/model-card`, `/api/forecast/pm25/explanation`. | `ml/training/train_pm25.py`, `ml/inference/pm25_forecaster.py`, `models/pm25/`, `backend/app/api/pm25_forecast.py` | ✅ | Conformal intervals are distribution-free; coverage degrades at longer horizons. |
 | R16 | **Pollution event detection (surge / relief / sustained high-risk)** | Statistical event detection from time-series anomalies: z-score surge, sustained episodes, relief transitions. Endpoint: `/api/events/current`. | `backend/app/services/events_service.py`, `backend/app/api/events.py`, `docs/events.md` | ✅ | Thresholds heuristic; documented as analytical overlays, not regulatory alerts. |
 | R17 | **Scenario analysis (what-if engine)** | Read-only perturbation engine: wind speed/direction, PBL height, fire activity, inversion strength adjustments propagated through the coupled model. Endpoint: `/api/scenario/analysis`. | `backend/app/services/scenario_service.py`, `backend/app/api/scenario.py`, `docs/scenario_analysis.md` | ✅ | Purely analytical; not a policy simulator. |
 | R18 | **Model performance dashboard** | Persisted cross-model performance comparison (persistence / RF / XGBoost / GRU) across horizons with MAE/RMSE/R² metrics. Endpoint: `/api/model/performance`. | `backend/app/api/model_performance.py`, `frontend/src/pages/ModelPerformancePage.tsx`, `frontend/src/components/ModelPerformance.tsx` | ✅ | Metrics are from the most recent chronological evaluation run. |
 | R19 | **4-model evaluation (persistence / RF / XGBoost / GRU)** | Full evaluation suite in `models/pm25/evaluation.json` and `evaluation.csv`: persistence, RF, XGBoost, and GRU across all 6 horizons. | `ml/training/evaluate_pm25.py`, `models/pm25/evaluation.json`, `models/pm25/evaluation.csv` | ✅ | GRU honestly underperforms tree ensemble; results not inflated. |
+| R20 | **Graded Response Action Plan (GRAP)** | CAQM stage matrix (Oct-2024 revision: Stage I ≥201, II ≥301, III ≥401, IV >450) as a pure service plus three API endpoints and a dashboard panel. Live NCR assessment combines the persisted 24-hour average AQI with the shallowest-PBL inversion proxy and FIRMS mean FRP, returning a stage, rationale, and the exact actionable measures list. | `backend/app/services/grap_service.py`, `backend/app/api/grap.py`, `backend/app/schemas/schemas.py`, `frontend/src/components/GrapPanel.tsx`, `frontend/src/pages/Dashboard.tsx`; endpoints `GET /api/grap/stages`, `/api/grap/current`, `/api/grap/{station}` | ✅ | Stage classification depends on 24-hour average AQI availability; advisory-only when no recent AQI exists (explicit in rationale). |
 
 ---
 
@@ -90,7 +91,7 @@ These are **advective transport estimates**, not dispersion simulations. The 2D 
 
 | Check | Command | Result |
 |-------|---------|--------|
-| Full backend test suite | `python -m pytest backend/tests -q` | **422 passed** |
+| Full backend test suite | `python -m pytest backend/tests -q` | **454 passed** |
 | Lint (changed files) | `python -m ruff check <files> --config pyproject.toml` | **All checks passed** |
 | Frontend TypeScript + build | `cd frontend && npm run build` | **build succeeds** (tsc + vite) |
 | Live pressure-level fetch | Open-Meteo `temperature_{1000,925,850,700}hPa` + `geopotential_height_{925,850}hPa` | HTTP 200, real values |
@@ -125,6 +126,18 @@ These are **advective transport estimates**, not dispersion simulations. The 2D 
 - `frontend/src/pages/ModelPerformancePage.tsx`
 - `frontend/src/components/ModelPerformance.tsx`
 - `docs/events.md`, `docs/scenario_analysis.md`
+
+**Created (1.2.0 — GRAP)**
+- `backend/app/services/grap_service.py` — CAQM GRAP stage engine
+- `backend/app/api/grap.py` — `/api/grap/stages`, `/api/grap/current`, `/api/grap/{station}`
+- `backend/tests/unit/test_grap.py`, `backend/tests/unit/test_grap_api.py` — stage matrix + endpoint tests
+- `frontend/src/components/GrapPanel.tsx` — dashboard GRAP panel
+
+**Modified (1.2.0 — GRAP)**
+- `backend/app/schemas/schemas.py` — `GrapStageResponse`, `GrapAssessmentResponse`
+- `backend/app/main.py` — register GRAP router
+- `frontend/src/types/index.ts`, `frontend/src/api/client.ts`, `frontend/src/pages/Dashboard.tsx`
+- `README.md` (capability + API tables), `CHANGELOG.md` (1.2.0)
 
 **Modified (Phase-2)**
 - `ml/features/inversion.py` — added lapse-rate inversion features (`add_lapse_rate_inversion_features`, `_extract_temp_by_level`); legacy `detect_inversion`/`add_inversion_features` preserved (backward compatible).
