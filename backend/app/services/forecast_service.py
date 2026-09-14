@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 
 from ..services.aqi_calculator import calculate_aqi
-from ..utils.helpers import haversine_distance
+from ..utils.helpers import haversine_distance, repo_root
 
 logger = logging.getLogger("aerocast.forecast")
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "models")
+MODEL_DIR = str(repo_root() / "models")
 
 DEFAULT_HORIZONS = [1, 6, 12, 24, 48, 72]
 
