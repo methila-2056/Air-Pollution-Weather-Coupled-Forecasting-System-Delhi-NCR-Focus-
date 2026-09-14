@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -234,7 +234,7 @@ def data_quality():
 
         return {
             "status": "ok",
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
             "station_count": len(stations),
             "stations_with_forecasts": forecasted_stations,
             "forecast_coverage": forecast_coverage,

@@ -1,6 +1,6 @@
 """Unit tests for the atmospheric-condition analysis layer."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.models.db_models import Station, WeatherReading
@@ -60,7 +60,7 @@ class TestVentilation:
 
 
 def _add_latest_weather(db_session, station, **kwargs):
-    base = datetime.utcnow().replace(minute=0, second=0, microsecond=0) + timedelta(minutes=1)
+    base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0) + timedelta(minutes=1)
     row = WeatherReading(
         station_id=station.id,
         timestamp=base,

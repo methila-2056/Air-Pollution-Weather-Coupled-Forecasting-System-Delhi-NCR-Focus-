@@ -18,7 +18,7 @@ isolation and reused by the API layer.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 GRAP_SOURCE = "CAQM graded response action plan (Delhi NCR) — revised October 2024"
 
@@ -197,7 +197,7 @@ def assess_grap(
         ]
 
     return {
-        "assessed_at": datetime.utcnow(),
+        "assessed_at": datetime.now(UTC).replace(tzinfo=None),
         "stage": stage["stage"],
         "status": "ACTIVE" if stage["stage"] > 0 else "NOT_INVOKED",
         "title": stage["title"],

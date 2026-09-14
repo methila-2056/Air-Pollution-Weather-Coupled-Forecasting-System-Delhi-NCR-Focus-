@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import joblib
 import numpy as np
@@ -357,7 +357,7 @@ def get_fire_context(db) -> dict:
 
 def save_forecasts(db, station_id: int, predictions: list[dict], forecast_timestamp=None) -> list:
     from ..models.db_models import Forecast
-    base_ts = forecast_timestamp or datetime.utcnow()
+    base_ts = forecast_timestamp or datetime.now(UTC).replace(tzinfo=None)
     rows = []
     for p in predictions:
         pbl = p.get("pbl_height") or 500.0
@@ -427,7 +427,7 @@ def generate_coupled_forecast(db, station_id: int, horizons=None) -> dict:
 def save_coupled_forecasts(db, station_id: int, points: list[dict], forecast_timestamp=None) -> list:
     """Persist the coupled forecast points (including SO2/CO + coupling state)."""
     from ..models.db_models import Forecast
-    base_ts = forecast_timestamp or datetime.utcnow()
+    base_ts = forecast_timestamp or datetime.now(UTC).replace(tzinfo=None)
     rows = []
     for p in points:
         pbl = p.get("pbl_height") or p.get("pbl_effective") or 500.0

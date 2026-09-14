@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.models.db_models import PollutionReading, Station, WeatherReading
 
@@ -34,7 +34,7 @@ def _pollution_csv(rows):
 
 
 def _old_ts(hours_back: int) -> str:
-    base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+    base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
     return (base - timedelta(hours=hours_back)).strftime("%Y-%m-%d %H:%M:%S")
 
 

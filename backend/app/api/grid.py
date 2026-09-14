@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -76,5 +76,5 @@ def get_grid_overview(db: Session = Depends(get_db)):
     return {
         "stations": [{"name": s.name, "lat": s.latitude, "lon": s.longitude, "forecasts": counts[s.name]} for s in stations],
         "latest_forecast_at": latest.forecast_timestamp.isoformat() if latest else None,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
     }

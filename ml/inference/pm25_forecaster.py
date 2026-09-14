@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import joblib
@@ -175,7 +175,7 @@ class Pm25Forecaster:
             )
 
         if base_time is None:
-            base_time = datetime.utcnow()
+            base_time = datetime.now(UTC).replace(tzinfo=None)
         if base_time.tzinfo is not None:  # normalise to naive UTC
             base_time = base_time.astimezone().replace(tzinfo=None)
         base_time = base_time.replace(minute=0, second=0, microsecond=0)

@@ -76,7 +76,7 @@ def generate_coupled_forecast(
 
     return {
         "station": station.name,
-        "generated_at": datetime.utcnow(),
+        "generated_at": datetime.now(UTC).replace(tzinfo=None),
         "horizons": horizons,
         "mode": "coupled-two-way",
         "coupled": result["coupled"],
@@ -135,11 +135,11 @@ def generate_forecast(
 
     return ForecastGenerateResponse(
         station=station.name,
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC).replace(tzinfo=None),
         horizons=horizons,
         forecasts=[
             ForecastPoint(
-                timestamp=datetime.utcnow() + timedelta(hours=p["horizon_hours"]),
+                timestamp=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=p["horizon_hours"]),
                 horizon_hours=p["horizon_hours"],
                 pm25_pred=p["pm25_pred"],
                 pm10_pred=p["pm10_pred"],
@@ -161,7 +161,7 @@ def get_forecast_comparison(
     db: Session = Depends(get_db),
 ):
     station = _station_or_404(db, station_name)
-    start = datetime.utcnow() - timedelta(hours=hours)
+    start = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
     forecasts = (
         db.query(Forecast)

@@ -1,4 +1,4 @@
-﻿"""Unit tests for the PM2.5 model evaluation pipeline (evaluate_pm25)."""
+"""Unit tests for the PM2.5 model evaluation pipeline (evaluate_pm25)."""
 
 from __future__ import annotationsimport pathlibimport pandas as pdimport pytestfrom conftest import TINY_XGB, _make_synthetic_dffrom ml.training import evaluate_pm25 as evfrom ml.training.train_pm25 import run_trainingRF_TINY = {"n_estimators": 20, "max_depth": 3, "n_jobs": 1}
 

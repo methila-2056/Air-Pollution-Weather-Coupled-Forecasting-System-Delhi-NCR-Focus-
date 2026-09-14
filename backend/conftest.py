@@ -2,7 +2,7 @@ import os
 import pathlib
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -50,7 +50,7 @@ def _seed_test_data(session):
     seed_data(session)
     station = session.query(Station).filter(Station.name == "Anand Vihar").first()
 
-    base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+    base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
 
     readings = []
     weather = []

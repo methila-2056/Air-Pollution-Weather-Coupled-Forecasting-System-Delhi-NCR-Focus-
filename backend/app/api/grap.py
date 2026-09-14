@@ -6,7 +6,7 @@ PBL-derived inversion proxy and recent FIRMS fire intensity) with no external
 network calls, so it is safe to call from the dashboard on every refresh.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -39,7 +39,7 @@ def grap_stages():
 @router.get("/grap/current", response_model=GrapAssessment)
 def grap_current(db: Session = Depends(get_db)):
     """Assess the operative GRAP stage for NCR from current persisted state."""
-    since = datetime.utcnow() - timedelta(hours=24)
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
 
     stations = db.query(Station).order_by(Station.name).all()
     aqi_values: list[int] = []

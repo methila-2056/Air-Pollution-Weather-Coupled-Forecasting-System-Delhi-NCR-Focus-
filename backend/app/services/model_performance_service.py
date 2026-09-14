@@ -1,4 +1,4 @@
-﻿"""Model performance service: loads the measured performance dataset.
+"""Model performance service: loads the measured performance dataset.
 
 Reads models/pm25/evaluation.json (written by ml/training/evaluate_pm25.py)
 and returns it as a validated ModelPerformanceResponse. Every metric in the

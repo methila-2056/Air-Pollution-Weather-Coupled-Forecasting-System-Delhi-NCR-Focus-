@@ -1,4 +1,4 @@
-﻿"""REST API for model performance metrics.
+"""REST API for model performance metrics.
 
 Endpoint: GET /api/model/performance
 """

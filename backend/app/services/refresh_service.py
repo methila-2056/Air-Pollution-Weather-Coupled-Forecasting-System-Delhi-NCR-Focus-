@@ -8,7 +8,7 @@ observations.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 import requests
@@ -188,8 +188,8 @@ def refresh_weather(db, dry_run: bool = False) -> int:
     from ..models.db_models import Station, WeatherReading
 
     stations = {s.name: s for s in db.query(Station).all()}
-    end = datetime.utcnow().strftime("%Y-%m-%d")
-    start = (datetime.utcnow() - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    end = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
+    start = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     inserted = 0
     for raw_name, (lat, lon) in STATIONS.items():

@@ -1,6 +1,6 @@
 """Unit tests for the live-data refresh service (all network I/O mocked)."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 import pandas as pd
@@ -58,7 +58,7 @@ NUM_POLLUTION_STATIONS = len(rs.CKAN_RESOURCES)  # pollution feeds cover the ori
 
 class TestRefreshWeather:
     def test_upserts_and_dedups_within_batch(self, db_session):
-        base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
         hourly = _fresh_hourly(base, n=2, repeats=True)  # 3 timestamps, 2 unique per station
         with mock.patch.object(rs.requests, "get", return_value=FakeResp(json_data={"hourly": hourly})):
             count = rs.refresh_weather(db_session)
@@ -101,7 +101,7 @@ class TestRefreshWeather:
         assert all(t.tzinfo is None for t in times)  # naive UTC by convention
 
     def test_second_batch_does_not_duplicate(self, db_session):
-        base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
         hourly = _fresh_hourly(base, n=2)
         resp = FakeResp(json_data={"hourly": hourly})
         with mock.patch.object(rs.requests, "get", return_value=resp):
@@ -148,7 +148,7 @@ class TestRefreshFire:
 
 class TestRefreshPollution:
     def test_upserts_reading_with_aqi(self, db_session):
-        base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
         records = [{
             "datetime": (base + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
             "site": "Anand Vihar",
@@ -177,7 +177,7 @@ class TestRefreshPollution:
 
 class TestRunRefreshOnce:
     def test_dry_run_reports_summary_without_writing(self, db_session):
-        base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
         hourly = _fresh_hourly(base, n=1)
         fire_csv = (
             "latitude,longitude,acq_date,acq_time,confidence,frp,satellite,daynight\n"

@@ -169,13 +169,13 @@ class TestDatabaseIntegration:
         assert len(result["station_detail"]) >= 1
 
     def test_fires_older_than_window_excluded(self, db_session):
-        from datetime import timedelta
+        from datetime import UTC, timedelta
 
         from app.models.db_models import FireReading
         db_session.query(FireReading).delete()
         # Insert a fire far in the past (120h), outside the 72h window.
         from datetime import datetime
-        old = datetime.utcnow() - timedelta(hours=120)
+        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=120)
         db_session.add(FireReading(latitude=30.5, longitude=76.1, acq_date=old,
                                    confidence="high", frp=90.0, satellite="SNPP", daynight="D"))
         db_session.commit()

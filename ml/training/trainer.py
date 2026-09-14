@@ -8,7 +8,7 @@ horizon per pollutant, saves models/metrics/importances.
 
 import json
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 
 import joblib
 import numpy as np
@@ -142,7 +142,7 @@ def save_model(model, model_type: str, target: str, horizon: int, model_dir: str
     payload = {"type": model_type, "target": target, "horizon": horizon, "model": model}
     joblib.dump(payload, path)
 
-    meta = {"target": target, "horizon": horizon, "trained_at": datetime.utcnow().isoformat()}
+    meta = {"target": target, "horizon": horizon, "trained_at": datetime.now(UTC).replace(tzinfo=None).isoformat()}
     meta_path = path.replace(".joblib", ".json")
     with open(meta_path, "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)

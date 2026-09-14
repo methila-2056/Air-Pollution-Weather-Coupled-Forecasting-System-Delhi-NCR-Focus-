@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ def get_summary(db: Session = Depends(get_db)):
     """
     stations = db.query(Station).order_by(Station.name).all()
 
-    since = datetime.utcnow() - timedelta(hours=24)
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
     latest_by_station = {}
     for s in stations:
         r = (
@@ -68,7 +68,7 @@ def get_summary(db: Session = Depends(get_db)):
     latest_forecast = db.query(Forecast).order_by(Forecast.forecast_timestamp.desc()).first()
 
     return SummaryResponse(
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC).replace(tzinfo=None),
         stations=len(stations),
         stations_with_readings=len(summaries),
         ncr_avg_aqi=round(float(sum(aqi_values) / len(aqi_values)), 1) if aqi_values else None,

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -34,7 +34,7 @@ def get_explanation(station_name: str, db: Session = Depends(get_db)):
 
     return ExplanationResponse(
         station=station.name,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC).replace(tzinfo=None),
         prediction=prediction,
         top_features=top_features,
         natural_language=natural_language,

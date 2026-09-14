@@ -14,7 +14,7 @@ Usage:
     python -m backend.scripts.bootstrap_recent
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from backend.app.database import SessionLocal
 from backend.app.models.db_models import (
@@ -25,7 +25,7 @@ from backend.app.models.db_models import (
 
 
 def _aligned_slots(n_hours: int, anchor_minute: int) -> list[datetime]:
-    now = datetime.utcnow().replace(minute=anchor_minute, second=0, microsecond=0)
+    now = datetime.now(UTC).replace(tzinfo=None).replace(minute=anchor_minute, second=0, microsecond=0)
     return [now - timedelta(hours=h) for h in range(n_hours - 1, -1, -1)]
 
 
@@ -45,7 +45,7 @@ def bootstrap_pollution(db, anchor_minute: int) -> int:
             for (ts,) in db.query(PollutionReading.timestamp)
             .filter(
                 PollutionReading.station_id == s.id,
-                PollutionReading.timestamp >= datetime.utcnow() - timedelta(hours=24),
+                PollutionReading.timestamp >= datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24),
             )
             .all()
         }
@@ -88,7 +88,7 @@ def bootstrap_weather(db, anchor_minute: int) -> int:
             for (ts,) in db.query(WeatherReading.timestamp)
             .filter(
                 WeatherReading.station_id == s.id,
-                WeatherReading.timestamp >= datetime.utcnow() - timedelta(hours=24),
+                WeatherReading.timestamp >= datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24),
             )
             .all()
         }

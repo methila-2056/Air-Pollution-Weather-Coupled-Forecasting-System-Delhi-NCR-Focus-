@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -48,7 +48,7 @@ def get_coupling_feedback(station_name: str, db: Session = Depends(get_db)):
 
     return CouplingResponse(
         station=station.name,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC).replace(tzinfo=None),
         pm25=pm25,
         pbl_height=pbl,
         wind_speed=wind,

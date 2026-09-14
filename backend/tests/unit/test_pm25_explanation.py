@@ -188,10 +188,10 @@ class TestExplainForecastById:
         from app.services import pm25_explanation_service as svc
 
         station = db_session.query(Station).filter(Station.name == "Anand Vihar").first()
-        from datetime import datetime, timedelta
+        from datetime import UTC, datetime, timedelta
 
         from app.database import SessionLocal
-        base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
         forecast = Forecast(
             station_id=station.id,
             forecast_timestamp=base + timedelta(hours=1),
@@ -232,14 +232,14 @@ class TestExplainForecastById:
             svc.explain_forecast_by_id(db_session, 999999)
 
     def test_horizon_not_trained_raises(self, db_session):
-        from datetime import datetime, timedelta
+        from datetime import UTC, datetime, timedelta
 
         from app.database import SessionLocal
         from app.models.db_models import Forecast, Station
         from app.services import pm25_explanation_service as svc
 
         station = db_session.query(Station).filter(Station.name == "Anand Vihar").first()
-        base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
         forecast = Forecast(
             station_id=station.id,
             forecast_timestamp=base + timedelta(hours=99),
@@ -268,14 +268,14 @@ class TestExplainForecastById:
 class TestForecastExplanationApi:
     def _seed_forecast(self) -> int:
         """Insert a Forecast row and return its id (visible to the API session)."""
-        from datetime import datetime, timedelta
+        from datetime import UTC, datetime, timedelta
 
         from app.database import SessionLocal
         from app.models.db_models import Forecast, Station
 
         with SessionLocal() as db:
             station = db.query(Station).filter(Station.name == "Anand Vihar").first()
-            base = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+            base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0)
             forecast = Forecast(
                 station_id=station.id,
                 forecast_timestamp=base + timedelta(hours=1),

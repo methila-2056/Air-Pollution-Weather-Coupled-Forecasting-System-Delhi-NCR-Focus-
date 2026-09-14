@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -30,7 +30,7 @@ def export_forecast_csv(
     Content-Disposition filename.
     """
     station = _station_or_404(db, station_name)
-    start = datetime.utcnow() - timedelta(hours=hours)
+    start = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     forecasts = (
         db.query(Forecast)
         .filter(
@@ -90,7 +90,7 @@ def export_weather_csv(
     consumed by ``POST /api/import/weather`` so exports round-trip cleanly.
     """
     station = _station_or_404(db, station_name)
-    start = datetime.utcnow() - timedelta(hours=hours)
+    start = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(WeatherReading)
         .filter(
@@ -140,7 +140,7 @@ def export_pollution_csv(
     round-trip cleanly (``aqi`` is recomputed when absent on import).
     """
     station = _station_or_404(db, station_name)
-    start = datetime.utcnow() - timedelta(hours=hours)
+    start = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(PollutionReading)
         .filter(
