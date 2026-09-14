@@ -232,10 +232,7 @@ def fetch_ncr_records(api_key: str | None = None, cities: list[str] | None = Non
                 # while more records remain — its throttling signature. Retry the
                 # same offset before accepting a truncated result.
                 total = payload.get("total")
-                more_expected = (
-                    isinstance(total, int) and not isinstance(total, bool)
-                    and total > offset
-                )
+                more_expected = isinstance(total, int) and not isinstance(total, bool) and total > offset
                 if more_expected:
                     for attempt in range(RETRY_ATTEMPTS):
                         time.sleep(RETRY_DELAY * (attempt + 1))
@@ -251,7 +248,10 @@ def fetch_ncr_records(api_key: str | None = None, cities: list[str] | None = Non
                     errors.append(f"city={city} empty-page-offset={offset}")
                     logger.warning(
                         "CPCB empty page for %s at offset=%s (total=%s); %d record(s) known",
-                        city, offset, payload.get("total"), len(records),
+                        city,
+                        offset,
+                        payload.get("total"),
+                        len(records),
                     )
                 break
             records.extend(page)
@@ -262,8 +262,7 @@ def fetch_ncr_records(api_key: str | None = None, cities: list[str] | None = Non
             # ends when the per-city offset reaches ``total`` or a page comes back
             # shorter than its predecessor (defensive fallback when total is absent).
             total = payload.get("total")
-            total_is_int = isinstance(total, int) and not isinstance(total, bool)
-            if total_is_int and total >= 0 and offset >= total:
+            if isinstance(total, int) and not isinstance(total, bool) and total >= 0 and offset >= total:
                 break
             if prev_len is not None and fetched < prev_len:
                 break
@@ -351,8 +350,12 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
 
     stations = {s.name: s for s in db.query(Station).all()}
     counters = {
-        "inserted": 0, "updated": 0, "skipped": 0,
-        "station_created": 0, "station_updated": 0, "station_skipped": 0,
+        "inserted": 0,
+        "updated": 0,
+        "skipped": 0,
+        "station_created": 0,
+        "station_updated": 0,
+        "station_skipped": 0,
     }
 
     matched: list[tuple[Station, NormalizedObservation]] = []
@@ -392,15 +395,16 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
         )
         values = {k: obs.values.get(k) for k in _SIX}
         aqi, _, _ = calculate_aqi(
-            values["pm25"], values["pm10"], values["o3"],
-            values["no2"], values["so2"], values["co"],
+            values["pm25"],
+            values["pm10"],
+            values["o3"],
+            values["no2"],
+            values["so2"],
+            values["co"],
         )
 
         if existing:
-            if (
-                all(getattr(existing, k) == v for k, v in values.items())
-                and existing.aqi == aqi
-            ):
+            if all(getattr(existing, k) == v for k, v in values.items()) and existing.aqi == aqi:
                 counters["skipped"] += 1
                 continue
             for k, v in values.items():
@@ -408,12 +412,14 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
             existing.aqi = aqi
             counters["updated"] += 1
         else:
-            db.add(PollutionReading(
-                station_id=station.id,
-                timestamp=ts,
-                **values,
-                aqi=aqi,
-            ))
+            db.add(
+                PollutionReading(
+                    station_id=station.id,
+                    timestamp=ts,
+                    **values,
+                    aqi=aqi,
+                )
+            )
             counters["inserted"] += 1
 
     db.commit()
@@ -431,9 +437,7 @@ def run_ingestion(db, api_key: str | None = None) -> dict[str, Any]:
     return {
         "records_fetched": len(records),
         "observations_normalized": len(observations),
-        "stations_processed": sum(
-            1 for o in observations if _canonical_station_name(o.station_name) in existing_names
-        ),
+        "stations_processed": sum(1 for o in observations if _canonical_station_name(o.station_name) in existing_names),
         "inserted": counters["inserted"],
         "updated": counters["updated"],
         "skipped": counters["skipped"],

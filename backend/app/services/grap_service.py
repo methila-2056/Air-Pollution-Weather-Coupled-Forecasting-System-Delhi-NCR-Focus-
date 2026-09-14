@@ -19,10 +19,23 @@ isolation and reused by the API layer.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TypedDict
 
 GRAP_SOURCE = "CAQM graded response action plan (Delhi NCR) — revised October 2024"
 
-GRAP_STAGES = [
+
+class GrapStage(TypedDict):
+    stage: int
+    title: str
+    aqi_range_low: int | None
+    aqi_range_high: int | None
+    categories: list[str]
+    color: str
+    summary: str
+    measures: list[str]
+
+
+GRAP_STAGES: list[GrapStage] = [
     {
         "stage": 1,
         "title": "Stage I — Poor",
@@ -90,7 +103,7 @@ GRAP_STAGES = [
     },
 ]
 
-NOT_INVOKED = {
+NOT_INVOKED: GrapStage = {
     "stage": 0,
     "title": "Not invoked",
     "aqi_range_low": None,
@@ -106,12 +119,12 @@ NOT_INVOKED = {
 }
 
 
-def get_grap_stages() -> list[dict]:
+def get_grap_stages() -> list[GrapStage]:
     """Return the full GRAP stage matrix (including the not-invoked stage 0)."""
     return [NOT_INVOKED] + [stage.copy() for stage in GRAP_STAGES]
 
 
-def stage_from_aqi(aqi: float | None) -> dict:
+def stage_from_aqi(aqi: float | None) -> GrapStage:
     """Resolve the GRAP stage for a 24-hour average AQI value.
 
     Stage 0 means the plan is not invoked. Values above 500 clamp to Stage IV.
@@ -154,15 +167,12 @@ def assess_grap(
     if aqi_val is None:
         rationale.append("No recent 24-hour average AQI is available; stage is advisory only.")
     elif stage["stage"] == 0:
-        rationale.append(
-            f"24-hour average AQI is {aqi_val} (≤ 200) — below the Stage I trigger of 201."
-        )
+        rationale.append(f"24-hour average AQI is {aqi_val} (≤ 200) — below the Stage I trigger of 201.")
     else:
         hi = stage["aqi_range_high"]
-        band = f"{stage['aqi_range_low']}–{hi}" if hi is not None else f"> {stage['aqi_range_low'] - 1}"
-        rationale.append(
-            f"24-hour average AQI is {aqi_val} (band {band}) → invoked under GRAP {stage['title']}."
-        )
+        stage_low = stage["aqi_range_low"]
+        band = f"{stage_low}–{hi}" if hi is not None else f"> {stage_low - 1}" if stage_low is not None else "unbounded"
+        rationale.append(f"24-hour average AQI is {aqi_val} (band {band}) → invoked under GRAP {stage['title']}.")
 
     inversion_note = None
     if inversion_strength is not None:
@@ -173,9 +183,7 @@ def assess_grap(
             )
             rationale.append("High inversion strength (lapse-rate / PBL proxy) is suppressing vertical mixing.")
         elif inversion_strength > 0.3:
-            inversion_note = (
-                "Moderate inversion present — expect slower dispersion during the next 24 h."
-            )
+            inversion_note = "Moderate inversion present — expect slower dispersion during the next 24 h."
             rationale.append("Moderate inversion is partially limiting vertical dispersion.")
 
     fire_note = None
@@ -192,9 +200,7 @@ def assess_grap(
 
     measures = stage["measures"]
     if aqi_val is not None and stage["stage"] > 0 and inversion_strength is not None and inversion_strength > 0.6:
-        measures = measures + [
-            "Extra advisory: hold discretionary outdoor activities while the inversion persists."
-        ]
+        measures = measures + ["Extra advisory: hold discretionary outdoor activities while the inversion persists."]
 
     return {
         "assessed_at": datetime.now(UTC).replace(tzinfo=None),
@@ -205,13 +211,9 @@ def assess_grap(
         "aqi": aqi_val,
         "aqi_category": None,
         "dominant_pollutant": None,
-        "inversion_strength": (
-            round(inversion_strength, 3) if inversion_strength is not None else None
-        ),
+        "inversion_strength": (round(inversion_strength, 3) if inversion_strength is not None else None),
         "inversion_note": inversion_note,
-        "fire_mean_frp_mw": (
-            round(fire_mean_frp_mw, 1) if fire_mean_frp_mw is not None else None
-        ),
+        "fire_mean_frp_mw": (round(fire_mean_frp_mw, 1) if fire_mean_frp_mw is not None else None),
         "fire_note": fire_note,
         "advisory": (
             "Stage not invoked — routine monitoring only."

@@ -115,8 +115,7 @@ RISK_BANDS: list[tuple[float, str]] = [
     (float("inf"), "VERY HIGH"),
 ]
 
-COMPASS_POINTS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-                  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+COMPASS_POINTS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 
 DISCLAIMER = (
     "Estimated Regional Pollution Transport Risk — a transparent heuristic "
@@ -180,9 +179,13 @@ def _mean_wind(stations: list[dict[str, Any]]) -> dict[str, Any]:
         speeds.append(float(spd))
         n += 1
     if n == 0 or (sin_sum == 0.0 and cos_sum == 0.0):
-        return {"wind_speed_mps": None, "wind_direction_deg": None,
-                "compass_from": None, "basis": "no stored wind data",
-                "stations_used": n}
+        return {
+            "wind_speed_mps": None,
+            "wind_direction_deg": None,
+            "compass_from": None,
+            "basis": "no stored wind data",
+            "stations_used": n,
+        }
     toward_deg = (math.degrees(math.atan2(sin_sum, cos_sum)) + 360.0) % 360.0
     from_deg = (toward_deg + 180.0) % 360.0
     return {
@@ -216,7 +219,8 @@ def compute_regional_risk(
     if fires_df is not None and not fires_df.empty:
         impact = compute_fire_impact(
             fires_df,
-            ncr_lat, ncr_lon,
+            ncr_lat,
+            ncr_lon,
             wind_dir=wind_direction if wind_direction is not None else 0.0,
             wind_speed=wind_speed or 0.0,
             max_distance_km=MAX_DISTANCE_KM,
@@ -257,9 +261,9 @@ def compute_regional_risk(
     pbl_known = pbl_norm is not None
     if vent_known or pbl_known or inv_known:
         atmo_component = (
-            WA_VENT * (1.0 - (ventilation_norm if vent_known else 0.5))
-            + WA_INVERSION * (inversion_norm if inv_known else 0.0)
-            + WA_PBL * (1.0 - (pbl_norm if pbl_known else 0.5))
+            WA_VENT * (1.0 - (ventilation_norm if ventilation_norm is not None else 0.5))
+            + WA_INVERSION * (inversion_norm if inversion_norm is not None else 0.0)
+            + WA_PBL * (1.0 - (pbl_norm if pbl_norm is not None else 0.5))
         )
         atmo_component = round(float(np.clip(atmo_component, 0.0, 1.0)), 4)
     else:
@@ -267,9 +271,7 @@ def compute_regional_risk(
 
     # ---- pollution component ----
     if region_pm25 is not None and region_pm25 > 0:
-        pollution_component = _clip01(
-            (region_pm25 - PM25_REF_GOOD) / (PM25_REF_SEVERE - PM25_REF_GOOD)
-        )
+        pollution_component = _clip01((region_pm25 - PM25_REF_GOOD) / (PM25_REF_SEVERE - PM25_REF_GOOD))
     else:
         pollution_component = None
 
@@ -283,7 +285,8 @@ def compute_regional_risk(
     else:
         denom = sum(w for w, _ in active) or 1.0
         raw = sum(w * c for w, c in active) / denom
-        risk_score = int(round(100.0 * _clip01(raw)))
+        clipped = _clip01(raw)
+        risk_score = int(round(100.0 * (0.0 if clipped is None else clipped)))
         excluded = [
             (name, w)
             for name, w, c in (
@@ -301,52 +304,79 @@ def compute_regional_risk(
     # ---- factors ----
     ranking: list[tuple[float, str]] = []
     fire_descriptors = [
-        (W_FIRE * WF_INTENSITY * impact_score,
-         f"Upwind fire activity: {upwind_count} of {fire_count} hotspots within {MAX_DISTANCE_KM:.0f} km are "
-         f"upwind of NCR ({alignment_pct:.0f}% aligned); FRP-weighted impact {impact_score:.2f}"),
-        (W_FIRE * WF_INTENSITY * impact_score,
-         f"Fire intensity: cumulative FRP-weighted transport potential {impact_score:.4f} (FRP x wind alignment / distance)"),
-        (W_FIRE * WF_PROXIMITY * proximity,
-         f"Proximity: nearest fire {nearest_km:.0f} km from NCR centroid" if nearest_km < MAX_DISTANCE_KM
-         else "Proximity: no fire within 500 km of NCR"),
-        (W_FIRE * WF_COUNT * count_factor,
-         f"Upwind hotspot density: {upwind_count} upwind fires (saturates at {UPWIND_COUNT_SATURATION:.0f})"),
-        (W_FIRE * WF_ALIGNMENT * (alignment_pct / 100.0),
-         f"Wind alignment: {alignment_pct:.0f}% of regional fires upwind of NCR"),
+        (
+            W_FIRE * WF_INTENSITY * impact_score,
+            f"Upwind fire activity: {upwind_count} of {fire_count} hotspots within {MAX_DISTANCE_KM:.0f} km are "
+            f"upwind of NCR ({alignment_pct:.0f}% aligned); FRP-weighted impact {impact_score:.2f}",
+        ),
+        (
+            W_FIRE * WF_INTENSITY * impact_score,
+            f"Fire intensity: cumulative FRP-weighted transport potential {impact_score:.4f} (FRP x wind alignment / distance)",
+        ),
+        (
+            W_FIRE * WF_PROXIMITY * proximity,
+            f"Proximity: nearest fire {nearest_km:.0f} km from NCR centroid"
+            if nearest_km < MAX_DISTANCE_KM
+            else "Proximity: no fire within 500 km of NCR",
+        ),
+        (
+            W_FIRE * WF_COUNT * count_factor,
+            f"Upwind hotspot density: {upwind_count} upwind fires (saturates at {UPWIND_COUNT_SATURATION:.0f})",
+        ),
+        (
+            W_FIRE * WF_ALIGNMENT * (alignment_pct / 100.0),
+            f"Wind alignment: {alignment_pct:.0f}% of regional fires upwind of NCR",
+        ),
     ]
     if impact["transport_time_hours"]:
         fire_descriptors.append(
-            (W_FIRE * 0.5,
-             f"Nearest-fire smoke advective arrival ~{impact['transport_time_hours']:.1f}h at the regional wind")
+            (
+                W_FIRE * 0.5,
+                f"Nearest-fire smoke advective arrival ~{impact['transport_time_hours']:.1f}h at the regional wind",
+            )
         )
     if fire_count == 0:
         fire_descriptors = [
-            (0.9, "No active fires within 500 km of NCR in the look-back window -> fire transport potential is negligible")
+            (
+                0.9,
+                "No active fires within 500 km of NCR in the look-back window -> fire transport potential is negligible",
+            )
         ]
     ranking.extend(fire_descriptors)
 
     if atmo_component is not None:
-        ranking.extend([
-            (W_ATMO * WA_VENT * (1.0 - (ventilation_norm or 0.5)),
-             f"Atmospheric ventilation: coefficient normalized {ventilation_norm:.2f}, its inverse raises accumulation risk" if vent_known
-             else "Atmospheric ventilation unavailable"),
-            (W_ATMO * WA_INVERSION * (inversion_norm or 0.0),
-             f"Stability/inversion: strength normalized {inversion_norm:.2f}; inversions cap vertical mixing" if inv_known
-             else "Stability/inversion unavailable"),
-            (W_ATMO * WA_PBL * (1.0 - (pbl_norm or 0.5)),
-             f"Boundary layer: depth normalized {pbl_norm:.2f}; a shallower PBL concentrates surface pollution" if pbl_known
-             else "Boundary layer unavailable"),
-        ])
+        ranking.extend(
+            [
+                (
+                    W_ATMO * WA_VENT * (1.0 - (ventilation_norm or 0.5)),
+                    f"Atmospheric ventilation: coefficient normalized {ventilation_norm:.2f}, its inverse raises accumulation risk"
+                    if vent_known
+                    else "Atmospheric ventilation unavailable",
+                ),
+                (
+                    W_ATMO * WA_INVERSION * (inversion_norm or 0.0),
+                    f"Stability/inversion: strength normalized {inversion_norm:.2f}; inversions cap vertical mixing"
+                    if inv_known
+                    else "Stability/inversion unavailable",
+                ),
+                (
+                    W_ATMO * WA_PBL * (1.0 - (pbl_norm or 0.5)),
+                    f"Boundary layer: depth normalized {pbl_norm:.2f}; a shallower PBL concentrates surface pollution"
+                    if pbl_known
+                    else "Boundary layer unavailable",
+                ),
+            ]
+        )
     if pollution_component is not None:
         ranking.append(
-            (W_POLLUTION * pollution_component,
-             f"Current observed pollution: regional mean PM2.5 "
-             f"{region_pm25:.1f} ug/m3 (normalized {pollution_component:.2f}) raises the existing burden")
+            (
+                W_POLLUTION * pollution_component,
+                f"Current observed pollution: regional mean PM2.5 "
+                f"{region_pm25:.1f} ug/m3 (normalized {pollution_component:.2f}) raises the existing burden",
+            )
         )
     else:
-        ranking.append(
-            (W_POLLUTION, "No current NCR PM2.5 stored -> pollution component excluded")
-        )
+        ranking.append((W_POLLUTION, "No current NCR PM2.5 stored -> pollution component excluded"))
 
     ranking.sort(key=lambda t: t[0], reverse=True)
 
@@ -410,28 +440,33 @@ def get_current_transport_risk(db, fire_window_hours: int = 72) -> dict[str, Any
     pbl_norm = _mean("pbl")
     inv_norm = _mean("inversion")
 
-    pm25_vals = [r["inputs"].get("pm25_ugm3") for r in atmo_rows
-                 if r.get("inputs", {}).get("pm25_ugm3") is not None]
+    pm25_vals = [r["inputs"].get("pm25_ugm3") for r in atmo_rows if r.get("inputs", {}).get("pm25_ugm3") is not None]
     region_pm25 = round(float(np.mean(pm25_vals)), 1) if pm25_vals else None
 
     # Fires in the look-back window (real stored FIRMS rows).
     since = now - timedelta(hours=fire_window_hours)
     if get_settings().database_url.startswith("sqlite"):
         since = since.replace(tzinfo=None)
-    fire_rows = (
-        db.query(FireReading)
-        .filter(FireReading.acq_date >= since)
-        .order_by(FireReading.acq_date.desc())
-        .all()
-    )
+    fire_rows = db.query(FireReading).filter(FireReading.acq_date >= since).order_by(FireReading.acq_date.desc()).all()
     fires_df = None
     if fire_rows:
-        fires_df = pd.DataFrame([{
-            "lat": f.latitude, "lon": f.longitude, "frp": f.frp or 1.0,
-        } for f in fire_rows])
+        fires_df = pd.DataFrame(
+            [
+                {
+                    "lat": f.latitude,
+                    "lon": f.longitude,
+                    "frp": f.frp or 1.0,
+                }
+                for f in fire_rows
+            ]
+        )
 
     mean_frp = round(float(np.mean([f.frp for f in fire_rows if f.frp])), 1) if fires_df is not None else 0.0
-    peak_frp = round(float(max(f.frp for f in fire_rows if f.frp)), 1) if fires_df is not None and any(f.frp for f in fire_rows) else 0.0
+    peak_frp = (
+        round(float(max(f.frp for f in fire_rows if f.frp)), 1)
+        if fires_df is not None and any(f.frp for f in fire_rows)
+        else 0.0
+    )
 
     centroid_lat = float(np.mean([s.latitude for s in stations]))
     centroid_lon = float(np.mean([s.longitude for s in stations]))
@@ -456,20 +491,28 @@ def get_current_transport_risk(db, fire_window_hours: int = 72) -> dict[str, Any
     risk["generated_at"] = now
     risk["region"] = REGION
     risk["disclaimer"] = DISCLAIMER
-    risk["dominant_wind_direction"].update(
-        {"basis": wind["basis"], "basis_count_stations": wind["stations_used"]})
-    risk["atmospheric_condition"].update({
-        "ventilation_condition": "poor" if vent_norm is not None and vent_norm < 0.5
-            else "good" if vent_norm is not None and vent_norm >= 1.0
-            else "moderate" if vent_norm is not None else None,
-        "pbl_condition": "shallow" if pbl_norm is not None and pbl_norm < 0.2
-            else "deep" if pbl_norm is not None and pbl_norm >= 0.33
-            else "moderate" if pbl_norm is not None else None,
-        "inversion_source_seen": sorted({
-            (r.get("inversion") or {}).get("source", "unavailable")
-            for r in atmo_rows
-        }),
-    })
+    risk["dominant_wind_direction"].update({"basis": wind["basis"], "basis_count_stations": wind["stations_used"]})
+    risk["atmospheric_condition"].update(
+        {
+            "ventilation_condition": "poor"
+            if vent_norm is not None and vent_norm < 0.5
+            else "good"
+            if vent_norm is not None and vent_norm >= 1.0
+            else "moderate"
+            if vent_norm is not None
+            else None,
+            "pbl_condition": "shallow"
+            if pbl_norm is not None and pbl_norm < 0.2
+            else "deep"
+            if pbl_norm is not None and pbl_norm >= 0.33
+            else "moderate"
+            if pbl_norm is not None
+            else None,
+            "inversion_source_seen": sorted(
+                {(r.get("inversion") or {}).get("source", "unavailable") for r in atmo_rows}
+            ),
+        }
+    )
     risk["methodology"] = {
         "version": METHODOLOGY_VERSION,
         "disclaimer": DISCLAIMER,
@@ -499,11 +542,20 @@ def get_current_transport_risk(db, fire_window_hours: int = 72) -> dict[str, Any
             "pm25_ref_good_ugm3": PM25_REF_GOOD,
             "pm25_ref_severe_ugm3": PM25_REF_SEVERE,
             "component_weights": {"fire": W_FIRE, "atmosphere": W_ATMO, "pollution": W_POLLUTION},
-            "fire_sub_weights": {"intensity": WF_INTENSITY, "proximity": WF_PROXIMITY,
-                                 "count": WF_COUNT, "alignment": WF_ALIGNMENT},
+            "fire_sub_weights": {
+                "intensity": WF_INTENSITY,
+                "proximity": WF_PROXIMITY,
+                "count": WF_COUNT,
+                "alignment": WF_ALIGNMENT,
+            },
             "atmo_sub_weights": {"ventilation": WA_VENT, "inversion": WA_INVERSION, "pbl": WA_PBL},
-            "risk_bands": {"0-20": "LOW", "21-40": "MODERATE", "41-60": "ELEVATED",
-                           "61-80": "HIGH", "81-100": "VERY HIGH"},
+            "risk_bands": {
+                "0-20": "LOW",
+                "21-40": "MODERATE",
+                "41-60": "ELEVATED",
+                "61-80": "HIGH",
+                "81-100": "VERY HIGH",
+            },
         },
         "caveats": [
             "ESTIMATION only — not a chemical transport/plume model.",
@@ -514,9 +566,14 @@ def get_current_transport_risk(db, fire_window_hours: int = 72) -> dict[str, Any
         ],
     }
     risk["station_detail"] = [
-        {"station": r["station"], "pm25_ugm3": r["inputs"].get("pm25_ugm3"),
-         "vent_norm": r["features"].get("ventilation"), "pbl_norm": r["features"].get("pbl"),
-         "inv_norm": r["features"].get("inversion"), "inversion_source": (r.get("inversion") or {}).get("source")}
+        {
+            "station": r["station"],
+            "pm25_ugm3": r["inputs"].get("pm25_ugm3"),
+            "vent_norm": r["features"].get("ventilation"),
+            "pbl_norm": r["features"].get("pbl"),
+            "inv_norm": r["features"].get("inversion"),
+            "inversion_source": (r.get("inversion") or {}).get("source"),
+        }
         for r in atmo_rows
     ]
     return risk

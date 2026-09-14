@@ -9,6 +9,7 @@ observations.
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pandas as pd
 import requests
@@ -100,14 +101,12 @@ def _existing_timestamps(db, model_cls, station_id) -> set:
     """
     return {
         ts.replace(tzinfo=None) if ts.tzinfo else ts
-        for (ts,) in db.query(model_cls.timestamp)
-        .filter(model_cls.station_id == station_id)
-        .all()
+        for (ts,) in db.query(model_cls.timestamp).filter(model_cls.station_id == station_id).all()
     }
 
 
 def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: str) -> pd.DataFrame:
-    params = {
+    params: dict[str, Any] = {
         "latitude": lat,
         "longitude": lon,
         "start_date": start,
@@ -122,7 +121,7 @@ def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: 
     except Exception as exc:
         # Age out gracefully: fall back to forecast API for the next ~48h
         logger.warning("archive fetch failed (%s) — trying forecast", exc)
-        f_params = {
+        f_params: dict[str, Any] = {
             "latitude": lat,
             "longitude": lon,
             "forecast_days": 2,
@@ -205,25 +204,27 @@ def refresh_weather(db, dry_run: bool = False) -> int:
             ts = r["time"]
             if ts in existing:
                 continue
-            rows.append(WeatherReading(
-                station_id=stations[display].id,
-                timestamp=ts,
-                temperature=_to_float(r.get("temperature_2m")),
-                humidity=_to_float(r.get("relative_humidity_2m")),
-                pressure_msl=_to_float(r.get("pressure_msl")),
-                surface_pressure=_to_float(r.get("surface_pressure")),
-                wind_speed=_to_float(r.get("wind_speed_10m")),
-                wind_direction=_to_float(r.get("wind_direction_10m")),
-                precipitation=_to_float(r.get("precipitation")),
-                cloud_cover=_to_float(r.get("cloud_cover")),
-                pbl_height=_to_float(r.get("boundary_layer_height")),
-                temperature_1000hPa=_to_float(r.get("temperature_1000hPa")),
-                temperature_925hPa=_to_float(r.get("temperature_925hPa")),
-                temperature_850hPa=_to_float(r.get("temperature_850hPa")),
-                temperature_700hPa=_to_float(r.get("temperature_700hPa")),
-                geopotential_height_925hPa=_to_float(r.get("geopotential_height_925hPa")),
-                geopotential_height_850hPa=_to_float(r.get("geopotential_height_850hPa")),
-            ))
+            rows.append(
+                WeatherReading(
+                    station_id=stations[display].id,
+                    timestamp=ts,
+                    temperature=_to_float(r.get("temperature_2m")),
+                    humidity=_to_float(r.get("relative_humidity_2m")),
+                    pressure_msl=_to_float(r.get("pressure_msl")),
+                    surface_pressure=_to_float(r.get("surface_pressure")),
+                    wind_speed=_to_float(r.get("wind_speed_10m")),
+                    wind_direction=_to_float(r.get("wind_direction_10m")),
+                    precipitation=_to_float(r.get("precipitation")),
+                    cloud_cover=_to_float(r.get("cloud_cover")),
+                    pbl_height=_to_float(r.get("boundary_layer_height")),
+                    temperature_1000hPa=_to_float(r.get("temperature_1000hPa")),
+                    temperature_925hPa=_to_float(r.get("temperature_925hPa")),
+                    temperature_850hPa=_to_float(r.get("temperature_850hPa")),
+                    temperature_700hPa=_to_float(r.get("temperature_700hPa")),
+                    geopotential_height_925hPa=_to_float(r.get("geopotential_height_925hPa")),
+                    geopotential_height_850hPa=_to_float(r.get("geopotential_height_850hPa")),
+                )
+            )
             existing.add(ts)
         if rows:
             db.add_all(rows)
@@ -242,8 +243,7 @@ def refresh_weather(db, dry_run: bool = False) -> int:
                     WeatherReading.station_id == stations[display].id,
                     WeatherReading.temperature_925hPa.is_(None),
                     WeatherReading.timestamp >= pd.Timestamp(start).to_pydatetime(),
-                    WeatherReading.timestamp < pd.Timestamp(end).to_pydatetime()
-                    + pd.Timedelta(days=1),
+                    WeatherReading.timestamp < pd.Timestamp(end).to_pydatetime() + pd.Timedelta(days=1),
                 )
                 .all()
             )
@@ -316,9 +316,14 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
         if display not in stations:
             continue
         try:
+            ckan_params: dict[str, Any] = {
+                "resource_id": resource_id,
+                "limit": 500,
+                "sort": "Timestamp desc",
+            }
             resp = requests.get(
                 CKAN_BASE,
-                params={"resource_id": resource_id, "limit": 500, "sort": "Timestamp desc"},
+                params=ckan_params,
                 timeout=HTTP_TIMEOUT,
             )
             resp.raise_for_status()
@@ -329,7 +334,7 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
         if not records:
             continue
         df = pd.DataFrame(records)
-        if {"datetime", "site"} not in ({c for c in df.columns} , set()):
+        if {"datetime", "site"} not in ({c for c in df.columns}, set()):
             pass
         ts_col = next((c for c in ["datetime", "time", "From Date", "timestamp", "Timestamp"] if c in df.columns), None)
         if not ts_col:
@@ -352,20 +357,26 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
             if ts in existing:
                 continue
             aqi_val, _, _ = calculate_aqi(
-                vals.get("pm25"), vals.get("pm10"), vals.get("o3"),
-                vals.get("no2"), vals.get("so2"), vals.get("co"),
+                vals.get("pm25"),
+                vals.get("pm10"),
+                vals.get("o3"),
+                vals.get("no2"),
+                vals.get("so2"),
+                vals.get("co"),
             )
-            rows.append(PollutionReading(
-                station_id=stations[display].id,
-                timestamp=ts,
-                pm25=vals.get("pm25"),
-                pm10=vals.get("pm10"),
-                o3=vals.get("o3"),
-                no2=vals.get("no2"),
-                so2=vals.get("so2"),
-                co=vals.get("co"),
-                aqi=aqi_val,
-            ))
+            rows.append(
+                PollutionReading(
+                    station_id=stations[display].id,
+                    timestamp=ts,
+                    pm25=vals.get("pm25"),
+                    pm10=vals.get("pm10"),
+                    o3=vals.get("o3"),
+                    no2=vals.get("no2"),
+                    so2=vals.get("so2"),
+                    co=vals.get("co"),
+                    aqi=aqi_val,
+                )
+            )
             existing.add(ts)
         if rows:
             db.add_all(rows)

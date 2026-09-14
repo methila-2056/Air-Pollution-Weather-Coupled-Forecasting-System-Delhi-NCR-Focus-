@@ -139,8 +139,7 @@ def _resolve(base: float | None, change) -> float:
     # relative
     if base is None:
         raise ValueError(
-            "relative change requested but no baseline value is available; "
-            "use the 'absolute' mode for this input"
+            "relative change requested but no baseline value is available; use the 'absolute' mode for this input"
         )
     return base * float(change.value)
 
@@ -149,14 +148,8 @@ def _query_fires(db, since, until) -> pd.DataFrame:
     """Read stored fires (trailing window) — SELECT only, never writes."""
     from ..models.db_models import FireReading
 
-    rows = (
-        db.query(FireReading)
-        .filter(FireReading.acq_date >= since, FireReading.acq_date <= until)
-        .all()
-    )
-    return pd.DataFrame(
-        [{"lat": r.latitude, "lon": r.longitude, "acq_date": r.acq_date, "frp": r.frp} for r in rows]
-    )
+    rows = db.query(FireReading).filter(FireReading.acq_date >= since, FireReading.acq_date <= until).all()
+    return pd.DataFrame([{"lat": r.latitude, "lon": r.longitude, "acq_date": r.acq_date, "frp": r.frp} for r in rows])
 
 
 def _one_row_df(feature_row: dict[str, Any], station: Station, release_hour: pd.Timestamp) -> pd.DataFrame:
@@ -244,9 +237,7 @@ def _build_scenario_row(
             "wind-alignment fire terms are recomputed from real stored fire geometry "
             "against the scenario direction."
         )
-        logger.info(
-            "scenario %s wind_direction %s -> %s deg", station.name, base_wdir, new_wdir
-        )
+        logger.info("scenario %s wind_direction %s -> %s deg", station.name, base_wdir, new_wdir)
 
     # ---------------------------------------------------------------- pbl height
     if changes.pbl_height is not None:
@@ -302,7 +293,9 @@ def _build_scenario_row(
         )
         logger.info(
             "scenario %s inversion_detected -> %s strength -> %s",
-            station.name, scenario.get("inversion_detected"), scenario.get("inversion_strength"),
+            station.name,
+            scenario.get("inversion_detected"),
+            scenario.get("inversion_strength"),
         )
 
     # ------------------------------------------------------------------- effects
@@ -375,22 +368,17 @@ def run_scenario_analysis(db, station_name: str, hours: int, changes) -> dict[st
     forecaster = _p25.get_pm25_forecaster()
     if not forecaster.is_available:
         raise RuntimeError(
-            "PM2.5 models are not trained yet; run "
-            "`python -m ml.training.train_pm25 --horizons '1..72'` first"
+            "PM2.5 models are not trained yet; run `python -m ml.training.train_pm25 --horizons '1..72'` first"
         )
 
     baseline_row, release_time, context = _p25.build_feature_row(db, station)
     release_hour = pd.Timestamp(release_time)
 
-    scenario_row, effects, notes = _build_scenario_row(
-        db, station, baseline_row, release_hour, changes
-    )
+    scenario_row, effects, notes = _build_scenario_row(db, station, baseline_row, release_hour, changes)
 
     trained = forecaster.horizons
     if not trained or max(trained) < hours:
-        raise RuntimeError(
-            f"Requested {hours}h but trained PM2.5 models cover only up to {max(trained)}h"
-        )
+        raise RuntimeError(f"Requested {hours}h but trained PM2.5 models cover only up to {max(trained)}h")
     desired = list(range(1, hours + 1))
     base_time = release_time.to_pydatetime()
 
@@ -402,21 +390,26 @@ def run_scenario_analysis(db, station_name: str, hours: int, changes) -> dict[st
 
     differences = []
     for b, s in zip(baseline_fc, scenario_fc, strict=True):
-        differences.append({
-            "forecast_horizon": b["forecast_horizon"],
-            "timestamp": b["timestamp"],
-            "baseline_pm25": b["predicted_pm25"],
-            "scenario_pm25": s["predicted_pm25"],
-            "difference_pm25": round(float(s["predicted_pm25"]) - float(b["predicted_pm25"]), 2),
-            "baseline_lower_bound": b.get("pm25_lower_bound"),
-            "baseline_upper_bound": b.get("pm25_upper_bound"),
-            "scenario_lower_bound": s.get("pm25_lower_bound"),
-            "scenario_upper_bound": s.get("pm25_upper_bound"),
-        })
+        differences.append(
+            {
+                "forecast_horizon": b["forecast_horizon"],
+                "timestamp": b["timestamp"],
+                "baseline_pm25": b["predicted_pm25"],
+                "scenario_pm25": s["predicted_pm25"],
+                "difference_pm25": round(float(s["predicted_pm25"]) - float(b["predicted_pm25"]), 2),
+                "baseline_lower_bound": b.get("pm25_lower_bound"),
+                "baseline_upper_bound": b.get("pm25_upper_bound"),
+                "scenario_lower_bound": s.get("pm25_lower_bound"),
+                "scenario_upper_bound": s.get("pm25_upper_bound"),
+            }
+        )
 
     def _summary(pts: list[dict[str, Any]]) -> dict[str, Any]:
-        vals = [_num(p["predicted_pm25"]) for p in pts]
-        vals = [v for v in vals if v is not None]
+        vals: list[float] = []
+        for p in pts:
+            v = _num(p["predicted_pm25"])
+            if v is not None:
+                vals.append(v)
         return {
             "peak_pm25": round(float(np.max(vals)), 2) if vals else None,
             "mean_pm25": round(float(np.mean(vals)), 2) if vals else None,
@@ -441,8 +434,7 @@ def run_scenario_analysis(db, station_name: str, hours: int, changes) -> dict[st
         "served_horizons": desired,
         "value_kinds": {
             "observed": (
-                "last stored CPCB PM2.5 observation used as the model's anchor "
-                "(never modified by the scenario)."
+                "last stored CPCB PM2.5 observation used as the model's anchor (never modified by the scenario)."
             ),
             "forecast": "model output on the unchanged baseline feature row.",
             "scenario": "model output on the feature row after ONLY the requested input(s) changed.",
@@ -457,12 +449,10 @@ def run_scenario_analysis(db, station_name: str, hours: int, changes) -> dict[st
         "scene_forecast": _summary(scenario_fc),
         "difference": {
             "peak_difference_pm25": (
-                round(float(np.max([d["difference_pm25"] for d in differences])), 2)
-                if differences else None
+                round(float(np.max([d["difference_pm25"] for d in differences])), 2) if differences else None
             ),
             "mean_difference_pm25": (
-                round(float(np.mean([d["difference_pm25"] for d in differences])), 2)
-                if differences else None
+                round(float(np.mean([d["difference_pm25"] for d in differences])), 2) if differences else None
             ),
             "points": differences,
         },

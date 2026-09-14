@@ -89,7 +89,7 @@ VENT_MODERATE_M2S = 6000.0
 VENT_REF_M2S = 6000.0
 
 # PM2.5 reference points for observed-loading normalization (µg/m3):
-PM25_REF_GOOD = 35.0   # CPCB 24h satisfactory upper bound
+PM25_REF_GOOD = 35.0  # CPCB 24h satisfactory upper bound
 PM25_REF_SEVERE = 300.0  # CPCB emergency band
 
 # Trapping composite weights.
@@ -221,7 +221,7 @@ def inversion_indicator(reading) -> dict[str, Any]:
     """
     from ml.features.atmospheric_profile import combine_inversion
 
-    temps = {}
+    temps: dict[float, float] = {}
     for p in (1000, 925, 850, 700):
         val = _float(getattr(reading, f"temperature_{p}hPa", None))
         if val is not None:
@@ -266,10 +266,10 @@ def inversion_indicator(reading) -> dict[str, Any]:
 def _compass(direction: float | None) -> str | None:
     if direction is None:
         return None
-    points = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-              "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-    idx = int((_float(direction) % 360.0 + 11.25) / 22.5) % 16
-    return points[idx]
+    pts = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    deg = float(direction)
+    idx = int((deg % 360.0 + 11.25) / 22.5) % 16
+    return pts[idx]
 
 
 def trapping_index(
@@ -304,10 +304,12 @@ def trapping_index(
         + W_INV * (1.0 - (invn if invn is not None else 0.0))
     )
     trap_meteo = _clip01(1.0 - q_meteo)
+    trap_meteo = 0.0 if trap_meteo is None else trap_meteo
 
     pm = _float(pm25)
     if pm is not None and pm > 0:
         pm_norm = _clip01((pm - PM25_REF_GOOD) / (PM25_REF_SEVERE - PM25_REF_GOOD))
+        pm_norm = 0.0 if pm_norm is None else pm_norm
         score = _clip01(W_DISPERSION * trap_meteo + W_OBSERVED * pm_norm)
         loading_note = f"Observed PM2.5 {round(pm, 1)} µg/m3 ({round(pm_norm, 3)} normalized) weights trapping {'higher' if pm_norm > trap_meteo else 'lower'}."
     else:
@@ -316,8 +318,12 @@ def trapping_index(
 
     if score is None:
         return {
-            "score": None, "category": "unavailable", "label": "unavailable",
-            "normalized": None, "provenance": "DERIVED", "factors": [loading_note],
+            "score": None,
+            "category": "unavailable",
+            "label": "unavailable",
+            "normalized": None,
+            "provenance": "DERIVED",
+            "factors": [loading_note],
         }
     if score < 0.33:
         cat, label = "low", "Low trapping tendency"
@@ -377,15 +383,22 @@ def analyze_station(db, station, now: datetime | None = None) -> dict[str, Any]:
         .limit(1000)
         .all()
     )
-    weather = next((r for r in rows if _utc_naive(r.timestamp) is not None and _utc_naive(r.timestamp) <= now), None)
+    weather: WeatherReading | None = None
+    for r in rows:
+        ts = _utc_naive(r.timestamp)
+        if ts is not None and ts <= now:
+            weather = r
+            break
     if weather is None and rows:
         weather = rows[0]
     flags: list[str] = []
-    if weather is not None and _utc_naive(weather.timestamp) is not None and _utc_naive(weather.timestamp) > now:
-        flags.append(
-            "all stored weather readings are ahead of the current time; "
-            "results use the newest row (a model forecast hour, not a measurement)."
-        )
+    if weather is not None:
+        wts = _utc_naive(weather.timestamp)  # type: ignore[arg-type]
+        if wts is not None and wts > now:
+            flags.append(
+                "all stored weather readings are ahead of the current time; "
+                "results use the newest row (a model forecast hour, not a measurement)."
+            )
     pollution = (
         db.query(PollutionReading)
         .filter(PollutionReading.station_id == station.id)
@@ -413,7 +426,7 @@ def analyze_station(db, station, now: datetime | None = None) -> dict[str, Any]:
     pm25 = _float(getattr(pollution, "pm25", None))
     trap = trapping_index(wind, pbl, vent, inv or {}, pm25)
 
-    if inv is None:  # no weather at all
+    if weather is None or inv is None:  # no weather at all
         base = {
             "station": station.name,
             "station_id": station.id,
@@ -424,7 +437,9 @@ def analyze_station(db, station, now: datetime | None = None) -> dict[str, Any]:
             "pollution_age_hours": _age_hours(pollution.timestamp, now) if pollution else None,
             "flags": flags or None,
             "inputs": {},
-            "wind": wind, "pbl": pbl, "ventilation": vent,
+            "wind": wind,
+            "pbl": pbl,
+            "ventilation": vent,
             "inversion": None,
             "trapping": trap,
             "features": {
@@ -459,7 +474,7 @@ def analyze_station(db, station, now: datetime | None = None) -> dict[str, Any]:
         "analyzed_at": now,
         "weather_timestamp": weather.timestamp,
         "pollution_timestamp": pollution.timestamp if pollution else None,
-        "weather_age_hours": _age_hours(weather.timestamp, now) if weather else None,
+        "weather_age_hours": _age_hours(weather.timestamp, now) if weather else None,  # type: ignore[arg-type]
         "pollution_age_hours": _age_hours(pollution.timestamp, now) if pollution else None,
         "flags": flags or None,
         "inputs": inputs,
@@ -505,9 +520,7 @@ def get_current_atmosphere(db) -> dict[str, Any]:
             (
                 r["weather_timestamp"]
                 for r in rows
-                if r["weather_timestamp"]
-                and _utc_naive(r["weather_timestamp"]) is not None
-                and _utc_naive(r["weather_timestamp"]) <= now
+                if (wt := r["weather_timestamp"]) is not None and (wts := _utc_naive(wt)) is not None and wts <= now
             ),
             default=None,
         ),
@@ -523,11 +536,7 @@ def get_current_atmosphere(db) -> dict[str, Any]:
             max(r["ventilation_coefficient_m2s"] for r in vent_vals) if vent_vals else None,
         ),
         "worst_trapping_station": (
-            max(
-                (row["station"], row["trapping"]["score"])
-                for row in rows
-                if row["trapping"].get("score") is not None
-            )
+            max((row["station"], row["trapping"]["score"]) for row in rows if row["trapping"].get("score") is not None)
             if any(row["trapping"].get("score") is not None for row in rows)
             else None
         ),

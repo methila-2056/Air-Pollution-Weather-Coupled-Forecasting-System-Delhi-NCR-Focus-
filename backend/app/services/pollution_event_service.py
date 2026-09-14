@@ -110,7 +110,9 @@ def _round(v, nd: int) -> float | None:
     return round(f, nd) if f is not None else None
 
 
-def _contiguous_activating_runs(series: list[dict[str, Any]], predicate: Callable[[dict[str, Any]], bool]) -> list[list[dict[str, Any]]]:
+def _contiguous_activating_runs(
+    series: list[dict[str, Any]], predicate: Callable[[dict[str, Any]], bool]
+) -> list[list[dict[str, Any]]]:
     """Split ``series`` into contiguous runs of points that satisfy ``predicate``.
 
     Forecast points are hourly; points more than ~1 hour apart break a run. This
@@ -141,32 +143,55 @@ def _contiguous_activating_runs(series: list[dict[str, Any]], predicate: Callabl
 
 def _max_point(run: list[dict[str, Any]]) -> tuple[dict[str, Any], float]:
     best = max(run, key=lambda p: _float(p.get("predicted_pm25")) or 0.0)
-    return best, _float(best.get("predicted_pm25"))
+    peak = _float(best.get("predicted_pm25"))
+    return best, 0.0 if peak is None else peak
 
 
 def _min_point(run: list[dict[str, Any]]) -> tuple[dict[str, Any], float]:
     best = min(run, key=lambda p: _float(p.get("predicted_pm25")) or 1e18)
-    return best, _float(best.get("predicted_pm25"))
+    trough = _float(best.get("predicted_pm25"))
+    return best, 0.0 if trough is None else trough
 
 
 def _surge_severity(peak: float) -> tuple[str, str]:
     if peak >= PM25_SEVERE_MIN_UGM3:
-        return "severe", f"Severe surge — expected peak {peak:.0f} µg/m3 lies in the CPCB 'Severe' PM2.5 tier (>=250 µg/m3)"
+        return (
+            "severe",
+            f"Severe surge — expected peak {peak:.0f} µg/m3 lies in the CPCB 'Severe' PM2.5 tier (>=250 µg/m3)",
+        )
     if peak >= PM25_VERY_POOR_MIN_UGM3:
-        return "moderate", f"Moderate surge — expected peak {peak:.0f} µg/m3 lies in the CPCB 'Very Poor' tier (121–250 µg/m3)"
-    return "mild", f"Mild surge — expected peak {peak:.0f} µg/m3 exceeds the 24h NAAQS limit (60 µg/m3) but stays below the 'Very Poor' tier"
+        return (
+            "moderate",
+            f"Moderate surge — expected peak {peak:.0f} µg/m3 lies in the CPCB 'Very Poor' tier (121–250 µg/m3)",
+        )
+    return (
+        "mild",
+        f"Mild surge — expected peak {peak:.0f} µg/m3 exceeds the 24h NAAQS limit (60 µg/m3) but stays below the 'Very Poor' tier",
+    )
 
 
 def _relief_severity(drop_pct: float, trough: float) -> tuple[str, str]:
     if drop_pct >= RELIEF_WASHOUT_DECREASE_PCT or trough < NAAQS_PM25_24H_UGM3:
-        return "significant", f"Significant relief — forecast minimum {trough:.0f} µg/m3 is {drop_pct:.0f}% below baseline and reaches within the 24h NAAQS limit (60 µg/m3)"
-    return "minor", f"Minor relief — forecast minimum {trough:.0f} µg/m3 is {drop_pct:.0f}% below baseline (>=25%) but stays above the 24h NAAQS limit"
+        return (
+            "significant",
+            f"Significant relief — forecast minimum {trough:.0f} µg/m3 is {drop_pct:.0f}% below baseline and reaches within the 24h NAAQS limit (60 µg/m3)",
+        )
+    return (
+        "minor",
+        f"Minor relief — forecast minimum {trough:.0f} µg/m3 is {drop_pct:.0f}% below baseline (>=25%) but stays above the 24h NAAQS limit",
+    )
 
 
 def _episode_severity(peak: float, n_active_factors: int) -> tuple[str, str]:
     if peak >= PM25_SEVERE_MIN_UGM3 or n_active_factors >= 2:
-        return "emergency", f"Emergency episode — sustained 'Very Poor' tier with forecast peak {peak:.0f} µg/m3 and {n_active_factors} active atmospheric risk contributor(s)"
-    return "high", f"High-risk episode — 'Very Poor' tier sustained for >=24h with {n_active_factors} active atmospheric risk contributor(s)"
+        return (
+            "emergency",
+            f"Emergency episode — sustained 'Very Poor' tier with forecast peak {peak:.0f} µg/m3 and {n_active_factors} active atmospheric risk contributor(s)",
+        )
+    return (
+        "high",
+        f"High-risk episode — 'Very Poor' tier sustained for >=24h with {n_active_factors} active atmospheric risk contributor(s)",
+    )
 
 
 def _uncertainty_confidence(
@@ -242,50 +267,61 @@ def _risk_factors(
     out: list[dict[str, Any]] = []
     if vc is not None:
         active = vc < VENT_POOR_M2S
-        out.append({
-            "factor": "low_ventilation",
-            "status": "active" if active else "not_contributing",
-            "value": vc,
-            "evidence": f"ventilation_coefficient = wind {ws} m/s x PBL {pbl_m} m = {vc} m2/s",
-            "description": "Weak horizontal+vertical mixing limits pollutant dispersal (poor band <3000 m2/s).",
-        })
+        out.append(
+            {
+                "factor": "low_ventilation",
+                "status": "active" if active else "not_contributing",
+                "value": vc,
+                "evidence": f"ventilation_coefficient = wind {ws} m/s x PBL {pbl_m} m = {vc} m2/s",
+                "description": "Weak horizontal+vertical mixing limits pollutant dispersal (poor band <3000 m2/s).",
+            }
+        )
     if pbl_m is not None:
         active = pbl_m < PBL_SHALLOW_M
-        out.append({
-            "factor": "shallow_pbl",
-            "status": "active" if active else "not_contributing",
-            "value": pbl_m,
-            "evidence": f"stored pbl_height = {pbl_m} m",
-            "description": "A shallow boundary layer (<300 m) confines pollution near the surface.",
-        })
-    out.append({
-        "factor": "inversion",
-        "status": "active" if bool(inv.get("detected")) else "not_contributing",
-        "value": _float(inv.get("strength")),
-        "evidence": (
-            f"inversion source={inv.get('source')}, category={inv.get('category')}, strength={_float(inv.get('strength'))}"
-            if inv else "no stored vertical temperature profile for inversion detection"
-        ),
-        "description": "A temperature inversion caps vertical mixing and traps pollutants.",
-    })
+        out.append(
+            {
+                "factor": "shallow_pbl",
+                "status": "active" if active else "not_contributing",
+                "value": pbl_m,
+                "evidence": f"stored pbl_height = {pbl_m} m",
+                "description": "A shallow boundary layer (<300 m) confines pollution near the surface.",
+            }
+        )
+    out.append(
+        {
+            "factor": "inversion",
+            "status": "active" if bool(inv.get("detected")) else "not_contributing",
+            "value": _float(inv.get("strength")),
+            "evidence": (
+                f"inversion source={inv.get('source')}, category={inv.get('category')}, strength={_float(inv.get('strength'))}"
+                if inv
+                else "no stored vertical temperature profile for inversion detection"
+            ),
+            "description": "A temperature inversion caps vertical mixing and traps pollutants.",
+        }
+    )
     if ws is not None:
         active = ws < WIND_LIGHT_MPS
-        out.append({
-            "factor": "stagnant_wind",
-            "status": "active" if active else "not_contributing",
-            "value": ws,
-            "evidence": f"stored wind_speed = {ws} m/s",
-            "description": "Light/calm wind (<2 m/s) slows horizontal ventilation.",
-        })
+        out.append(
+            {
+                "factor": "stagnant_wind",
+                "status": "active" if active else "not_contributing",
+                "value": ws,
+                "evidence": f"stored wind_speed = {ws} m/s",
+                "description": "Light/calm wind (<2 m/s) slows horizontal ventilation.",
+            }
+        )
     if transport_risk_level is not None:
         active = transport_risk_level in TRANSPORT_RISK_HIGH_BANDS
-        out.append({
-            "factor": "regional_transport",
-            "status": "active" if active else "not_contributing",
-            "value": transport_risk_score,
-            "evidence": f"Estimated Regional Pollution Transport Risk level = {transport_risk_level}",
-            "description": "Upwind fire plumes can compound local accumulation (elevated at HIGH/VERY HIGH).",
-        })
+        out.append(
+            {
+                "factor": "regional_transport",
+                "status": "active" if active else "not_contributing",
+                "value": transport_risk_score,
+                "evidence": f"Estimated Regional Pollution Transport Risk level = {transport_risk_level}",
+                "description": "Upwind fire plumes can compound local accumulation (elevated at HIGH/VERY HIGH).",
+            }
+        )
     return out
 
 
@@ -301,30 +337,36 @@ def _dispersion_factors(atmosphere: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     if vc is not None:
         good = vc >= 2.0 * VENT_POOR_M2S  # >=6000 m2/s (documented VENT_MODERATE), reuse threshold spirit
-        out.append({
-            "factor": "ventilation",
-            "status": "supporting" if good else ("partial" if vc >= VENT_POOR_M2S else "not_supporting"),
-            "value": vc,
-            "evidence": f"ventilation_coefficient = wind {ws} m/s x PBL {pbl_m} m = {vc} m2/s",
-            "description": "Higher ventilation coefficients (>=6000 m2/s) indicate effective dispersal.",
-        })
+        out.append(
+            {
+                "factor": "ventilation",
+                "status": "supporting" if good else ("partial" if vc >= VENT_POOR_M2S else "not_supporting"),
+                "value": vc,
+                "evidence": f"ventilation_coefficient = wind {ws} m/s x PBL {pbl_m} m = {vc} m2/s",
+                "description": "Higher ventilation coefficients (>=6000 m2/s) indicate effective dispersal.",
+            }
+        )
     if pbl_m is not None:
         deep = pbl_m >= PBL_SHALLOW_M
-        out.append({
-            "factor": "boundary_layer_depth",
-            "status": "supporting" if deep else "not_supporting",
-            "value": pbl_m,
-            "evidence": f"stored pbl_height = {pbl_m} m",
-            "description": "A deeper PBL (>300 m) leaves more room for vertical mixing.",
-        })
+        out.append(
+            {
+                "factor": "boundary_layer_depth",
+                "status": "supporting" if deep else "not_supporting",
+                "value": pbl_m,
+                "evidence": f"stored pbl_height = {pbl_m} m",
+                "description": "A deeper PBL (>300 m) leaves more room for vertical mixing.",
+            }
+        )
     if ws is not None:
-        out.append({
-            "factor": "wind",
-            "status": "supporting" if ws >= WIND_LIGHT_MPS else "not_supporting",
-            "value": ws,
-            "evidence": f"stored wind_speed = {ws} m/s",
-            "description": "Winds >=2 m/s advect and dilute surface pollution.",
-        })
+        out.append(
+            {
+                "factor": "wind",
+                "status": "supporting" if ws >= WIND_LIGHT_MPS else "not_supporting",
+                "value": ws,
+                "evidence": f"stored wind_speed = {ws} m/s",
+                "description": "Winds >=2 m/s advect and dilute surface pollution.",
+            }
+        )
     return out
 
 
@@ -358,7 +400,10 @@ def detect_events_from_series(
     now = now or datetime.now(UTC).replace(tzinfo=None)
 
     def _r2(point: dict[str, Any]) -> float | None:
-        met = test_metrics.get(point.get("forecast_horizon")) or {}
+        horizon = point.get("forecast_horizon")
+        if not isinstance(horizon, int):
+            return None
+        met = test_metrics.get(horizon) or {}
         return _float(met.get("test_r2"))
 
     events: list[dict[str, Any]] = []
@@ -375,36 +420,43 @@ def detect_events_from_series(
             increase_pct = (peak - baseline) / baseline * 100.0
             severity, sev_label = _surge_severity(peak)
             factors = _risk_factors(atmosphere, transport_risk_level, transport_risk_score)
-            factors.insert(0, {
-                "factor": "relative_increase",
-                "status": "triggering",
-                "value": round(increase_pct, 1),
-                "evidence": (
-                    f"observed 24h baseline {baseline} µg/m3 -> forecast peak {peak} µg/m3 "
-                    f"(+{round(increase_pct, 1)}%)"
-                ),
-                "description": f"Forecast peak is >= {SURGE_MIN_RELATIVE_INCREASE_PCT:.0f}% above the observed baseline and reaches the 24h NAAQS limit.",
-            })
+            factors.insert(
+                0,
+                {
+                    "factor": "relative_increase",
+                    "status": "triggering",
+                    "value": round(increase_pct, 1),
+                    "evidence": (
+                        f"observed 24h baseline {baseline} µg/m3 -> forecast peak {peak} µg/m3 "
+                        f"(+{round(increase_pct, 1)}%)"
+                    ),
+                    "description": f"Forecast peak is >= {SURGE_MIN_RELATIVE_INCREASE_PCT:.0f}% above the observed baseline and reaches the 24h NAAQS limit.",
+                },
+            )
             effective_end = run[-1]["timestamp"] if run[-1] is not points[-1] else None
-            events.append({
-                "event_type": "pollution_surge",
-                "station": station_name,
-                "status": _event_status(run[0]["timestamp"], effective_end, now),
-                "start_time": run[0]["timestamp"],
-                "end_time": effective_end,
-                "expected_peak": round(peak, 2),
-                "expected_peak_time": peak_pt["timestamp"],
-                "expected_trough": None,
-                "expected_trough_time": None,
-                "severity": severity,
-                "severity_label": sev_label,
-                "confidence": _uncertainty_confidence(
-                    peak_pt, margin,
-                    test_r2=_r2(peak_pt), coverage_target=coverage_target,
-                    uncertainty_method=uncertainty_method,
-                ),
-                "contributing_factors": factors,
-            })
+            events.append(
+                {
+                    "event_type": "pollution_surge",
+                    "station": station_name,
+                    "status": _event_status(run[0]["timestamp"], effective_end, now),
+                    "start_time": run[0]["timestamp"],
+                    "end_time": effective_end,
+                    "expected_peak": round(peak, 2),
+                    "expected_peak_time": peak_pt["timestamp"],
+                    "expected_trough": None,
+                    "expected_trough_time": None,
+                    "severity": severity,
+                    "severity_label": sev_label,
+                    "confidence": _uncertainty_confidence(
+                        peak_pt,
+                        margin,
+                        test_r2=_r2(peak_pt),
+                        coverage_target=coverage_target,
+                        uncertainty_method=uncertainty_method,
+                    ),
+                    "contributing_factors": factors,
+                }
+            )
 
     # ----------------------------------------------------------------- relief
     if baseline is not None and baseline > 0:
@@ -419,36 +471,43 @@ def detect_events_from_series(
                 margin = rel_threshold - trough
                 severity, sev_label = _relief_severity(drop_pct, trough)
                 factors = _dispersion_factors(atmosphere)
-                factors.insert(0, {
-                    "factor": "relative_decrease",
-                    "status": "triggering",
-                    "value": round(drop_pct, 1),
-                    "evidence": (
-                        f"observed 24h baseline {baseline} µg/m3 -> forecast minimum {trough} µg/m3 "
-                        f"({round(drop_pct, 1)}% lower)"
-                    ),
-                    "description": f"Forecast minimum is >= {RELIEF_MIN_RELATIVE_DECREASE_PCT:.0f}% below the observed baseline with a dispersion-supporting atmosphere.",
-                })
+                factors.insert(
+                    0,
+                    {
+                        "factor": "relative_decrease",
+                        "status": "triggering",
+                        "value": round(drop_pct, 1),
+                        "evidence": (
+                            f"observed 24h baseline {baseline} µg/m3 -> forecast minimum {trough} µg/m3 "
+                            f"({round(drop_pct, 1)}% lower)"
+                        ),
+                        "description": f"Forecast minimum is >= {RELIEF_MIN_RELATIVE_DECREASE_PCT:.0f}% below the observed baseline with a dispersion-supporting atmosphere.",
+                    },
+                )
                 effective_end = run[-1]["timestamp"] if run[-1] is not points[-1] else None
-                events.append({
-                    "event_type": "pollution_relief",
-                    "station": station_name,
-                    "status": _event_status(run[0]["timestamp"], effective_end, now),
-                    "start_time": run[0]["timestamp"],
-                    "end_time": effective_end,
-                    "expected_peak": None,
-                    "expected_peak_time": None,
-                    "expected_trough": round(trough, 2),
-                    "expected_trough_time": trough_pt["timestamp"],
-                    "severity": severity,
-                    "severity_label": sev_label,
-                    "confidence": _uncertainty_confidence(
-                        trough_pt, margin,
-                        test_r2=_r2(trough_pt), coverage_target=coverage_target,
-                        uncertainty_method=uncertainty_method,
-                    ),
-                    "contributing_factors": factors,
-                })
+                events.append(
+                    {
+                        "event_type": "pollution_relief",
+                        "station": station_name,
+                        "status": _event_status(run[0]["timestamp"], effective_end, now),
+                        "start_time": run[0]["timestamp"],
+                        "end_time": effective_end,
+                        "expected_peak": None,
+                        "expected_peak_time": None,
+                        "expected_trough": round(trough, 2),
+                        "expected_trough_time": trough_pt["timestamp"],
+                        "severity": severity,
+                        "severity_label": sev_label,
+                        "confidence": _uncertainty_confidence(
+                            trough_pt,
+                            margin,
+                            test_r2=_r2(trough_pt),
+                            coverage_target=coverage_target,
+                            uncertainty_method=uncertainty_method,
+                        ),
+                        "contributing_factors": factors,
+                    }
+                )
 
     # ------------------------------------------------------------ episode
     if len(points) >= EPISODE_SUSTAINED_HOURS:
@@ -465,25 +524,29 @@ def detect_events_from_series(
                 margin = peak - PM25_VERY_POOR_MIN_UGM3
                 severity, sev_label = _episode_severity(peak, len(active))
                 effective_end = run[-1]["timestamp"] if run[-1] is not points[-1] else None
-                events.append({
-                    "event_type": "high_risk_episode",
-                    "station": station_name,
-                    "status": _event_status(run[0]["timestamp"], effective_end, now),
-                    "start_time": run[0]["timestamp"],
-                    "end_time": effective_end,
-                    "expected_peak": round(peak, 2),
-                    "expected_peak_time": peak_pt["timestamp"],
-                    "expected_trough": None,
-                    "expected_trough_time": None,
-                    "severity": severity,
-                    "severity_label": sev_label,
-                    "confidence": _uncertainty_confidence(
-                        peak_pt, margin,
-                        test_r2=_r2(peak_pt), coverage_target=coverage_target,
-                        uncertainty_method=uncertainty_method,
-                    ),
-                    "contributing_factors": active,
-                })
+                events.append(
+                    {
+                        "event_type": "high_risk_episode",
+                        "station": station_name,
+                        "status": _event_status(run[0]["timestamp"], effective_end, now),
+                        "start_time": run[0]["timestamp"],
+                        "end_time": effective_end,
+                        "expected_peak": round(peak, 2),
+                        "expected_peak_time": peak_pt["timestamp"],
+                        "expected_trough": None,
+                        "expected_trough_time": None,
+                        "severity": severity,
+                        "severity_label": sev_label,
+                        "confidence": _uncertainty_confidence(
+                            peak_pt,
+                            margin,
+                            test_r2=_r2(peak_pt),
+                            coverage_target=coverage_target,
+                            uncertainty_method=uncertainty_method,
+                        ),
+                        "contributing_factors": active,
+                    }
+                )
 
     return events
 
@@ -554,8 +617,11 @@ def _observed_24h_mean(db, station_id: int, release: datetime) -> float | None:
         )
         .all()
     )
-    vals = [_float(r.pm25) for r in rows]
-    vals = [v for v in vals if v is not None]
+    vals: list[float] = []
+    for r in rows:
+        v = _float(r.pm25)
+        if v is not None:
+            vals.append(v)
     if not vals:
         return None
     return round(float(np.mean(vals)), 2)

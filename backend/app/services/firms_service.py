@@ -35,10 +35,7 @@ HTTP_TIMEOUT = 60
 FIRMS_REGION = {"min_lon": 73.5, "min_lat": 27.5, "max_lon": 78.5, "max_lat": 33.0}
 
 # Official FIRMS area API. `area` is west,south,east,north (decimal degrees).
-FIRMS_API_AREA_CSV = (
-    "https://firms.modaps.eosdis.nasa.gov/api/area/csv/"
-    "{map_key}/{source}/{day}/{area}"
-)
+FIRMS_API_AREA_CSV = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{map_key}/{source}/{day}/{area}"
 
 # All active satellites exposed by the FIRMS area API.
 FIRMS_API_SOURCES = [
@@ -51,10 +48,8 @@ FIRMS_API_SOURCES = [
 
 # Public FIRMS daily-24h CSV contributions (no API key required).
 PUBLIC_CSV_URLS = [
-    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/"
-    "suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
-    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/"
-    "modis-c6.1/csv/MODIS_C6_1_Global_24h.csv",
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv",
 ]
 
 DEFAULT_API_DAYS = 7
@@ -132,12 +127,7 @@ def _to_float(v) -> float | None:
 
 
 def _valid_coordinate(lat: float | None, lon: float | None) -> bool:
-    return (
-        lat is not None
-        and lon is not None
-        and -90.0 <= lat <= 90.0
-        and -180.0 <= lon <= 180.0
-    )
+    return lat is not None and lon is not None and -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0
 
 
 def in_region(lat: float, lon: float) -> bool:
@@ -160,7 +150,11 @@ def normalise_fire_records(df: pd.DataFrame) -> list[dict]:
     for _, row in df.iterrows():
         lat = _to_float(row.get("latitude"))
         lon = _to_float(row.get("longitude"))
-        if not _valid_coordinate(lat, lon) or not in_region(lat, lon):
+        if not _valid_coordinate(lat, lon):
+            dropped += 1
+            continue
+        assert lat is not None and lon is not None
+        if not in_region(lat, lon):
             dropped += 1
             continue
         ts = _parse_acq_time(row)
@@ -170,17 +164,19 @@ def normalise_fire_records(df: pd.DataFrame) -> list[dict]:
         confidence = str(row.get("confidence") or "").strip().lower()
         if confidence not in _CONFIDENCE_VALUES:
             confidence = ""
-        records.append({
-            "satellite": str(row.get("satellite") or "").strip(),
-            "instrument": _instrument_for(row),
-            "latitude": round(lat, 4),
-            "longitude": round(lon, 4),
-            "acq_date": ts.to_pydatetime(),
-            "confidence": confidence or None,
-            "frp": _to_float(row.get("frp")),
-            "brightness": _normalise_brightness(row),
-            "daynight": str(row.get("daynight") or "").strip(),
-        })
+        records.append(
+            {
+                "satellite": str(row.get("satellite") or "").strip(),
+                "instrument": _instrument_for(row),
+                "latitude": round(lat, 4),
+                "longitude": round(lon, 4),
+                "acq_date": ts.to_pydatetime(),
+                "confidence": confidence or None,
+                "frp": _to_float(row.get("frp")),
+                "brightness": _normalise_brightness(row),
+                "daynight": str(row.get("daynight") or "").strip(),
+            }
+        )
     if dropped:
         logger.info("firms: dropped %d of %d raw rows (out of region/invalid)", dropped, len(df))
     return records
@@ -312,17 +308,19 @@ def upsert_fire_records(db, records: list[dict], dry_run: bool = False) -> dict:
             skipped += 1
             continue
         existing.add(key)
-        rows.append(FireReading(
-            satellite=rec["satellite"] or None,
-            instrument=rec["instrument"] or None,
-            latitude=rec["latitude"],
-            longitude=rec["longitude"],
-            acq_date=rec["acq_date"],
-            confidence=rec["confidence"] or None,
-            frp=rec["frp"],
-            brightness=rec["brightness"],
-            daynight=rec["daynight"] or None,
-        ))
+        rows.append(
+            FireReading(
+                satellite=rec["satellite"] or None,
+                instrument=rec["instrument"] or None,
+                latitude=rec["latitude"],
+                longitude=rec["longitude"],
+                acq_date=rec["acq_date"],
+                confidence=rec["confidence"] or None,
+                frp=rec["frp"],
+                brightness=rec["brightness"],
+                daynight=rec["daynight"] or None,
+            )
+        )
 
     if rows:
         db.add_all(rows)

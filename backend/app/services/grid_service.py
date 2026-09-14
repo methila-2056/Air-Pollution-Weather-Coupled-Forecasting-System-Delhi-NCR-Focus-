@@ -11,16 +11,20 @@ The NCR domain is wrapped at ~0.02deg (~2.2km) resolution between
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from .aqi_calculator import get_aqi_category
 
 NCR_BOUNDS = {
-    "lat_min": 28.2, "lat_max": 28.9,
-    "lon_min": 76.6, "lon_max": 77.5,
+    "lat_min": 28.2,
+    "lat_max": 28.9,
+    "lon_min": 76.6,
+    "lon_max": 77.5,
 }
 GRID_STEP = 0.02  # ~2.2 km cell
-POWER = 2.0       # IDW power
+POWER = 2.0  # IDW power
 ADVECTION_WEIGHT = 0.25  # how strongly wind shifts the field downwind
 
 
@@ -52,12 +56,12 @@ def idw_interpolate(
         for j, glon in enumerate(grid_lons):
             dlat = (station_lats - glat) * 110.0
             dlon = (station_lons - glon) * 100.0 * np.cos(np.deg2rad(glat))
-            dist = np.sqrt(dlat ** 2 + dlon ** 2)
+            dist = np.sqrt(dlat**2 + dlon**2)
             near = dist < 0.0001
             if near.any():
                 out[i, j] = station_values[near][0]
                 continue
-            w = 1.0 / (dist ** power + 1e-6)
+            w = 1.0 / (dist**power + 1e-6)
             w = w / w.sum()
             valid = ~np.isnan(station_values)
             if valid.any():
@@ -67,7 +71,9 @@ def idw_interpolate(
     return out
 
 
-def advective_shift(lon_idx: np.ndarray, lat_idx: np.ndarray, wind_dir: float, wind_speed: float) -> tuple[np.ndarray, np.ndarray]:
+def advective_shift(
+    lon_idx: np.ndarray, lat_idx: np.ndarray, wind_dir: float, wind_speed: float
+) -> tuple[np.ndarray, np.ndarray]:
     """Displace grid indices in the downwind direction by a wind-dependent shift.
 
     Returns (shifted_j, shifted_i) index arrays applying advection so the
@@ -83,8 +89,7 @@ def advective_shift(lon_idx: np.ndarray, lat_idx: np.ndarray, wind_dir: float, w
     hours = 3.0
     dlon_cells = u * 3600 * hours / (GRID_STEP * 100000.0)
     dlat_cells = v * 3600 * hours / (GRID_STEP * 111000.0)
-    return (lon_idx.astype(float) + dlon_cells,
-            lat_idx.astype(float) + dlat_cells)
+    return (lon_idx.astype(float) + dlon_cells, lat_idx.astype(float) + dlat_cells)
 
 
 def _clip_grid_indices(inds: np.ndarray, limit: int) -> np.ndarray:
@@ -98,7 +103,7 @@ def compute_ncr_grid(
     horizon_hours: int,
     wind_dir: float | None = None,
     wind_speed: float | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Interpolate a selected horizon's AQI across the NCR domain.
 
     Args:
@@ -110,7 +115,7 @@ def compute_ncr_grid(
     Returns a GeoJSON-style structure for the dashboard map.
     """
     lats, lons = build_grid()
-    result = {
+    result: dict[str, Any] = {
         "horizon_hours": horizon_hours,
         "step_deg": GRID_STEP,
         "bounds": NCR_BOUNDS,
@@ -118,8 +123,10 @@ def compute_ncr_grid(
         "wind_speed": wind_speed,
         "cells": [],
         "extent": {
-            "lats_min": float(lats.min()), "lats_max": float(lats.max()),
-            "lons_min": float(lons.min()), "lons_max": float(lons.max()),
+            "lats_min": float(lats.min()),
+            "lats_max": float(lats.max()),
+            "lons_min": float(lons.min()),
+            "lons_max": float(lons.max()),
         },
     }
 
@@ -137,8 +144,11 @@ def compute_ncr_grid(
         return result
 
     field = idw_interpolate(
-        np.array(sit_lats), np.array(sit_lons), np.array(sit_vals),
-        lats, lons,
+        np.array(sit_lats),
+        np.array(sit_lons),
+        np.array(sit_vals),
+        lats,
+        lons,
     )
 
     # optional advection bias
@@ -157,12 +167,14 @@ def compute_ncr_grid(
                 continue
             aqi = int(round(float(aqi)))
             category, _ = get_aqi_category(aqi)
-            result["cells"].append({
-                "lat": round(float(lats[i]), 4),
-                "lon": round(float(lons[j]), 4),
-                "aqi": aqi,
-                "aqi_category": category,
-            })
+            result["cells"].append(
+                {
+                    "lat": round(float(lats[i]), 4),
+                    "lon": round(float(lons[j]), 4),
+                    "aqi": aqi,
+                    "aqi_category": category,
+                }
+            )
 
     result["grid_size"] = [len(result["cells"]), len(lats), len(lons)]
     return result

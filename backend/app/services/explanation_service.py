@@ -15,7 +15,10 @@ FEATURE_DESCRIPTIONS = {
     "wind_direction": ("Wind direction", "Winds from the north-west advect stubble-burning smoke"),
     "precipitation": ("Precipitation", "Rain scavenges pollutants from the air"),
     "cloud_cover": ("Cloud cover", "Cloud cover reduces photochemical activity"),
-    "pbl_height": ("Planetary boundary layer height", "A compressed boundary layer is trapping pollutants near the surface"),
+    "pbl_height": (
+        "Planetary boundary layer height",
+        "A compressed boundary layer is trapping pollutants near the surface",
+    ),
     "inversion_strength": ("Atmospheric inversion strength", "An inversion layer is inhibiting vertical mixing"),
     "fire_impact_score": ("Regional fire impact", "Stubble-burning smoke is being advected into the region"),
     "fire_count_100km": ("Fires within 100 km", "Nearby burning hotspots add fresh emissions"),
@@ -27,13 +30,23 @@ FEATURE_DESCRIPTIONS = {
     "season": ("Season", "Season conditions the typical pollution regime"),
     "aod_est": ("Estimated aerosol optical depth", "Aerosol loading is attenuating solar radiation"),
     "radiation_transmittance": ("Surface radiation transmittance", "Aerosols are reducing surface solar heating"),
-    "pbl_suppression_factor": ("PBL suppression by aerosols", "Aerosol radiative forcing is suppressing boundary-layer growth"),
+    "pbl_suppression_factor": (
+        "PBL suppression by aerosols",
+        "Aerosol radiative forcing is suppressing boundary-layer growth",
+    ),
     "corrected_pbl_height": ("Aerosol-corrected PBL height", "Effective mixing layer is reduced by aerosol feedback"),
-    "stability_coupling_index": ("Aerosol-PBL stability coupling", "Coupled aerosol-PBL feedback is stabilising the layer"),
-    "feedback_multiplier": ("Two-way feedback multiplier", "Stable coupled system is retaining pollutants near surface"),
+    "stability_coupling_index": (
+        "Aerosol-PBL stability coupling",
+        "Coupled aerosol-PBL feedback is stabilising the layer",
+    ),
+    "feedback_multiplier": (
+        "Two-way feedback multiplier",
+        "Stable coupled system is retaining pollutants near surface",
+    ),
 }
 
-FALLBACK_WEIGHTS = []  # NOT USED: feature weights are never fabricated.
+FALLBACK_WEIGHTS: list[tuple[str, float]] = []  # NOT USED: feature weights are never fabricated.
+
 
 def _get_feature_names(model) -> list:
     for attr in ("feature_names_", "feature_names_in_"):
@@ -46,6 +59,7 @@ def _get_feature_names(model) -> list:
         if names is not None and len(names):
             return list(names)
     return []
+
 
 def _tree_estimator(model):
     """Return the underlying tree estimator for SHAP.
@@ -94,22 +108,26 @@ def explain_prediction(model, features: dict) -> list[dict]:
         v = float(values[i])
         desc, hint = FEATURE_DESCRIPTIONS.get(name, (name, ""))
         description = f"{desc}. {hint}" if hint else desc
-        feature_importance.append({
-            "feature": name,
-            "importance": round(abs(v), 4),
-            "importance_pct": round(abs(v) / total * 100, 1),
-            "direction": "positive" if v > 0 else "negative",
-            "value": features.get(name),
-            "description": description,
-        })
+        feature_importance.append(
+            {
+                "feature": name,
+                "importance": round(abs(v), 4),
+                "importance_pct": round(abs(v) / total * 100, 1),
+                "direction": "positive" if v > 0 else "negative",
+                "value": features.get(name),
+                "description": description,
+            }
+        )
     feature_importance.sort(key=lambda x: x["importance"], reverse=True)
     return feature_importance[:6]
+
 
 def explain_fallback(features: dict) -> list[dict]:
     raise RuntimeError(
         "no_model_for_explanation: no tree-based model is available, so SHAP "
         "cannot compute feature contributions. No fabricated weights are returned."
     )
+
 
 def generate_natural_language(features: dict, top_features: list[dict], prediction=None) -> list[str]:
     lines = []

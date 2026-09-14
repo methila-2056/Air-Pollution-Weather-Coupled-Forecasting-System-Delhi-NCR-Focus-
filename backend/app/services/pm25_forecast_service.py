@@ -31,11 +31,22 @@ FIRE_BUFFER_HOURS = 26
 WINDOW_SPANS_DAYS = (10, 30, 120)  # adaptive: try wider windows on sparse feeds
 
 _weather_cols = [
-    "station_id", "timestamp", "temperature", "humidity", "pressure",
-    "pressure_msl", "surface_pressure", "wind_speed", "wind_direction",
-    "precipitation", "cloud_cover", "pbl_height",
-    "temperature_1000hPa", "temperature_925hPa",
-    "temperature_850hPa", "temperature_700hPa",
+    "station_id",
+    "timestamp",
+    "temperature",
+    "humidity",
+    "pressure",
+    "pressure_msl",
+    "surface_pressure",
+    "wind_speed",
+    "wind_direction",
+    "precipitation",
+    "cloud_cover",
+    "pbl_height",
+    "temperature_1000hPa",
+    "temperature_925hPa",
+    "temperature_850hPa",
+    "temperature_700hPa",
 ]
 
 _forecaster: Any | None = None
@@ -70,9 +81,7 @@ def _query_pollution(db, station_id: int, since, until=None) -> pd.DataFrame:
     if until is not None:
         query = query.filter(PollutionReading.timestamp <= until)
     rows = query.order_by(PollutionReading.timestamp).all()
-    return pd.DataFrame(
-        [{"station_id": r.station_id, "timestamp": r.timestamp, "pm25": r.pm25} for r in rows]
-    )
+    return pd.DataFrame([{"station_id": r.station_id, "timestamp": r.timestamp, "pm25": r.pm25} for r in rows])
 
 
 def _query_weather(db, station_id: int, since, until=None) -> pd.DataFrame:
@@ -83,20 +92,12 @@ def _query_weather(db, station_id: int, since, until=None) -> pd.DataFrame:
     if until is not None:
         query = query.filter(WeatherReading.timestamp <= until)
     rows = query.order_by(WeatherReading.timestamp).all()
-    return pd.DataFrame(
-        [{c: getattr(r, c) for c in _weather_cols} for r in rows]
-    )
+    return pd.DataFrame([{c: getattr(r, c) for c in _weather_cols} for r in rows])
 
 
 def _query_fires(db, since, until) -> pd.DataFrame:
-    rows = (
-        db.query(FireReading)
-        .filter(FireReading.acq_date >= since, FireReading.acq_date <= until)
-        .all()
-    )
-    return pd.DataFrame(
-        [{"lat": r.latitude, "lon": r.longitude, "acq_date": r.acq_date, "frp": r.frp} for r in rows]
-    )
+    rows = db.query(FireReading).filter(FireReading.acq_date >= since, FireReading.acq_date <= until).all()
+    return pd.DataFrame([{"lat": r.latitude, "lon": r.longitude, "acq_date": r.acq_date, "frp": r.frp} for r in rows])
 
 
 def build_feature_row(
@@ -142,7 +143,7 @@ def build_feature_row(
     poll = None
     for span_days in WINDOW_SPANS_DAYS:
         since = latest_poll_ts - timedelta(days=span_days)
-        poll = _query_pollution(db, station.id, since, until=latest_poll_ts)
+        poll = _query_pollution(db, station.id, since, until=latest_poll_ts)  # type: ignore[arg-type]
         if len(poll) >= MIN_POLLUTION_ROWS:
             break
 
@@ -153,7 +154,8 @@ def build_feature_row(
         )
 
     wx = _query_weather(
-        db, station.id,
+        db,
+        station.id,  # type: ignore[arg-type]
         latest_poll_ts - timedelta(days=WINDOW_DAYS),
         until=latest_poll_ts,
     )
@@ -210,8 +212,7 @@ def forecast_pm25(db, station_name: str, hours: int) -> dict[str, Any]:
     forecaster = get_pm25_forecaster()
     if not forecaster.is_available:
         raise RuntimeError(
-            "PM2.5 models are not trained yet; run "
-            "`python -m ml.training.train_pm25 --horizons '1..72'` first"
+            "PM2.5 models are not trained yet; run `python -m ml.training.train_pm25 --horizons '1..72'` first"
         )
 
     feature_row, release_time, context = build_feature_row(db, station)
@@ -220,9 +221,7 @@ def forecast_pm25(db, station_name: str, hours: int) -> dict[str, Any]:
     trained = forecaster.horizons
     if not trained or max(trained) < hours:
         max_h = forecaster.max_horizon
-        raise RuntimeError(
-            f"Requested {hours}h but trained PM2.5 models cover only up to {max_h}h"
-        )
+        raise RuntimeError(f"Requested {hours}h but trained PM2.5 models cover only up to {max_h}h")
     supported = desired  # all desired horizons are covered since hours <= max(trained)
 
     result = forecaster.forecast(feature_row, horizons=supported, base_time=release_time.to_pydatetime())

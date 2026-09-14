@@ -32,13 +32,13 @@ from __future__ import annotations
 import numpy as np
 
 #: Pressure levels used for inversion analysis, surface -> top.
-DEFAULT_LEVELS_HPA = [1000, 925, 850, 700]
+DEFAULT_LEVELS_HPA: list[float] = [1000, 925, 850, 700]
 
 #: Inversion categories by gradient strength (K / 100 hPa), applied to the
 #: strongest (most positive) layer gradient.
-STRONG_INVERSION_THRESHOLD_K = 1.5       # > 1.5 K/100hPa -> strong
-MODERATE_INVERSION_THRESHOLD_K = 0.6     # > 0.6  K/100hPa -> moderate
-WEAK_INVERSION_THRESHOLD_K = 0.0         # > 0.0  K/100hPa -> weak inversion (T increases w/ height)
+STRONG_INVERSION_THRESHOLD_K = 1.5  # > 1.5 K/100hPa -> strong
+MODERATE_INVERSION_THRESHOLD_K = 0.6  # > 0.6  K/100hPa -> moderate
+WEAK_INVERSION_THRESHOLD_K = 0.0  # > 0.0  K/100hPa -> weak inversion (T increases w/ height)
 
 #: PBL height (m) classification used for the PBL proxy fallback.
 PBL_STRONG_M = 150.0

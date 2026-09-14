@@ -18,12 +18,31 @@ DEFAULT_HORIZONS = [1, 6, 12, 24, 48, 72]
 ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
 
 FEATURE_NAMES = [
-    "pm25_lag1", "pm10_lag1", "o3_lag1", "no2_lag1", "so2_lag1", "co_lag1",
-    "temperature", "humidity", "pressure_msl", "wind_speed", "wind_direction",
-    "precipitation", "cloud_cover", "pbl_height", "inversion_strength",
-    "fire_impact_score", "fire_count_100km", "nearest_fire_km",
-    "hour", "is_winter", "day_of_year", "aqi_lag1", "season",
+    "pm25_lag1",
+    "pm10_lag1",
+    "o3_lag1",
+    "no2_lag1",
+    "so2_lag1",
+    "co_lag1",
+    "temperature",
+    "humidity",
+    "pressure_msl",
+    "wind_speed",
+    "wind_direction",
+    "precipitation",
+    "cloud_cover",
+    "pbl_height",
+    "inversion_strength",
+    "fire_impact_score",
+    "fire_count_100km",
+    "nearest_fire_km",
+    "hour",
+    "is_winter",
+    "day_of_year",
+    "aqi_lag1",
+    "season",
 ]
+
 
 def load_model(model_name: str):
     path = os.path.join(MODEL_DIR, f"{model_name}.joblib")
@@ -40,12 +59,14 @@ def load_model(model_name: str):
             logger.warning("Failed to load model %s: %s", model_name, exc)
     return None
 
+
 def available_models() -> list[str]:
     if not os.path.isdir(MODEL_DIR):
         return []
     return sorted(f for f in os.listdir(MODEL_DIR) if f.endswith(".joblib"))
 
-def load_pollutant_model(pollutant: str, horizon_hours: int = None):
+
+def load_pollutant_model(pollutant: str, horizon_hours: int | None = None):
     for model_type in ("xgboost", "random_forest", "rf", "persistence", "gbm"):
         suffixes = [f"_{horizon_hours}h", f"_{horizon_hours}", ""]
         if horizon_hours is None:
@@ -57,7 +78,8 @@ def load_pollutant_model(pollutant: str, horizon_hours: int = None):
                 return model
     return None
 
-def _model_predict(model, features: dict) -> float:
+
+def _model_predict(model, features: dict) -> float | None:
     if model is None:
         return None
     try:
@@ -84,6 +106,7 @@ def _model_predict(model, features: dict) -> float:
         logger.warning("Prediction failed for %s: %s", type(model).__name__, exc)
         return None
 
+
 def _fallback_pm25(features: dict, h: int) -> float:
     base = features.get("pm25_lag1", 50) or 50
     decay = max(0.55, 1.0 - 0.006 * h)
@@ -95,20 +118,24 @@ def _fallback_pm25(features: dict, h: int) -> float:
     fire_factor = 1.0 + fire * 0.15
     return base * decay * wind_penalty * pbl_factor * fire_factor
 
+
 def _fallback_pm10(pm25_pred: float, features: dict, h: int) -> float:
     base = features.get("pm10_lag1", 0) or 0
     if not base:
         base = pm25_pred * 1.9
     return max(base * (1.0 - 0.004 * h), pm25_pred * 1.5)
 
+
 def _fallback_o3(features: dict, h: int) -> float:
     temp = features.get("temperature", 25) or 25
     solar = 1.0 + max(0.0, (temp - 20) / 20) * 0.3
     return max(10.0, 45 * solar * (1.0 - 0.002 * h))
 
+
 def _fallback_no2(features: dict) -> float:
     disp = 1.0 + (features.get("wind_speed", 5) or 5) * 0.05
     return max(5.0, 48 / disp)
+
 
 def _fallback_so2(features: dict) -> float:
     base = features.get("so2_lag1") or 15.0
@@ -117,10 +144,12 @@ def _fallback_so2(features: dict) -> float:
     washout = max(0.6, 1.0 - precip * 0.15)
     return max(2.0, base * washout / disp)
 
+
 def _fallback_co(features: dict) -> float:
     base = features.get("co_lag1") or 1.4
     disp = 1.0 + (features.get("wind_speed", 5) or 5) * 0.04
     return max(0.2, base / disp)
+
 
 def predict_pollutants(features: dict, horizons=None) -> list[dict]:
     if horizons is None:
@@ -154,21 +183,29 @@ def predict_pollutants(features: dict, horizons=None) -> list[dict]:
             co_pred = _fallback_co(features)
 
         aqi_val, category, dominant = calculate_aqi(
-            pm25_pred, pm10_pred, o3_pred, no2_pred, so2_pred, co_pred,
+            pm25_pred,
+            pm10_pred,
+            o3_pred,
+            no2_pred,
+            so2_pred,
+            co_pred,
         )
-        predictions.append({
-            "horizon_hours": int(h),
-            "pm25_pred": round(pm25_pred, 1),
-            "pm10_pred": round(pm10_pred, 1),
-            "o3_pred": round(o3_pred, 1),
-            "no2_pred": round(no2_pred, 1),
-            "so2_pred": round(so2_pred, 1),
-            "co_pred": round(co_pred, 2),
-            "aqi_pred": aqi_val,
-            "aqi_category": category,
-            "dominant_pollutant": dominant,
-        })
+        predictions.append(
+            {
+                "horizon_hours": int(h),
+                "pm25_pred": round(pm25_pred, 1),
+                "pm10_pred": round(pm10_pred, 1),
+                "o3_pred": round(o3_pred, 1),
+                "no2_pred": round(no2_pred, 1),
+                "so2_pred": round(so2_pred, 1),
+                "co_pred": round(co_pred, 2),
+                "aqi_pred": aqi_val,
+                "aqi_category": category,
+                "dominant_pollutant": dominant,
+            }
+        )
     return predictions
+
 
 def _fire_features(station_lat: float, station_lon: float, fires) -> dict:
     count_100 = 0
@@ -188,9 +225,11 @@ def _fire_features(station_lat: float, station_lon: float, fires) -> dict:
         "fire_impact_score": round(min(1.0, impact / 1000.0), 4),
     }
 
+
 def _flush_json_value(v):
     """Coerce numpy/pandas values to plain JSON-safe python numbers."""
     import math
+
     if v is None:
         return 0.0
     try:
@@ -230,21 +269,41 @@ def build_features_from_db(db, station_id: int) -> dict:
     if not poll_rows and not wx_rows:
         return {name: 0.0 for name in FEATURE_NAMES}
 
-    poll = pd.DataFrame([{
-        "timestamp": p.timestamp, "pm25": p.pm25, "pm10": p.pm10,
-        "o3": p.o3, "no2": p.no2, "so2": p.so2, "co": p.co,
-    } for p in poll_rows])
-    wx = pd.DataFrame([{
-        "timestamp": w.timestamp, "temperature": w.temperature,
-        "humidity": w.humidity, "pressure_msl": w.pressure_msl,
-        "surface_pressure": w.surface_pressure, "wind_speed": w.wind_speed,
-        "wind_direction": w.wind_direction, "precipitation": w.precipitation,
-        "cloud_cover": w.cloud_cover, "pbl_height": w.pbl_height,
-        "temperature_1000hPa": getattr(w, "temperature_1000hPa", None),
-        "temperature_925hPa": getattr(w, "temperature_925hPa", None),
-        "temperature_850hPa": getattr(w, "temperature_850hPa", None),
-        "temperature_700hPa": getattr(w, "temperature_700hPa", None),
-    } for w in wx_rows])
+    poll = pd.DataFrame(
+        [
+            {
+                "timestamp": p.timestamp,
+                "pm25": p.pm25,
+                "pm10": p.pm10,
+                "o3": p.o3,
+                "no2": p.no2,
+                "so2": p.so2,
+                "co": p.co,
+            }
+            for p in poll_rows
+        ]
+    )
+    wx = pd.DataFrame(
+        [
+            {
+                "timestamp": w.timestamp,
+                "temperature": w.temperature,
+                "humidity": w.humidity,
+                "pressure_msl": w.pressure_msl,
+                "surface_pressure": w.surface_pressure,
+                "wind_speed": w.wind_speed,
+                "wind_direction": w.wind_direction,
+                "precipitation": w.precipitation,
+                "cloud_cover": w.cloud_cover,
+                "pbl_height": w.pbl_height,
+                "temperature_1000hPa": getattr(w, "temperature_1000hPa", None),
+                "temperature_925hPa": getattr(w, "temperature_925hPa", None),
+                "temperature_850hPa": getattr(w, "temperature_850hPa", None),
+                "temperature_700hPa": getattr(w, "temperature_700hPa", None),
+            }
+            for w in wx_rows
+        ]
+    )
 
     combined = poll
     if not wx.empty and not poll.empty:
@@ -289,13 +348,20 @@ def build_features_from_db(db, station_id: int) -> dict:
 
     # Real fire features from the FIRMS records stored in the DB
     from ..models.db_models import FireReading
+
     fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(2000).all()
     if fires:
-        fires_df = pd.DataFrame([{
-            "lat": f.latitude, "lon": f.longitude,
-            "frp": f.frp or 1.0,
-            "acq_timestamp": f.acq_date,
-        } for f in fires])
+        fires_df = pd.DataFrame(
+            [
+                {
+                    "lat": f.latitude,
+                    "lon": f.longitude,
+                    "frp": f.frp or 1.0,
+                    "acq_timestamp": f.acq_date,
+                }
+                for f in fires
+            ]
+        )
         eng = add_fire_features(eng, fires_df=fires_df)
         fire_count_latest = int((eng.iloc[-1] if not eng.empty else pd.Series()).get("fire_count", 0) or 0)
     else:
@@ -319,8 +385,10 @@ def build_features_from_db(db, station_id: int) -> dict:
     features["is_winter"] = int(_flush_json_value(features.get("is_winter", 0)))
     return features
 
+
 def get_weather_context(db, station_id: int) -> dict:
     from ..models.db_models import WeatherReading
+
     r = (
         db.query(WeatherReading)
         .filter(WeatherReading.station_id == station_id)
@@ -340,49 +408,53 @@ def get_weather_context(db, station_id: int) -> dict:
         "pbl_height": r.pbl_height,
     }
 
+
 def get_fire_context(db) -> dict:
     from ..models.db_models import FireReading
+
     fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(500).all()
     if not fires:
         return {"fire_count": 0}
-    distances = [
-        haversine_distance(28.6139, 77.2090, f.latitude, f.longitude)
-        for f in fires
-    ]
+    distances = [haversine_distance(28.6139, 77.2090, f.latitude, f.longitude) for f in fires]
     return {
         "fire_count": len(fires),
         "distance_nearest_fire": round(min(distances), 1),
         "mean_frp": round(sum((f.frp or 0.0) for f in fires) / len(fires), 2),
     }
 
+
 def save_forecasts(db, station_id: int, predictions: list[dict], forecast_timestamp=None) -> list:
     from ..models.db_models import Forecast
+
     base_ts = forecast_timestamp or datetime.now(UTC).replace(tzinfo=None)
     rows = []
     for p in predictions:
         pbl = p.get("pbl_height") or 500.0
-        rows.append(Forecast(
-            station_id=station_id,
-            forecast_timestamp=base_ts + timedelta(hours=p["horizon_hours"]),
-            horizon_hours=p["horizon_hours"],
-            pm25_pred=p.get("pm25_pred"),
-            pm10_pred=p.get("pm10_pred"),
-            o3_pred=p.get("o3_pred"),
-            no2_pred=p.get("no2_pred"),
-            so2_pred=p.get("so2_pred"),
-            co_pred=p.get("co_pred"),
-            aqi_pred=p.get("aqi_pred"),
-            aqi_category=p.get("aqi_category"),
-            dominant_pollutant=p.get("dominant_pollutant"),
-            inversion_detected=1 if pbl < 500 else 0,
-            inversion_strength=round(max(0.0, (500 - pbl) / 500), 4),
-            pbl_height=pbl,
-        ))
+        rows.append(
+            Forecast(
+                station_id=station_id,
+                forecast_timestamp=base_ts + timedelta(hours=p["horizon_hours"]),
+                horizon_hours=p["horizon_hours"],
+                pm25_pred=p.get("pm25_pred"),
+                pm10_pred=p.get("pm10_pred"),
+                o3_pred=p.get("o3_pred"),
+                no2_pred=p.get("no2_pred"),
+                so2_pred=p.get("so2_pred"),
+                co_pred=p.get("co_pred"),
+                aqi_pred=p.get("aqi_pred"),
+                aqi_category=p.get("aqi_category"),
+                dominant_pollutant=p.get("dominant_pollutant"),
+                inversion_detected=1 if pbl < 500 else 0,
+                inversion_strength=round(max(0.0, (500 - pbl) / 500), 4),
+                pbl_height=pbl,
+            )
+        )
     db.add_all(rows)
     db.commit()
     for row in rows:
         db.refresh(row)
     return rows
+
 
 def generate_forecast(db, station_id: int, horizons=None) -> tuple[list, list[dict]]:
     features = build_features_from_db(db, station_id)
@@ -410,7 +482,9 @@ def generate_coupled_forecast(db, station_id: int, horizons=None) -> dict:
     base_pbl = features.get("pbl_height") or 600.0
 
     result = _run_coupled(
-        coupled_single_step, features, horizons,
+        coupled_single_step,
+        features,
+        horizons,
         start_hour=features.get("hour") or 12,
     )
 
@@ -427,29 +501,32 @@ def generate_coupled_forecast(db, station_id: int, horizons=None) -> dict:
 def save_coupled_forecasts(db, station_id: int, points: list[dict], forecast_timestamp=None) -> list:
     """Persist the coupled forecast points (including SO2/CO + coupling state)."""
     from ..models.db_models import Forecast
+
     base_ts = forecast_timestamp or datetime.now(UTC).replace(tzinfo=None)
     rows = []
     for p in points:
         pbl = p.get("pbl_height") or p.get("pbl_effective") or 500.0
-        rows.append(Forecast(
-            station_id=station_id,
-            forecast_timestamp=base_ts + timedelta(hours=p["horizon_hours"]),
-            horizon_hours=p["horizon_hours"],
-            pm25_pred=p.get("pm25_pred"),
-            pm10_pred=p.get("pm10_pred"),
-            o3_pred=p.get("o3_pred"),
-            no2_pred=p.get("no2_pred"),
-            so2_pred=p.get("so2_pred"),
-            co_pred=p.get("co_pred"),
-            aqi_pred=p.get("aqi_pred"),
-            aqi_category=p.get("aqi_category"),
-            dominant_pollutant=p.get("dominant_pollutant"),
-            inversion_detected=1 if pbl < 500 else 0,
-            inversion_strength=round(max(0.0, (500 - pbl) / 500), 4),
-            pbl_height=pbl,
-            coupling_stability=p.get("coupling_stability"),
-            coupling_mode="coupled" if p.get("coupling_stability") is not None else None,
-        ))
+        rows.append(
+            Forecast(
+                station_id=station_id,
+                forecast_timestamp=base_ts + timedelta(hours=p["horizon_hours"]),
+                horizon_hours=p["horizon_hours"],
+                pm25_pred=p.get("pm25_pred"),
+                pm10_pred=p.get("pm10_pred"),
+                o3_pred=p.get("o3_pred"),
+                no2_pred=p.get("no2_pred"),
+                so2_pred=p.get("so2_pred"),
+                co_pred=p.get("co_pred"),
+                aqi_pred=p.get("aqi_pred"),
+                aqi_category=p.get("aqi_category"),
+                dominant_pollutant=p.get("dominant_pollutant"),
+                inversion_detected=1 if pbl < 500 else 0,
+                inversion_strength=round(max(0.0, (500 - pbl) / 500), 4),
+                pbl_height=pbl,
+                coupling_stability=p.get("coupling_stability"),
+                coupling_mode="coupled" if p.get("coupling_stability") is not None else None,
+            )
+        )
     db.add_all(rows)
     db.commit()
     for row in rows:

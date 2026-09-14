@@ -25,6 +25,7 @@ reproducible on commodity hardware (see README "Honest Scope" and
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import requests
 
@@ -47,8 +48,8 @@ LAPSE_UNIT = "K per 100 hPa"
 
 def _level_variables(levels: list[float] | None = None) -> list[str]:
     """Build the Open-Meteo hourly variable list for temperature at *levels*."""
-    levels = levels or PRESSURE_LEVELS
-    return [f"temperature_{int(p)}hPa" for p in levels]
+    chosen: list[float] = levels if levels is not None else PRESSURE_LEVELS
+    return [f"temperature_{int(p)}hPa" for p in chosen]
 
 
 def fetch_vertical_profile(
@@ -71,7 +72,7 @@ def fetch_vertical_profile(
 
     or ``None`` if the request failed.
     """
-    levels = levels or PRESSURE_LEVELS
+    levels = levels if levels is not None else PRESSURE_LEVELS
     hourly = _level_variables(levels)
     # Geopotential heights available at these levels on the free tier.
     for p in (925, 850):
@@ -79,7 +80,7 @@ def fetch_vertical_profile(
         if f"temperature_{int(p)}hPa" in hourly:
             hourly.append(name)
 
-    params = {
+    params: dict[str, Any] = {
         "latitude": latitude,
         "longitude": longitude,
         "hourly": ",".join(hourly),
@@ -99,16 +100,16 @@ def fetch_vertical_profile(
         logger.warning("Open-Meteo returned no pressure-level data")
         return None
 
-    temps = {}
-    geopot = {}
-    for p in levels:
-        var = f"temperature_{int(p)}hPa"
+    temps: dict[float, list[float]] = {}
+    geopot: dict[float, list[float]] = {}
+    for level in levels:
+        var = f"temperature_{int(level)}hPa"
         if var in hourly_data:
-            temps[p] = hourly_data[var]
+            temps[float(level)] = hourly_data[var]
     for p in (925, 850):
         var = f"geopotential_height_{int(p)}hPa"
         if var in hourly_data:
-            geopot[p] = hourly_data[var]
+            geopot[float(p)] = hourly_data[var]
 
     if len(temps) < 2:
         logger.warning("Fewer than 2 temperature levels available (%s)", sorted(temps))
@@ -142,13 +143,13 @@ def analyze_vertical_profile(
     if not profile:
         return None
 
-    temps = {}
+    temps: dict[float, float] = {}
     for p, series in (profile.get("temperature") or {}).items():
         try:
             val = float(series[at_index])
         except (IndexError, TypeError, ValueError):
-            val = None
-        temps[p] = val
+            continue
+        temps[float(p)] = val
 
     return combine_inversion(pbl_height, temps)
 
@@ -171,6 +172,9 @@ def analyze_station(
     if profile is None:
         analysis = combine_inversion(pbl_height, None)
         return {"station_atmosphere": analysis, "profile_fetched": False}
-    analysis = analyze_vertical_profile(profile, pbl_height)
-    analysis["profile_fetched"] = True
-    return {"station_atmosphere": analysis, "profile_fetched": True}
+    found = analyze_vertical_profile(profile, pbl_height)
+    if found is None:
+        analysis = combine_inversion(pbl_height, None)
+        return {"station_atmosphere": analysis, "profile_fetched": False}
+    found["profile_fetched"] = True
+    return {"station_atmosphere": found, "profile_fetched": True}
