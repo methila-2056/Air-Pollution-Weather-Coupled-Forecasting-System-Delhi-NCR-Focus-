@@ -6,11 +6,9 @@ evaluation report.
 """
 
 import json
-from typing import Optional
 
 import numpy as np
 import pandas as pd
-
 
 AQI_BREAKPOINTS = [
     (0, 50, "Good"),
@@ -100,11 +98,11 @@ def compute_aqi_category_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> dic
     fp = {c: 0 for c in all_categories}
     fn = {c: 0 for c in all_categories}
 
-    correct = sum(1 for t, p in zip(true_cats, pred_cats) if t == p)
+    correct = sum(1 for t, p in zip(true_cats, pred_cats, strict=True) if t == p)
     total = len(true_cats)
     results["overall_accuracy"] = correct / total if total > 0 else 0.0
 
-    for tc, pc in zip(true_cats, pred_cats):
+    for tc, pc in zip(true_cats, pred_cats, strict=True):
         tp[tc] += 1
         if pc != tc:
             fp[pc] += 1

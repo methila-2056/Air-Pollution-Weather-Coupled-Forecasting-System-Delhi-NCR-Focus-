@@ -6,11 +6,8 @@ validates pollutant ranges, flags outliers, and saves processed data.
 
 import glob
 import os
-from typing import Optional
 
-import numpy as np
 import pandas as pd
-
 
 POLLUTANT_RANGES = {
     "pm25": (0, 1000),
@@ -104,7 +101,7 @@ def flag_statistical_outliers(df: pd.DataFrame, z_thresh: float = 4.0) -> pd.Dat
         z = (df[pollutant] - mean) / std
         is_outlier = z.abs() > z_thresh
         df.loc[is_outlier, "outlier_flags"] = df.loc[is_outlier, "outlier_flags"].apply(
-            lambda x: (x + "," if x else "") + f"{pollutant}_zscore"
+            lambda x, _p=pollutant: (x + "," if x else "") + f"{_p}_zscore"
         )
     return df
 
@@ -162,9 +159,9 @@ def save_processed(df: pd.DataFrame, output_path: str) -> None:
 
 
 def process_pollution(
-    input_dir: Optional[str] = None,
-    output_path: Optional[str] = None,
-    df: Optional[pd.DataFrame] = None,
+    input_dir: str | None = None,
+    output_path: str | None = None,
+    df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Full pipeline: load, clean, validate, save.
 

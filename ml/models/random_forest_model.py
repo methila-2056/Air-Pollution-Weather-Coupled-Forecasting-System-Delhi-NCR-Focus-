@@ -5,7 +5,6 @@ scikit-learn compatible fit/predict interface, feature importance reporting,
 and save/load via joblib.
 """
 
-from typing import List, Optional
 
 import joblib
 import numpy as np
@@ -35,7 +34,7 @@ class RandomForestModel:
     def __init__(
         self,
         n_estimators: int = DEFAULT_N_ESTIMATORS,
-        max_depth: Optional[int] = DEFAULT_MAX_DEPTH,
+        max_depth: int | None = DEFAULT_MAX_DEPTH,
         min_samples_split: int = DEFAULT_MIN_SAMPLES_SPLIT,
         random_state: int = DEFAULT_RANDOM_STATE,
         n_jobs: int = -1,
@@ -87,7 +86,7 @@ class RandomForestModel:
         """
         return self.model.predict(X)
 
-    def get_feature_importance(self, feature_names: Optional[List[str]] = None) -> dict:
+    def get_feature_importance(self, feature_names: list[str] | None = None) -> dict:
         """Return feature importances as a name -> value mapping.
 
         Args:
@@ -102,7 +101,7 @@ class RandomForestModel:
             names = list(self.feature_names_)
         if names is None:
             names = [str(i) for i in range(self.model.n_features_in_)]
-        return dict(zip(names, self.model.feature_importances_))
+        return dict(zip(names, self.model.feature_importances_, strict=True))
 
     def cross_validate(self, X, y, cv: int = 5, scoring: str = "neg_mean_squared_error"):
         """Run k-fold cross-validation and return per-fold scores.

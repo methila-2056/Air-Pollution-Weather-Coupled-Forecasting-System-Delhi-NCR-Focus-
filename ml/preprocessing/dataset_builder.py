@@ -6,15 +6,14 @@ and produces the final coupled training dataset.
 """
 
 import os
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-from .pollution_processor import process_pollution, POLLUTANT_RANGES
-from .weather_processor import process_weather
-from .fire_processor import process_fire, haversine_distance
 from .atmosphere_processor import process_atmosphere
+from .fire_processor import haversine_distance, process_fire
+from .pollution_processor import process_pollution
+from .weather_processor import process_weather
 
 FINAL_SCHEMA = [
     "timestamp", "station", "latitude", "longitude",
@@ -96,7 +95,7 @@ def merge_fire_aggregates(merged: pd.DataFrame, fires: pd.DataFrame) -> pd.DataF
                 s_mask = mask & (merged["station"] == station)
                 if has_lat_lon:
                     dists = hour_fires.apply(
-                        lambda r: haversine_distance(s_lat, s_lon, r["lat"], r["lon"]),
+                        lambda r, _lat=s_lat, _lon=s_lon: haversine_distance(_lat, _lon, r["lat"], r["lon"]),
                         axis=1,
                     )
                     within_500 = dists <= 500
@@ -113,9 +112,9 @@ def merge_fire_aggregates(merged: pd.DataFrame, fires: pd.DataFrame) -> pd.DataF
         else:
             if has_lat_lon:
                 dists = hour_fires.apply(
-                    lambda r: haversine_distance(
-                        merged.loc[mask, "latitude"].mean(),
-                        merged.loc[mask, "longitude"].mean(),
+                    lambda r, _m=mask: haversine_distance(
+                        merged.loc[_m, "latitude"].mean(),
+                        merged.loc[_m, "longitude"].mean(),
                         r["lat"], r["lon"],
                     ),
                     axis=1,
@@ -145,7 +144,6 @@ def merge_atmosphere(merged: pd.DataFrame, atmosphere: pd.DataFrame) -> pd.DataF
             merge_cols.append(col)
     if not merge_cols:
         return merged
-    atm_dedup = atmosphere.drop_duplicates(subset=merge_cols, keep="last")
     atm_cols_to_merge = [c for c in ["pbl_height"] if c in atmosphere.columns]
     if not atm_cols_to_merge:
         return merged
@@ -237,13 +235,13 @@ def print_statistics(df: pd.DataFrame) -> None:
         ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
         print(f"Time range: {ts.min()} to {ts.max()}")
     numeric_cols = [c for c in df.columns if c not in ["timestamp", "station", "outlier_flags", "weather_outlier_flags"]]
-    print(f"\nNumeric column statistics:")
+    print("\nNumeric column statistics:")
     for col in numeric_cols[:15]:
         if col in df.columns and df[col].notna().any():
             print(f"  {col}: mean={df[col].mean():.2f}, std={df[col].std():.2f}, "
                   f"min={df[col].min():.2f}, max={df[col].max():.2f}, "
                   f"missing={df[col].isna().sum()} ({100 * df[col].isna().mean():.1f}%)")
-    print(f"\nNaN summary:")
+    print("\nNaN summary:")
     for col in df.columns:
         n = df[col].isna().sum()
         if n > 0:
@@ -253,7 +251,7 @@ def print_statistics(df: pd.DataFrame) -> None:
 
 def process_and_build(
     raw_dir: str,
-    output_path: Optional[str] = None,
+    output_path: str | None = None,
 ) -> pd.DataFrame:
     """End-to-end: process each source, build coupled dataset, save."""
     print("=" * 60)

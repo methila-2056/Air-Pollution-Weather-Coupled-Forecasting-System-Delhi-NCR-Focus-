@@ -6,13 +6,11 @@ returns structured results.
 """
 
 import os
-from typing import Optional
 
-import joblib
 import numpy as np
 import pandas as pd
 
-from ..evaluation.metrics import compute_metrics, compute_aqi_category_accuracy, aqi_to_category
+from ..evaluation.metrics import compute_aqi_category_accuracy, compute_metrics
 
 
 def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray) -> dict:
@@ -42,7 +40,7 @@ def print_metrics(metrics: dict, label: str = "") -> None:
 
 
 def generate_predicted_vs_actual(
-    y_true: np.ndarray, y_pred: np.ndarray, timestamps: Optional[np.ndarray] = None
+    y_true: np.ndarray, y_pred: np.ndarray, timestamps: np.ndarray | None = None
 ) -> pd.DataFrame:
     """Create a DataFrame of predicted vs actual values for frontend plotting.
 
@@ -89,8 +87,8 @@ def full_evaluation(
     model_name: str = "unknown",
     target: str = "pm25",
     horizon: int = 1,
-    timestamps: Optional[np.ndarray] = None,
-    output_dir: Optional[str] = None,
+    timestamps: np.ndarray | None = None,
+    output_dir: str | None = None,
 ) -> dict:
     """Run complete evaluation: metrics, category accuracy, save results.
 

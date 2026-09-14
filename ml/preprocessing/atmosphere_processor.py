@@ -6,11 +6,9 @@ cleans and validates values, and saves processed data.
 
 import glob
 import os
-from typing import Optional
 
 import numpy as np
 import pandas as pd
-
 
 COLUMN_ALIASES = {
     "time": "timestamp",
@@ -134,9 +132,9 @@ def save_processed(df: pd.DataFrame, output_path: str) -> None:
 
 
 def process_atmosphere(
-    input_dir: Optional[str] = None,
-    output_path: Optional[str] = None,
-    df: Optional[pd.DataFrame] = None,
+    input_dir: str | None = None,
+    output_path: str | None = None,
+    df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Full pipeline: load, clean, validate, save."""
     if df is None:

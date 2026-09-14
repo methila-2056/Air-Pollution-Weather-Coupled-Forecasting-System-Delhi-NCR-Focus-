@@ -5,7 +5,6 @@ feature importance ranking, save/load via joblib, and optional SHAP
 explainability via get_shap_values.
 """
 
-from typing import List, Optional, Tuple, Union
 
 import joblib
 import numpy as np
@@ -91,9 +90,9 @@ class XGBoostModel:
         self,
         X,
         y,
-        eval_set: Optional[List[Tuple]] = None,
-        early_stopping_rounds: Optional[int] = None,
-        verbose: Union[bool, int, None] = False,
+        eval_set: list[tuple] | None = None,
+        early_stopping_rounds: int | None = None,
+        verbose: bool | int | None = False,
     ):
         """Train the XGBoost model with optional early stopping.
 
@@ -138,7 +137,7 @@ class XGBoostModel:
     def get_feature_importance(
         self,
         importance_type: str = "weight",
-        feature_names: Optional[List[str]] = None,
+        feature_names: list[str] | None = None,
     ) -> dict:
         """Return a name -> importance mapping.
 
@@ -173,13 +172,13 @@ class XGBoostModel:
             names = list(self.feature_names_)
         if names is None:
             names = [str(i) for i in range(self.model.n_features_in_)]
-        return dict(zip(names, importances))
+        return dict(zip(names, importances, strict=True))
 
     def get_feature_importance_ranking(
         self,
         importance_type: str = "weight",
-        n_top: Optional[int] = None,
-    ) -> List[Tuple[str, float]]:
+        n_top: int | None = None,
+    ) -> list[tuple[str, float]]:
         """Return features sorted by importance, descending.
 
         Args:
@@ -212,11 +211,11 @@ class XGBoostModel:
             raise RuntimeError("XGBoostModel must be fit before requesting SHAP values")
         try:
             import shap
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "SHAP explainability requires the 'shap' package. "
                 "Install it with: pip install shap"
-            )
+            ) from exc
         if isinstance(X, (list, tuple)):
             X = np.asarray(X, dtype=float)
         model = getattr(self.model, "get_booster", lambda: self.model)()

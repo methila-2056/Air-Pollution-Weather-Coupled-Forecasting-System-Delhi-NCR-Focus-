@@ -5,13 +5,10 @@ computes wind components, validates ranges, and saves processed data.
 """
 
 import glob
-import math
 import os
-from typing import Optional
 
 import numpy as np
 import pandas as pd
-
 
 WEATHER_VALID_RANGES = {
     "temperature": (-60, 60),
@@ -98,7 +95,7 @@ def validate_ranges(df: pd.DataFrame) -> pd.DataFrame:
         out_of_range = (df[var] < lo) | (df[var] > hi)
         df.loc[out_of_range, "weather_outlier_flags"] = df.loc[
             out_of_range, "weather_outlier_flags"
-        ].apply(lambda x: (x + "," if x else "") + f"{var}_oor")
+        ].apply(lambda x, _v=var: (x + "," if x else "") + f"{_v}_oor")
         df[var] = df[var].clip(lower=lo, upper=hi)
     df["weather_outlier_flags"] = df["weather_outlier_flags"].str.rstrip(",")
     return df
@@ -148,9 +145,9 @@ def save_processed(df: pd.DataFrame, output_path: str) -> None:
 
 
 def process_weather(
-    input_dir: Optional[str] = None,
-    output_path: Optional[str] = None,
-    df: Optional[pd.DataFrame] = None,
+    input_dir: str | None = None,
+    output_path: str | None = None,
+    df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Full pipeline: load, clean, validate, save."""
     if df is None:

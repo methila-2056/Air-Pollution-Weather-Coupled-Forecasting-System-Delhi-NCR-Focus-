@@ -145,7 +145,7 @@ def main():
         else [s for s in args.stations if s in RESOURCES]
     )
 
-    print(f"CPCB Pollution Download (opencity.in CKAN)")
+    print("CPCB Pollution Download (opencity.in CKAN)")
     print(f"  Stations  : {stations}")
     print(f"  Output dir: {output_dir}")
     print()

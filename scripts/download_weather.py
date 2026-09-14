@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 import requests
 
-
 STATIONS = {
     "Anand_Vihar": {"lat": 28.6492, "lon": 77.2918},
     "RK_Puram": {"lat": 28.5601, "lon": 77.1835},
@@ -164,7 +163,7 @@ def main():
         print("No matching stations found. Available:", list(STATIONS.keys()))
         return
 
-    print(f"Open-Meteo Weather Download")
+    print("Open-Meteo Weather Download")
     print(f"  Date range : {args.start_date} -> {args.end_date}")
     print(f"  Stations   : {list(stations.keys())}")
     print(f"  Output dir : {output_dir}")

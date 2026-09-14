@@ -29,8 +29,6 @@ dispersion'.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from ml.features.coupling import boundary_stability_index, corrected_pbl_height
@@ -70,10 +68,10 @@ class DispersionSolver:
 
     def __init__(
         self,
-        lat_min: Optional[float] = None,
-        lat_max: Optional[float] = None,
-        lon_min: Optional[float] = None,
-        lon_max: Optional[float] = None,
+        lat_min: float | None = None,
+        lat_max: float | None = None,
+        lon_min: float | None = None,
+        lon_max: float | None = None,
         step_deg: float = GRID_STEP,
         diffusivity: float = HORIZONTAL_DIFFUSIVITY,
     ):
@@ -310,15 +308,15 @@ def run_dispersion_forecast(
     wind_dir_deg: float,
     pbl_height: float,
     precip_mm: float = 0.0,
-    fires: Optional[list] = None,
+    fires: list | None = None,
     hours: int = 24,
-    dt: Optional[float] = None,
+    dt: float | None = None,
     urban_emission: float = 3.0e-3,
     start_hour: int = 8,
-    wind_hourly: Optional[list] = None,
-    pbl_hourly: Optional[list] = None,
-    precip_hourly: Optional[list] = None,
-    dir_hourly: Optional[list] = None,
+    wind_hourly: list | None = None,
+    pbl_hourly: list | None = None,
+    precip_hourly: list | None = None,
+    dir_hourly: list | None = None,
     coupled: bool = True,
 ) -> dict:
     """Run the numerical dispersion integration over `hours`.

@@ -7,7 +7,6 @@ Fallback: public FIRMS global CSV (VIIRS SNPP c2), filtered to region.
 
 import argparse
 import os
-from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
@@ -47,7 +46,7 @@ def download_via_firms_api(map_key: str, days: int, out_path: str) -> bool:
         f"{REGION_PROPS['max_lon']},{REGION_PROPS['max_lat']}/"
         f"{days}"
     )
-    print(f"  Trying FIRMS API ...")
+    print("  Trying FIRMS API ...")
     resp = requests.get(url, timeout=90)
     if resp.status_code != 200:
         print(f"    API returned HTTP {resp.status_code}. Text: {resp.text[:120]}")
@@ -66,7 +65,6 @@ def download_via_public_csv(days: int, out_path: str) -> bool:
     """Fallback: public daily FIRMS CSVs, grabbing up to `days` daily files."""
     print("  Falling back to public FIRMS daily CSVs ...")
     frames = []
-    today = datetime.utcnow()
     sensor = "VIIRS_SNPP"
     url = PUBLIC_CSV[sensor]
 
@@ -124,7 +122,7 @@ def main():
     args = parser.parse_args()
 
     out_path = os.path.join(os.path.abspath(args.output_dir), "firms_fires.csv")
-    print(f"NASA FIRMS Fire Download")
+    print("NASA FIRMS Fire Download")
     print(f"  Region     : {REGION_PROPS}")
     print(f"  Output     : {out_path}")
     print()

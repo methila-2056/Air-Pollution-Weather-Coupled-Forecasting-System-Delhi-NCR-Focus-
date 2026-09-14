@@ -1,6 +1,5 @@
 import os
 
-
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 RAW_DIR = os.path.join(DATA_DIR, "raw")
 PROCESSED_DIR = os.path.join(DATA_DIR, "processed")

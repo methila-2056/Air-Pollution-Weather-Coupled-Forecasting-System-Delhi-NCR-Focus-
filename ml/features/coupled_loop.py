@@ -20,19 +20,19 @@ statistical forecast.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable, Optional
 
 import numpy as np
 
 from .coupling import (
-    estimate_aod,
-    surface_radiation_attenuation,
-    pbl_suppression_factor,
-    surface_temperature_damping,
     boundary_stability_index,
     corrected_pbl_height,
     coupling_feedback_score,
+    estimate_aod,
+    pbl_suppression_factor,
+    surface_radiation_attenuation,
+    surface_temperature_damping,
 )
 
 # Predictor signature: predict(features: dict, horizon_hours: int) -> dict
@@ -59,8 +59,6 @@ def _apply_coupling_forcing(features: dict, pred: dict, hour: int) -> dict:
     damping = surface_temperature_damping(pm25, hour)
 
     base_temp = float(f.get("temperature") or 20.0)
-    # diurnal swing estimate: pull predicted temp toward the aerosol-damped value
-    diurnal_swing = abs(base_temp - 13.0)  # rough baseline mid value
     damped_temp = 13.0 + (base_temp - 13.0) * damping
 
     stability = boundary_stability_index(pm25, pbl, wind, hour)
@@ -107,7 +105,7 @@ def _apply_coupling_forcing(features: dict, pred: dict, hour: int) -> dict:
 def run_coupled_forecast(
     predict_func: Callable,
     features: dict,
-    horizons: Optional[list] = None,
+    horizons: list | None = None,
     start_hour: int = 12,
 ) -> dict:
     """Run the sequential two-way coupling forecast.
@@ -133,12 +131,10 @@ def run_coupled_forecast(
     coupled = []
     feedback_path = []
     state = deepcopy(features)
-    running = {}   # last predicted concentrations
 
     # step continuously to the farthest horizon, record at requested horizons
     for h in range(1, max(horizons) + 1):
         pred = _next_prediction(predict_func, state)
-        running = pred
 
         state = _apply_coupling_forcing(state, pred, hour)
         hour = (hour + 1) % 24

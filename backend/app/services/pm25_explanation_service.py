@@ -18,12 +18,11 @@ from typing import Any
 import pandas as pd
 
 from ..models.db_models import Forecast, Station
+from ..utils.helpers import repo_root
 
 logger = logging.getLogger("pm25_explanation_service")
 
-_SERVICE_DIR = pathlib.Path(__file__).resolve().parent
-_REPO_ROOT = _SERVICE_DIR.parents[2]
-DEFAULT_MODEL_DIR = _REPO_ROOT / "models" / "pm25"
+DEFAULT_MODEL_DIR = repo_root() / "models" / "pm25"
 
 _valid_horizons = {1, 6, 12, 24, 48, 72}
 

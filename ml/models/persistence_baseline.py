@@ -5,7 +5,6 @@ the prediction for any forecast horizon. It is the simplest forecasting model
 that can be built, and any useful ML model should outperform it.
 """
 
-from typing import Union
 
 import numpy as np
 
@@ -32,8 +31,8 @@ class PersistenceBaseline:
                 do not change with horizon since it is a naive baseline).
         """
         self.horizon = horizon
-        self.last_value: Union[float, None] = None
-        self.n_features_: Union[int, None] = None
+        self.last_value: float | None = None
+        self.n_features_: int | None = None
 
     def fit(self, X, y):
         """Store the last observed value as the persistent prediction.

@@ -13,7 +13,6 @@ import argparse
 import os
 import pathlib
 import sys
-from datetime import datetime
 
 import pandas as pd
 

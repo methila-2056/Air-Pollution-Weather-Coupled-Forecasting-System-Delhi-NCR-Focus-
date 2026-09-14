@@ -13,10 +13,9 @@ import os
 import pathlib
 
 from ..schemas.schemas import ModelPerformanceResponse
+from ..utils.helpers import repo_root
 
-_SERVICE_DIR = pathlib.Path(__file__).resolve().parent
-_REPO_ROOT = _SERVICE_DIR.parents[2]
-DEFAULT_MODEL_DIR = _REPO_ROOT / "models" / "pm25"
+DEFAULT_MODEL_DIR = repo_root() / "models" / "pm25"
 
 
 def get_evaluation_path() -> pathlib.Path:

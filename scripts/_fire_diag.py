@@ -11,8 +11,7 @@ import pandas as pd
 
 from backend.app.database import SessionLocal
 from backend.app.models.db_models import FireReading, PollutionReading, Station, WeatherReading
-from ml.preprocessing.training_dataset import (_bearing_array, _haversine_arrays,
-                                               align_observations, coerce_utc_naive)
+from ml.preprocessing.training_dataset import _bearing_array, _haversine_arrays, align_observations, coerce_utc_naive
 
 LOG = Path(__file__).resolve().parent.parent / "scripts" / "_fire_diag.log"
 

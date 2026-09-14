@@ -10,8 +10,6 @@ download_weather.py and prints a reminder.
 
 import argparse
 import os
-import sys
-import time
 
 import pandas as pd
 
@@ -135,7 +133,7 @@ def main():
 
     output_dir = os.path.abspath(args.output_dir)
 
-    print(f"ERA5 Atmosphere Download")
+    print("ERA5 Atmosphere Download")
     print(f"  Date range : {args.start_date} -> {args.end_date}")
     print(f"  Area       : {LAT_MIN}-{LAT_MAX} lat, {LON_MIN}-{LON_MAX} lon")
     print(f"  Output dir : {output_dir}")

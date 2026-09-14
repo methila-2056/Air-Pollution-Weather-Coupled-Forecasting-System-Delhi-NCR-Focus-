@@ -12,12 +12,10 @@ import glob
 import json
 import os
 import re
-import shutil
 
 import pandas as pd
 
 from ml.evaluation.metrics import compute_metrics
-
 
 MODEL_DIR_DEFAULT = "models"
 

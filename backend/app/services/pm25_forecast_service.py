@@ -19,12 +19,11 @@ from typing import Any
 import pandas as pd
 
 from ..models.db_models import FireReading, PollutionReading, Station, WeatherReading
+from ..utils.helpers import repo_root
 
 logger = logging.getLogger("pm25_forecast_service")
 
-_SERVICE_DIR = pathlib.Path(__file__).resolve().parent
-_REPO_ROOT = _SERVICE_DIR.parents[2]
-DEFAULT_MODEL_DIR = _REPO_ROOT / "models" / "pm25"
+DEFAULT_MODEL_DIR = repo_root() / "models" / "pm25"
 
 WINDOW_DAYS = 5
 MIN_POLLUTION_ROWS = 4

@@ -9,16 +9,15 @@ horizon per pollutant, saves models/metrics/importances.
 import json
 import os
 from datetime import datetime
-from typing import Optional
 
 import joblib
 import numpy as np
 import pandas as pd
 
-from ..evaluation.metrics import compute_metrics, generate_evaluation_report
-from ..models.xgboost_model import XGBoostModel
-from ..models.random_forest_model import RandomForestModel
+from ..evaluation.metrics import compute_metrics
 from ..models.persistence_baseline import PersistenceBaseline
+from ..models.random_forest_model import RandomForestModel
+from ..models.xgboost_model import XGBoostModel
 
 HORIZONS = [1, 6, 12, 24, 48, 72]
 ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
@@ -107,7 +106,7 @@ def train_single_model(
     X_val: np.ndarray, y_val: np.ndarray,
     model_type: str,
     horizon: int,
-    feature_names: Optional[list] = None,
+    feature_names: list | None = None,
 ) -> tuple:
     """Train a single model and return (model_wrapper, val_metrics)."""
     if model_type == "persistence":
@@ -151,7 +150,7 @@ def save_model(model, model_type: str, target: str, horizon: int, model_dir: str
 
 
 def save_feature_importance(model, model_type: str, target: str, horizon: int,
-                            feature_names: list, output_dir: str) -> Optional[str]:
+                            feature_names: list, output_dir: str) -> str | None:
     """Save feature importances to CSV (tree-based models only)."""
     if model_type == "persistence":
         return None
@@ -173,9 +172,9 @@ def save_feature_importance(model, model_type: str, target: str, horizon: int,
 def train_all(
     data_path: str = DEFAULT_DATA_PATH,
     model_dir: str = MODEL_DIR,
-    model_types: Optional[list] = None,
-    horizons: Optional[list] = None,
-    targets: Optional[list] = None,
+    model_types: list | None = None,
+    horizons: list | None = None,
+    targets: list | None = None,
 ) -> dict:
     """Full training pipeline for all models, horizons, and pollutants.
 
@@ -257,7 +256,7 @@ def train_all(
                 test_metrics = compute_metrics(y_te, y_test_pred)
                 print(f"      Test MAE={test_metrics['mae']:.2f} RMSE={test_metrics['rmse']:.2f} R2={test_metrics['r2']:.3f} MAPE={test_metrics['mape']:.1f}%")
 
-                path = save_model(model, model_type, target, horizon, model_dir)
+                save_model(model, model_type, target, horizon, model_dir)
                 save_feature_importance(model, model_type, target, horizon, feature_cols, model_dir)
 
                 pva_df = pd.DataFrame({
@@ -292,7 +291,7 @@ def train_all(
     metrics_path = os.path.join(model_dir, "metrics.json")
     if os.path.exists(metrics_path):
         try:
-            with open(metrics_path, "r", encoding="utf-8") as f:
+            with open(metrics_path, encoding="utf-8") as f:
                 existing = json.load(f)
             new_keys = {(e["model"], e["target"], e["horizon"]) for e in all_metrics_summary}
             all_metrics_summary = [

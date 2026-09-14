@@ -131,7 +131,6 @@ def main():
 
     all_records = []
     day = start
-    total_days = (end - start).days + 1
     while day <= end:
         records = generate_fires_for_date(day, args.daily_budget)
         all_records.extend(records)
@@ -169,7 +168,7 @@ def main():
     combined.to_csv(out_path, index=False)
     print(f"Saved {len(combined):,} total records -> {out_path}")
     print(f"  Date range: {combined['acq_date'].min()} to {combined['acq_date'].max()}")
-    print(f"  Synthetic records flagged with column 'synthetic'=True")
+    print("  Synthetic records flagged with column 'synthetic'=True")
 
 
 if __name__ == "__main__":

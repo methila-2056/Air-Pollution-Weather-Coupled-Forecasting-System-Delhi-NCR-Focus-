@@ -8,11 +8,8 @@ and saves processed data.
 import glob
 import math
 import os
-from typing import Optional
 
-import numpy as np
 import pandas as pd
-
 
 DELHI_CENTER_LAT = 28.6139
 DELHI_CENTER_LON = 77.2090
@@ -169,9 +166,9 @@ def save_processed(df: pd.DataFrame, output_path: str) -> None:
 
 
 def process_fire(
-    input_dir: Optional[str] = None,
-    output_path: Optional[str] = None,
-    df: Optional[pd.DataFrame] = None,
+    input_dir: str | None = None,
+    output_path: str | None = None,
+    df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Full pipeline: load, clean, filter, enrich, save."""
     if df is None:

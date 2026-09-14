@@ -4,9 +4,7 @@ Loads trained models, accepts latest feature vectors, generates 72-hour
 PM2.5 forecasts with confidence estimation based on model uncertainty.
 """
 
-import glob
 import os
-from typing import Optional
 
 import joblib
 import numpy as np
@@ -51,7 +49,7 @@ class Predictor:
             else:
                 print(f"  No model found for t+{horizon}h at {path}")
 
-    def predict_single(self, features: np.ndarray, horizon: int) -> Optional[float]:
+    def predict_single(self, features: np.ndarray, horizon: int) -> float | None:
         """Generate a single prediction for a given horizon.
 
         Args:

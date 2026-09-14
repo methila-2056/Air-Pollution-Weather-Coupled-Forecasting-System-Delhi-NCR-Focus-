@@ -1,5 +1,26 @@
 import math
+import pathlib
 from datetime import datetime
+
+_MODELS_DIR = "models"
+
+
+def repo_root(start: pathlib.Path | None = None) -> pathlib.Path:
+    """Walk up from ``start`` to the repository root that holds ``models/pm25``.
+
+    The backend may run from a bare-metal checkout (backend/app/services -> repo)
+    or from a container where the source sits at /app/app/services and the
+    models volume mounts at /app/models. Walking up until a parent containing
+    ``models/pm25`` is found keeps the model directory resolvable in both
+    layouts. ``pyproject.toml`` is used as a fallback marker (it is absent in
+    the container image, where only the mounted ML ``models/`` directory is
+    guaranteed to travel).
+    """
+    current = (start or pathlib.Path(__file__).resolve().parent).resolve()
+    for parent in [current, *current.parents]:
+        if (parent / _MODELS_DIR / "pm25").is_dir() or (parent / "pyproject.toml").is_file():
+            return parent
+    return current.parents[min(2, len(current.parents) - 1)]
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
