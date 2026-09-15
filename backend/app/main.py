@@ -11,6 +11,7 @@ from sqlalchemy import func, text
 from .api import (
     alerts,
     atmosphere,
+    auth,
     coupling,
     dispersion,
     events,
@@ -84,6 +85,8 @@ async def lifespan(app: FastAPI):
             seeded = seed_data(db)
             if seeded:
                 logger.info("Seeded %d default Delhi NCR stations", seeded)
+            from .api.auth import ensure_demo_user
+            ensure_demo_user(db)
             if migrated:
                 logger.info("Alembic migrations applied at startup")
     except Exception as exc:
@@ -129,6 +132,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(stations.router, prefix="/api", tags=["Stations"])
 app.include_router(pollution.router, prefix="/api", tags=["Pollution"])
 # NOTE: pm25_forecast must be registered BEFORE forecast because the latter has

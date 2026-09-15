@@ -4,32 +4,85 @@
 
 @layer base {
   body {
-    @apply bg-navy-900 text-gray-100 antialiased;
+    @apply bg-slate-100 text-slate-800 antialiased;
+  }
+  ::selection {
+    @apply bg-inst-200 text-inst-900;
+  }
+  /* Visible keyboard focus for accessibility (WCAG 2.x). */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    @apply outline-2 outline-offset-2 outline-inst-500;
+  }
+  /* Honor reduced-motion preferences. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
 @layer components {
   .card {
-    @apply bg-navy-800 border border-navy-700 rounded-xl p-6;
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card;
   }
   .card-header {
-    @apply text-sm font-medium text-gray-400 uppercase tracking-wider mb-4;
+    @apply mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500;
   }
   .stat-value {
-    @apply text-3xl font-bold;
+    @apply text-3xl font-bold text-slate-900;
   }
   .btn-primary {
-    @apply bg-accent-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors;
+    @apply rounded-lg bg-inst-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-inst-800;
+  }
+  .btn-outline {
+    @apply rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50;
   }
   .select {
-    @apply bg-navy-700 border border-navy-600 text-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent-blue;
+    @apply rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none focus:border-inst-500 focus:ring-2 focus:ring-inst-200;
   }
   .select option {
-    @apply bg-navy-700 text-gray-200;
+    @apply bg-white text-slate-800;
+  }
+  .input {
+    @apply rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-inst-500 focus:ring-2 focus:ring-inst-200;
+  }
+  .nav-link {
+    @apply inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-inst-300 hover:text-inst-800;
+  }
+  .nav-link-active {
+    @apply border-inst-700 text-inst-800;
   }
 }
 
-/* Leaflet map overrides */
+/* Leaflet light-theme overrides */
 .leaflet-container {
-  background: #111640;
+  @apply rounded-xl;
+  background: #e8eef3;
+  font-family: inherit;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  @apply rounded-lg border border-slate-200 bg-white;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.15);
+}
+.leaflet-popup-content {
+  @apply text-slate-800;
+}
+.leaflet-bar a {
+  @apply text-slate-700;
+}
+.leaflet-control-attribution {
+  @apply bg-white/80 text-[10px] text-slate-500;
+}
+.leaflet-control-attribution a {
+  @apply text-slate-600;
 }

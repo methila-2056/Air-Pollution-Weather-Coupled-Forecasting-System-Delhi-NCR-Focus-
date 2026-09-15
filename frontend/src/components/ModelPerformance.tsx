@@ -8,13 +8,14 @@ const MODEL_LABELS: Record<string, string> = {
 }
 
 const MODEL_COLORS: Record<string, string> = {
-  persistence: '#6b7280',
-  random_forest: '#22c55e',
-  xgboost: '#3b82f6',
+  persistence: '#64748b',
+  random_forest: '#16a34a',
+  xgboost: '#0B4F8A',
 }
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: '#111640', border: '1px solid #252b68', borderRadius: 8 },
+  contentStyle: { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 },
+  labelStyle: { color: '#334155' },
 }
 
 function fmt(v: number | null | undefined, digits = 2) {
@@ -29,7 +30,7 @@ function dateFmt(s: string | null | undefined) {
 
 export default function ModelPerformance({ data }: { data: ModelPerformanceResponse }) {
   if (!data.results?.length) {
-    return <div className="card"><p className="text-gray-400">No measured metrics available yet.</p></div>
+    return <div className="card"><p className="text-slate-500">No measured metrics available yet.</p></div>
   }
 
   const models = data.evaluated_models ?? Object.keys(data.results[0].metrics)
@@ -57,12 +58,12 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
   return (
     <div className="space-y-6">
       {/* Context / summary */}
-      <div className="card">
+<div className="card">
         <h3 className="card-header">Measured Test-Set Performance</h3>
-        <p className="text-sm text-gray-400 mb-4">
-          Target: <span className="text-gray-200">{data.target?.toUpperCase()}</span> |
+        <p className="text-sm text-slate-600 mb-4">
+          Target: <span className="font-semibold text-slate-900">{data.target?.toUpperCase()}</span> |
           Models: {data.evaluated_models?.join(', ')} |
-          Features: <span className="text-gray-200">{data.feature_count}</span> |
+          Features: <span className="font-semibold text-slate-900">{data.feature_count}</span> |
           Horizons: {data.horizons?.map(h => `+${h}h`).join(', ')}
           <br />
           Split: {data.split_type} — all metrics computed on the held-out test period only,
@@ -72,7 +73,7 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-gray-400 border-b border-navy-700">
+              <tr className="text-slate-500 border-b border-slate-200">
                 <th className="text-left py-2">Split</th>
                 <th className="text-left py-2">Start</th>
                 <th className="text-left py-2">End</th>
@@ -81,11 +82,11 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
             </thead>
             <tbody>
               {splitEntries.map(([name, s]) => (
-                <tr key={name} className="border-b border-navy-700/50">
-                  <td className="py-2 capitalize">{name}</td>
-                  <td className="py-2">{dateFmt(s.start)}</td>
-                  <td className="py-2">{dateFmt(s.end)}</td>
-                  <td className="text-right py-2">{s.n_rows?.toLocaleString()}</td>
+                <tr key={name} className="border-b border-slate-100">
+                  <td className="py-2 text-slate-900 capitalize">{name}</td>
+                  <td className="py-2 text-slate-700">{dateFmt(s.start)}</td>
+                  <td className="py-2 text-slate-700">{dateFmt(s.end)}</td>
+                  <td className="text-right py-2 text-slate-700">{s.n_rows?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -98,13 +99,13 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
         <h3 className="card-header">Mean Absolute Error by Horizon (lower is better)</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1a1f52" />
-            <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
-            <YAxis stroke="#6b7280" fontSize={12} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+            <YAxis stroke="#64748b" fontSize={12} />
             <Tooltip {...tooltipStyle} />
             <Legend />
             {models.map(m => (
-              <Bar key={m} dataKey={MODEL_LABELS[m] ?? m} fill={MODEL_COLORS[m] ?? '#3b82f6'} radius={[4, 4, 0, 0]} />
+              <Bar key={m} dataKey={MODEL_LABELS[m] ?? m} fill={MODEL_COLORS[m] ?? '#0B4F8A'} radius={[4, 4, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -115,13 +116,13 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
         <h3 className="card-header">R-squared by Horizon (higher is better)</h3>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={r2Data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1a1f52" />
-            <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
-            <YAxis stroke="#6b7280" fontSize={12} domain={[0, 1]} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+            <YAxis stroke="#64748b" fontSize={12} domain={[0, 1]} />
             <Tooltip {...tooltipStyle} />
             <Legend />
             {models.map(m => (
-              <Line key={m} type="monotone" dataKey={MODEL_LABELS[m] ?? m} stroke={MODEL_COLORS[m] ?? '#3b82f6'} strokeWidth={2} dot={{ r: 3 }} />
+              <Line key={m} type="monotone" dataKey={MODEL_LABELS[m] ?? m} stroke={MODEL_COLORS[m] ?? '#0B4F8A'} strokeWidth={2} dot={{ r: 3 }} />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -133,7 +134,7 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-gray-400 border-b border-navy-700">
+              <tr className="text-slate-500 border-b border-slate-200">
                 <th className="text-left py-2">Horizon</th>
                 {models.map(m => (
                   <th key={m} className="text-left py-2 px-2">{MODEL_LABELS[m] ?? m}</th>
@@ -143,23 +144,23 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
             </thead>
             <tbody>
               {data.results.map(r => (
-                <tr key={r.horizon_hours} className="border-b border-navy-700/50">
-                  <td className="py-2 font-medium">+{r.horizon_hours}h</td>
+                <tr key={r.horizon_hours} className="border-b border-slate-100">
+                  <td className="py-2 font-medium text-slate-900">+{r.horizon_hours}h</td>
                   {models.map(m => {
                     const mm = r.metrics[m]
                     return (
-                      <td key={m} className="py-2 px-2 text-xs">
+                      <td key={m} className="py-2 px-2 text-xs text-slate-700">
                         MAE {fmt(mm?.mae)} · RMSE {fmt(mm?.rmse)} · R² {fmt(mm?.r2, 3)}
                       </td>
                     )
                   })}
-                  <td className="text-right py-2">{r.n_test?.toLocaleString()}</td>
+                  <td className="text-right py-2 text-slate-700">{r.n_test?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-500 mt-3">
+        <p className="text-xs text-slate-500 mt-3">
           Persistence = last observed PM2.5 (pm25_lag1). Test period shown per horizon;
           all three models are scored on the exact same rows.
         </p>

@@ -88,6 +88,17 @@ Authoritative definitions live in `backend/app/api/*.py` and
 | GET | `/api/forecast/pm25/model-card` | Deployed model card (features, horizons, uncertainty metadata) |
 | GET | `/api/forecast/{forecast_id}/explanation` | Forecast-specific SHAP explanation |
 
+## Authentication (additive portal layer — data APIs stay public)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/login` | `{email, password}` → `{access_token, token_type, user, expires_in}` (HS256 JWT, stdlib-signed) |
+| GET | `/api/auth/me` | Current user profile — requires `Authorization: Bearer <token>` |
+| POST | `/api/auth/logout` | Idempotent logout (stateless tokens; returns user), requires bearer token |
+| GET | `/api/auth/demo` | Env-configured demo credentials for the login page hint (dev only) |
+
+All forecasting / observation endpoints remain public so scripts and tests keep working unchanged;
+route protection is enforced client-side on the protected portal pages.
+
 ## Notes
 - Horizon values: `[1, 6, 12, 24, 48, 72]` hours.
 - AQI categories: `Good`, `Satisfactory`, `Moderate`, `Poor`, `Very Poor`, `Severe`.

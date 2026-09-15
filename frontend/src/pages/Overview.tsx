@@ -8,6 +8,8 @@ import InversionPanel from '../components/InversionPanel'
 import CouplingPanel from '../components/CouplingPanel'
 import StubblePlume from '../components/StubblePlume'
 import ExplainabilityPanel from '../components/ExplainabilityPanel'
+import PageHeader from '../components/PageHeader'
+import EmptyState from '../components/EmptyState'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import type { Station, PollutionReading, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, CouplingData, SummaryResponse } from '../types'
 
@@ -82,40 +84,42 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Delhi NCR Air Intelligence</h1>
-          <p className="text-gray-400 text-sm">Real-time monitoring & 72-hour forecasting</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={e => setAutoRefresh(e.target.checked)}
-              className="accent-blue-500"
-            />
-            Auto-refresh (1 min)
-          </label>
-          <a
-            href={getForecastExportUrl(selectedStation, 72)}
-            className="bg-navy-700 hover:bg-navy-600 border border-navy-600 rounded-lg px-4 py-2 text-sm"
-          >
-            Export CSV
-          </a>
-          <select
-            value={selectedStation}
-            onChange={e => setSelectedStation(e.target.value)}
-            className="bg-navy-800 border border-navy-700 rounded-lg px-4 py-2 text-sm"
-          >
-            {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            {!stations.length && <option>Anand Vihar</option>}
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        title="Delhi NCR Air Intelligence"
+        subtitle="Real-time monitoring & 72-hour forecasting — consolidated operations view"
+        breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Overview' }]}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer select-none items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={e => setAutoRefresh(e.target.checked)}
+                className="h-3.5 w-3.5 accent-inst-700"
+              />
+              Auto-refresh (1 min)
+            </label>
+            <a
+              href={getForecastExportUrl(selectedStation, 72)}
+              className="btn-outline"
+            >
+              Export CSV
+            </a>
+            <select
+              value={selectedStation}
+              onChange={e => setSelectedStation(e.target.value)}
+              className="select"
+              aria-label="Select station"
+            >
+              {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              {!stations.length && <option>Anand Vihar</option>}
+            </select>
+          </div>
+        }
+      />
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatCard
             label="NCR Average AQI"
             value={summary.ncr_avg_aqi?.toFixed(0) ?? '--'}
@@ -137,28 +141,30 @@ export default function Overview() {
       )}
 
       {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <span>{error}</span>
           <button
             onClick={() => refreshAll()}
-            className="bg-red-700 hover:bg-red-600 rounded px-3 py-1 text-xs whitespace-nowrap"
+            className="whitespace-nowrap rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
           >
             Retry
           </button>
         </div>
       )}
 
-      {loading && <div className="text-center py-12 text-gray-400">Loading data...</div>}
+      {loading && <div className="py-12 text-center text-slate-400">Loading data...</div>}
 
       {!loading && !error && !selectedReading && (
-        <div className="bg-navy-800 border border-navy-700 rounded-lg p-4 text-sm text-gray-400">
-          No pollution data available for {selectedStation} yet. Run the official CPCB ingestion once the backend
-          has a data.gov.in API key, then refresh this page.
+        <div className="card border-dashed">
+          <EmptyState
+            title="No pollution data for this station yet"
+            hint="Run the official CPCB ingestion once the backend has a data.gov.in API key, then refresh this page."
+          />
         </div>
       )}
 
-      <div className="flex items-center justify-between text-sm text-gray-400">
-        <h2 className="text-base font-semibold text-white">Latest observation</h2>
+      <div className="flex items-center justify-between text-sm text-slate-500">
+        <h2 className="text-base font-bold text-slate-900">Latest observation</h2>
         {selectedReading ? (
           <span>
             {selectedReading.station} · {selectedReading.timestamp.slice(0, 16)}Z
@@ -168,7 +174,7 @@ export default function Overview() {
         )}
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <AQICard label="AQI" value={selectedReading?.aqi} />
         <AQICard label="PM2.5" value={selectedReading?.pm25} unit="μg/m³" />
         <AQICard label="PM10" value={selectedReading?.pm10} unit="μg/m³" />
@@ -179,26 +185,26 @@ export default function Overview() {
         <AQICard label="Category" value={selectedReading ? aqiCategory(selectedReading.aqi) : '--'} />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <AQICard label="Temperature" value={weather?.temperature} unit="°C" />
         <AQICard label="Humidity" value={weather?.humidity} unit="%" />
         <AQICard label="Wind Speed" value={weather?.wind_speed} unit="m/s" />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="text-lg font-semibold mb-3">72-Hour AQI Forecast</h2>
+          <h2 className="card-header">72-Hour AQI Forecast</h2>
           <ForecastChart data={forecast} pollutant="aqi_pred" color="#3b82f6" />
         </div>
         <InversionPanel data={inversion} />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid gap-6 lg:grid-cols-2">
         <StubblePlume data={plumeRisk} />
         <ExplainabilityPanel data={explanation} />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid gap-6 lg:grid-cols-2">
         <CouplingPanel data={coupling} />
         <InversionPanel data={inversion} />
       </div>

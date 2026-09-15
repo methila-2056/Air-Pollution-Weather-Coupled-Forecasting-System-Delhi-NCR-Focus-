@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     data_gov_ncr_cities: str = "Delhi,Gurugram,Noida,Ghaziabad,Faridabad"
     data_gov_timeout: int = 30
 
+    # --- Authentication (SIH26082 UI login layer) ---
+    secret_key: str = "aerocast-dev-secret-change-me-in-production"
+    access_token_expire_minutes: int = 480  # 8 hours — one operational shift
+    # Demo account seeded at startup; override via DEMO_USER_* env vars.
+    demo_user_email: str = "analyst@aerocast.in"
+    demo_user_name: str = "Demo Analyst"
+    demo_user_role: str = "Analyst"
+    demo_user_password: str = "AeroCast@2026"
+
     model_config = {"env_file": _ENV_FILE}
 
 @lru_cache

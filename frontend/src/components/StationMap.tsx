@@ -1,6 +1,7 @@
 import { MapContainer, TileLayer, Popup, CircleMarker, Polyline } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Station, FireHotspot, PollutionReading } from '../types'
+import { aqiStyle } from '../lib/aqi'
 
 interface WindVector {
   lat: number
@@ -31,12 +32,7 @@ function frpRadius(frp?: number | null): number {
 }
 
 function aqiColor(aqi?: number | null): string {
-  const v = aqi ?? 0
-  if (v <= 50) return '#00e400'
-  if (v <= 100) return '#ffff00'
-  if (v <= 200) return '#ff7e00'
-  if (v <= 300) return '#ff0000'
-  return '#7e0023'
+  return aqiStyle(aqi ?? null).hex
 }
 
 function windArrowPoints(w: WindVector): [number, number][] {
@@ -73,7 +69,7 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
     <MapContainer center={[28.6139, 77.2090]} zoom={10} className="h-96 rounded-xl z-0">
       <TileLayer
         attribution='&copy; OpenStreetMap contributors &copy; CARTO'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
       {fires.map((f, i) => (
         <CircleMarker
@@ -96,7 +92,7 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
         <Polyline
           key={`wind-${i}`}
           positions={windArrowPoints(w)}
-          pathOptions={{ color: '#06b6d4', weight: 2, opacity: 0.8 }}
+          pathOptions={{ color: '#0891b2', weight: 2, opacity: 0.8 }}
         />
       ))}
       {stations.map(s => {
@@ -111,16 +107,16 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
           >
             <Popup>
               <div className="text-sm">
-                <p className="font-bold">{s.name}</p>
-                <p className="text-gray-500">{s.city}{s.state ? `, ${s.state}` : ''}</p>
+                <p className="font-bold text-slate-900">{s.name}</p>
+                <p className="text-slate-500">{s.city}{s.state ? `, ${s.state}` : ''}</p>
                 {reading ? (
                   <>
-                    <p>AQI: {reading.aqi?.toFixed(0) ?? '--'}</p>
-                    <p>PM2.5: {reading.pm25?.toFixed(1) ?? '--'} μg/m³</p>
-                    <p>{reading.timestamp.slice(0, 16)}</p>
+                    <p className="text-slate-800">AQI: {reading.aqi?.toFixed(0) ?? '--'}</p>
+                    <p className="text-slate-800">PM2.5: {reading.pm25?.toFixed(1) ?? '--'} μg/m³</p>
+                    <p className="text-slate-500">{reading.timestamp.slice(0, 16)}</p>
                   </>
                 ) : (
-                  <p className="text-gray-400">No pollution reading yet</p>
+                  <p className="text-slate-400">No pollution reading yet</p>
                 )}
               </div>
             </Popup>

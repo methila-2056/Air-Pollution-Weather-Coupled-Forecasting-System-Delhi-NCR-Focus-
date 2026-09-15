@@ -3,6 +3,35 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.4.0] - 2026-09
+
+### Added
+- **Institutional light-theme UI redesign (full frontend overhaul).** The dark
+  developer dashboard is replaced with a credible government/NGO atmospheric-
+  services portal: deep institutional blue (`inst` palette) + white/light
+  surfaces, national header with SIH26082 badge, secondary section navigation,
+  breadcrumb-ready pages, footer disclaimer, `Inter`/Noto Sans font stack,
+  WCAG-aware focus rings, and `prefers-reduced-motion` support.
+  - New reusable components: `PageHeader`, `KpiCard`, `LoadingState` (skeleton),
+    `ErrorState` (retry), `EmptyState`, `AQIBadge`.
+  - Light CARTO basemap + light-themed Leaflet overrides; canonical CPCB AQI
+    colour table centralised in `frontend/src/lib/aqi.ts`.
+  - Legacy science pages (Overview, Spatial Forecast, AI Explanation, Data
+    Tools) preserved and reachable under their original routes.
+- **Portal authentication layer (additive, zero new dependencies).**
+  - Backend: `hashlib.scrypt` password hashing + hand-rolled HS256 JWT (stdlib
+    only) in `backend/app/security.py`; new `users` table (alembic
+    `a1b2c3d4e5f6` + SQLite `apply_migrations`); idempotent demo-user seeding at
+    startup; endpoints `POST /api/auth/login`, `GET /api/auth/me`,
+    `POST /api/auth/logout`, `GET /api/auth/demo`. All data APIs remain public.
+  - Frontend: `AuthContext`, `ProtectedRoute` guard, `/login` page with
+    password visibility toggle + demo autofill, `/profile` page, user menu with
+    avatar initials and sign-out. Credentials fully env-driven (`SECRET_KEY`,
+    `DEMO_USER_*`).
+
+### Changed
+- `docs/UI_REDESIGN_AUDIT.md` — frontend/UX + authentication audit and plan.
+
 ## [1.3.0] - 2026-09
 
 ### Added

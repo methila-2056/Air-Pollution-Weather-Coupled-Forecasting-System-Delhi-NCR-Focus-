@@ -1,10 +1,49 @@
 import axios from 'axios'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials } from '../types'
+
+const TOKEN_KEY = 'aerocast_token'
+const USER_KEY = 'aerocast_user'
+
+export const getStoredToken = () => sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY)
+export const getStoredUser = (): AuthUser | null => {
+  const raw = sessionStorage.getItem(USER_KEY) ?? localStorage.getItem(USER_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AuthUser
+  } catch {
+    return null
+  }
+}
+export const storeSession = (token: string, user: AuthUser) => {
+  sessionStorage.setItem(TOKEN_KEY, token)
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user))
+}
+export const clearSession = () => {
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+}
 
 const api = axios.create({
   baseURL: '/api',
   timeout: 15000,
 })
+
+api.interceptors.request.use((config) => {
+  const token = getStoredToken()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+export const login = (email: string, password: string) =>
+  api.post<LoginResponse>('/auth/login', { email, password })
+export const getMe = () => api.get<AuthUser>('/auth/me')
+export const logout = () => api.post<AuthUser>('/auth/logout')
+export const getDemoCredentials = () => api.get<DemoCredentials>('/auth/demo')
 
 export const getStations = () => api.get<Station[]>('/stations')
 export const getPollutionLatest = () => api.get<PollutionReading[]>('/pollution/latest')

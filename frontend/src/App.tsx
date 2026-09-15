@@ -1,5 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import ProtectedRoute from './auth/ProtectedRoute'
+import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import Overview from './pages/Overview'
 import Forecast72h from './pages/Forecast72h'
@@ -11,23 +13,36 @@ import Alerts from './pages/Alerts'
 import ModelPerformancePage from './pages/ModelPerformancePage'
 import SpatialForecastPage from './pages/SpatialForecastPage'
 import DataTools from './pages/DataTools'
+import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
   return (
-    <Layout>
-      <Routes>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/overview" element={<Overview />} />
         <Route path="/forecast" element={<Forecast72h />} />
         <Route path="/map" element={<NCRMap />} />
         <Route path="/atmosphere" element={<Atmosphere />} />
         <Route path="/stubble" element={<StubblePlumePage />} />
+        <Route path="/fire-plume" element={<StubblePlumePage />} />
         <Route path="/explanation" element={<AIExplanation />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/performance" element={<ModelPerformancePage />} />
+        <Route path="/model-performance" element={<ModelPerformancePage />} />
         <Route path="/spatial" element={<SpatialForecastPage />} />
         <Route path="/data" element={<DataTools />} />
-      </Routes>
-    </Layout>
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="*" element={<Dashboard />} />
+      </Route>
+    </Routes>
   )
 }

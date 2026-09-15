@@ -547,3 +547,24 @@ export interface GrapAssessment {
   measures: string[]
   source: string
 }
+
+export interface AuthUser {
+  id: number
+  email: string
+  name: string
+  role: string
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  user: AuthUser
+  expires_in: number
+}
+
+export interface DemoCredentials {
+  email: string
+  password: string
+  name: string
+  role: string
+}

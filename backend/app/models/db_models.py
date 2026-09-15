@@ -122,6 +122,22 @@ class Alert(Base):
     factors = Column(String)
     recommendation = Column(String)
 
+class User(Base):
+    """Portal account used by the UI authentication layer (SIH26082).
+
+    Stored passwords are scrypt-hashed with a per-user random salt; only the
+    hex-encoded salt and hash are persisted. See ``backend/app/security.py``.
+    """
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="Analyst")
+    password_hash = Column(String, nullable=False)
+    password_salt = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class ModelMetrics(Base):
     __tablename__ = "model_metrics"
     id = Column(Integer, primary_key=True, index=True)

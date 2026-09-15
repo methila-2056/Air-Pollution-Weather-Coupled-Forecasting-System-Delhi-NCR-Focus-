@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getStations, getExplanation } from '../api/client'
 import ExplainabilityPanel from '../components/ExplainabilityPanel'
+import PageHeader from '../components/PageHeader'
 import type { Station, Explanation } from '../types'
 
 export default function AIExplanation() {
@@ -19,21 +20,25 @@ export default function AIExplanation() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">AI Explanation</h1>
-      <select value={selected} onChange={e => setSelected(e.target.value)} className="bg-navy-800 border border-navy-700 rounded-lg px-4 py-2 text-sm">
-        {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-      </select>
-      {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>
-      )}
+      <PageHeader
+        title="AI Explanation"
+        subtitle="Why the model predicts what it predicts — station-level natural language and feature attribution"
+        breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'AI Explanation' }]}
+        actions={
+          <select value={selected} onChange={e => setSelected(e.target.value)} className="select" aria-label="Select station">
+            {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
+        }
+      />
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       <ExplainabilityPanel data={explanation} />
       <div className="card">
         <h3 className="card-header">Natural Language Explanation</h3>
         <div className="space-y-2">
           {explanation?.natural_language.map((text, i) => (
-            <p key={i} className="text-gray-300 text-sm">• {text}</p>
+            <p key={i} className="text-sm text-slate-700">• {text}</p>
           ))}
-          {!explanation && !error && <p className="text-gray-500 text-sm">Select a station to view explanation.</p>}
+          {!explanation && !error && <p className="text-sm text-slate-500">Select a station to view explanation.</p>}
         </div>
       </div>
     </div>

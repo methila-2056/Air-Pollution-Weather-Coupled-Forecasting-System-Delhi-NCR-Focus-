@@ -1,55 +1,55 @@
 import type { PlumeRisk } from '../types'
 
 export default function StubblePlume({ data }: { data: PlumeRisk | null }) {
-  if (!data) return <div className="card"><p className="text-gray-400">Loading fire data...</p></div>
+  if (!data) return <div className="card"><p className="text-slate-500">Loading fire data...</p></div>
   
   const riskColor = {
-    'HIGH': 'text-red-400 bg-red-500/20',
-    'MODERATE': 'text-orange-400 bg-orange-500/20',
-    'LOW': 'text-green-400 bg-green-500/20',
-  }[data.risk_level] || 'text-gray-400'
+    'HIGH': 'bg-red-100 text-red-800',
+    'MODERATE': 'bg-amber-100 text-amber-800',
+    'LOW': 'bg-green-100 text-green-800',
+  }[data.risk_level] || 'bg-slate-100 text-slate-700'
 
   return (
     <div className="card">
       <h3 className="card-header">Regional Fire-Plume Impact</h3>
       <div className="space-y-4">
         <div className={`text-center py-3 rounded-lg ${riskColor}`}>
-          <p className="text-2xl font-bold">{data.risk_level}</p>
+          <p className="text-2xl font-bold uppercase">{data.risk_level}</p>
           <p className="text-sm">Delhi NCR Impact</p>
         </div>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-gray-400">Fire Count</p>
-            <p className="text-lg font-bold">{data.fire_count}</p>
+            <p className="text-slate-500">Fire Count</p>
+            <p className="text-lg font-bold text-slate-900">{data.fire_count}</p>
           </div>
           <div>
-            <p className="text-gray-400">Transport</p>
-            <p className="text-lg font-bold">{data.transport_direction}</p>
+            <p className="text-slate-500">Transport</p>
+            <p className="text-lg font-bold text-slate-900">{data.transport_direction}</p>
           </div>
           <div>
-            <p className="text-gray-400">Nearest Fire</p>
-            <p className="text-lg font-bold">{data.distance_nearest_fire}km</p>
+            <p className="text-slate-500">Nearest Fire</p>
+            <p className="text-lg font-bold text-slate-900">{data.distance_nearest_fire}km</p>
           </div>
           <div>
-            <p className="text-gray-400">Confidence</p>
-            <p className="text-lg font-bold">{(data.confidence * 100).toFixed(0)}%</p>
+            <p className="text-slate-500">Confidence</p>
+            <p className="text-lg font-bold text-slate-900">{(data.confidence * 100).toFixed(0)}%</p>
           </div>
           {data.wind_alignment_pct != null && (
             <div>
-              <p className="text-gray-400">Winds Aligned</p>
-              <p className="text-lg font-bold">{data.wind_alignment_pct.toFixed(0)}%</p>
+              <p className="text-slate-500">Winds Aligned</p>
+              <p className="text-lg font-bold text-slate-900">{data.wind_alignment_pct.toFixed(0)}%</p>
             </div>
           )}
           {data.transport_time_hours != null && (
             <div>
-              <p className="text-gray-400">Smoke Arrival</p>
-              <p className="text-lg font-bold">{data.transport_time_hours.toFixed(1)}h</p>
+              <p className="text-slate-500">Smoke Arrival</p>
+              <p className="text-lg font-bold text-slate-900">{data.transport_time_hours.toFixed(1)}h</p>
             </div>
           )}
           {data.stubble_impact_score != null && (
             <div>
-              <p className="text-gray-400">Stubble Smoke Proxy</p>
-              <p className="text-lg font-bold">{data.stubble_impact_score.toFixed(2)}</p>
+              <p className="text-slate-500">Stubble Smoke Proxy</p>
+              <p className="text-lg font-bold text-slate-900">{data.stubble_impact_score.toFixed(2)}</p>
             </div>
           )}
         </div>

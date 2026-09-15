@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getGridForecast, getDispersionForecast, generateCoupledForecast, getStations } from '../api/client'
+import PageHeader from '../components/PageHeader'
 import type { GridForecast, CoupledForecastResult, DispersionForecast, Station, GridCell } from '../types'
 
 const AQI_COLORS: Record<string, string> = {
@@ -37,11 +38,11 @@ export default function SpatialForecastPage() {
     if (mode === 'statistical') {
       getGridForecast(horizon)
         .then(r => setGrid(r.data))
-        .catch(e => setError('Failed to load spatial forecast'))
+        .catch(() => setError('Failed to load spatial forecast'))
     } else {
       getDispersionForecast(horizon, 8)
         .then(r => setDisp(r.data))
-        .catch(e => setError('Failed to load numerical dispersion forecast'))
+        .catch(() => setError('Failed to load numerical dispersion forecast'))
     }
     generateCoupledForecast(selStation)
       .then(r => setCoupled(r.data))
@@ -59,60 +60,62 @@ export default function SpatialForecastPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">NCR Spatial AQI Forecast</h1>
-          <p className="text-sm text-gray-400">
-            {mode === 'statistical'
-              ? 'High-resolution gridded AQI surface (IDW + wind advection) across Delhi NCR'
-              : 'Numerical advection-diffusion dispersion of pollution plumes (72h, fire-inclusive, two-way coupled meteorology)'}
-          </p>
-        </div>
-        <div className="flex gap-2 items-center">
-          <div className="flex rounded-lg overflow-hidden border border-gray-700 text-sm">
-            <button
-              className={`px-3 py-1.5 ${mode === 'statistical' ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-300'}`}
-              onClick={() => setMode('statistical')}
+      <PageHeader
+        title="NCR Spatial AQI Forecast"
+        subtitle={
+          mode === 'statistical'
+            ? 'High-resolution gridded AQI surface (IDW + wind advection) across Delhi NCR'
+            : 'Numerical advection-diffusion dispersion of pollution plumes (72h, fire-inclusive, two-way coupled meteorology)'
+        }
+        breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Spatial Forecast' }]}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex overflow-hidden rounded-lg border border-slate-200 bg-slate-100 text-sm">
+              <button
+                className={`px-3 py-1.5 ${mode === 'statistical' ? 'bg-inst-700 text-white' : 'bg-transparent text-slate-600 hover:bg-slate-200'}`}
+                onClick={() => setMode('statistical')}
+              >
+                Statistical grid
+              </button>
+              <button
+                className={`px-3 py-1.5 ${mode === 'numerical' ? 'bg-inst-700 text-white' : 'bg-transparent text-slate-600 hover:bg-slate-200'}`}
+                onClick={() => setMode('numerical')}
+              >
+                Numerical dispersion
+              </button>
+            </div>
+            <select value={selStation} onChange={e => setSelStation(e.target.value)} className="select" aria-label="Select station">
+              {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+            <select
+              value={horizon}
+              onChange={e => { const h = Number(e.target.value); setHorizon(h); setDispHour(h) }}
+              className="select"
+              aria-label="Forecast horizon"
             >
-              Statistical grid
-            </button>
+              {(mode === 'numerical' ? DISP_HORIZONS : HORIZONS).map(h => <option key={h} value={h}>t+{h}h</option>)}
+            </select>
             <button
-              className={`px-3 py-1.5 ${mode === 'numerical' ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-300'}`}
-              onClick={() => setMode('numerical')}
+              className="btn-primary"
+              onClick={() => { setLoading(true); generateCoupledForecast(selStation).then(r => setCoupled(r.data)).catch(() => setError('Failed to run coupled forecast')).finally(() => setLoading(false)) }}
             >
-              Numerical dispersion
+              {loading ? 'Running...' : 'Run Coupled'}
             </button>
           </div>
-          <select value={selStation} onChange={e => setSelStation(e.target.value)} className="select">
-            {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-          </select>
-          <select
-            value={horizon}
-            onChange={e => { const h = Number(e.target.value); setHorizon(h); setDispHour(h) }}
-            className="select"
-          >
-            {(mode === 'numerical' ? DISP_HORIZONS : HORIZONS).map(h => <option key={h} value={h}>t+{h}h</option>)}
-          </select>
-          <button
-            className="btn-primary"
-            onClick={() => { setLoading(true); generateCoupledForecast(selStation).then(r => setCoupled(r.data)).catch(() => setError('Failed to run coupled forecast')).finally(() => setLoading(false)) }}
-          >
-            {loading ? 'Running...' : 'Run Coupled'}
-          </button>
-        </div>
-      </div>
+        }
+      />
 
-      {error && <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>}
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Heatmap */}
         <div className="card p-4">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-900">
               {mode === 'numerical' ? `Advected AQI Field — t+${dispFrame?.hour ?? horizon}h` : `AQI Surface — t+${horizon}h`}
             </h3>
             {mode === 'numerical' && disp ? (
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
                 <label>hour</label>
                 <select value={dispHour} onChange={e => setDispHour(Number(e.target.value))} className="select !w-auto !py-0.5">
                   {disp.frames.map(f => <option key={f.hour} value={f.hour}>t+{f.hour}</option>)}
@@ -120,7 +123,7 @@ export default function SpatialForecastPage() {
               </div>
             ) : null}
           </div>
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto bg-gray-900 rounded-lg">
+          <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full rounded-lg border border-slate-200 bg-slate-100">
             {frameCells.map((c, i) => (
               <rect
                 key={i}
@@ -128,21 +131,21 @@ export default function SpatialForecastPage() {
                 y={y(c.lat)}
                 width={width / 45}
                 height={height / 35}
-                fill={AQI_COLORS[c.aqi_category] ?? '#3f3f46'}
+                fill={AQI_COLORS[c.aqi_category] ?? '#94a3b8'}
                 opacity={0.85}
               />
             ))}
             {stations.map(s => (
-              <circle key={s.id} cx={x(s.longitude)} cy={y(s.latitude)} r={4} fill="#fff" stroke="#000" strokeWidth={1} />
+              <circle key={s.id} cx={x(s.longitude)} cy={y(s.latitude)} r={4} fill="#fff" stroke="#0f172a" strokeWidth={1} />
             ))}
             {(mode === 'numerical' ? disp?.fires ?? [] : []).map((f, i) => (
               <circle key={i} cx={x(f.lon)} cy={y(f.lat)} r={5} fill="#f97316" stroke="#7c2d12" strokeWidth={1.5} opacity={0.9} />
             ))}
           </svg>
-          <div className="flex gap-3 mt-3 flex-wrap">
+          <div className="mt-3 flex flex-wrap gap-3">
             {Object.entries(AQI_COLORS).map(([cat, col]) => (
-              <div key={cat} className="flex items-center gap-1 text-xs">
-                <span className="w-3 h-3 rounded" style={{ background: col }} />
+              <div key={cat} className="flex items-center gap-1 text-xs text-slate-600">
+                <span className="h-3 w-3 rounded" style={{ background: col }} />
                 {cat}
               </div>
             ))}
@@ -153,50 +156,50 @@ export default function SpatialForecastPage() {
         <div className="space-y-4">
           {mode === 'numerical' && disp && dispFrame && (
             <div className="card p-4 text-sm">
-              <h3 className="font-semibold mb-2">Dispersion Diagnostics — t+{dispFrame.hour}h</h3>
+              <h3 className="mb-2 font-semibold text-slate-900">Dispersion Diagnostics — t+{dispFrame.hour}h</h3>
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-gray-800/60 rounded p-2">
-                  <p className="text-xs text-gray-400">Mean AQI</p>
-                  <p className="font-semibold text-lg">{dispFrame.aqi_mean}</p>
+                <div className="rounded bg-slate-100 p-2">
+                  <p className="text-xs text-slate-500">Mean AQI</p>
+                  <p className="text-lg font-semibold text-slate-900">{dispFrame.aqi_mean}</p>
                 </div>
-                <div className="bg-gray-800/60 rounded p-2">
-                  <p className="text-xs text-gray-400">Max AQI</p>
-                  <p className="font-semibold text-lg">{dispFrame.aqi_max}</p>
+                <div className="rounded bg-slate-100 p-2">
+                  <p className="text-xs text-slate-500">Max AQI</p>
+                  <p className="text-lg font-semibold text-slate-900">{dispFrame.aqi_max}</p>
                 </div>
-                <div className="bg-gray-800/60 rounded p-2">
-                  <p className="text-xs text-gray-400">Fires</p>
-                  <p className="font-semibold text-lg">{disp.fire_count}</p>
+                <div className="rounded bg-slate-100 p-2">
+                  <p className="text-xs text-slate-500">Fires</p>
+                  <p className="text-lg font-semibold text-slate-900">{disp.fire_count}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 text-xs text-gray-400">
-                <span>Wind: <b className="text-gray-200">{dispFrame.wind_speed} m/s @ {dispFrame.wind_dir_deg}°</b></span>
-                <span>PBL: <b className="text-gray-200">{dispFrame.pbl_height} m</b></span>
-                <span>Precip: <b className="text-gray-200">{dispFrame.precip_mm} mm</b></span>
-                <span>Integration dt: <b className="text-gray-200">{disp.dt_used}s</b></span>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
+                <span>Wind: <b className="text-slate-900">{dispFrame.wind_speed} m/s @ {dispFrame.wind_dir_deg}°</b></span>
+                <span>PBL: <b className="text-slate-900">{dispFrame.pbl_height} m</b></span>
+                <span>Precip: <b className="text-slate-900">{dispFrame.precip_mm} mm</b></span>
+                <span>Integration dt: <b className="text-slate-900">{disp.dt_used}s</b></span>
               </div>
               <div className="mt-3">
-                <p className="text-xs font-semibold text-gray-400 mb-1">Two-way coupling feedback (chemistry → meteorology):</p>
+                <p className="mb-1 text-xs font-semibold text-slate-500">Two-way coupling feedback (chemistry → meteorology):</p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-gray-800/60 rounded p-2">
-                    <span className="text-gray-400">Stability index </span>
-                    <span className="font-semibold text-emerald-300">{dispFrame.coupling.stability_coupling_index.toFixed(3)}</span>
+                  <div className="rounded bg-slate-100 p-2">
+                    <span className="text-slate-500">Stability index </span>
+                    <span className="font-semibold text-emerald-600">{dispFrame.coupling.stability_coupling_index.toFixed(3)}</span>
                   </div>
-                  <div className="bg-gray-800/60 rounded p-2">
-                    <span className="text-gray-400">PBL suppression </span>
-                    <span className="font-semibold text-emerald-300">{dispFrame.coupling.pbl_suppression_factor.toFixed(3)}</span>
+                  <div className="rounded bg-slate-100 p-2">
+                    <span className="text-slate-500">PBL suppression </span>
+                    <span className="font-semibold text-emerald-600">{dispFrame.coupling.pbl_suppression_factor.toFixed(3)}</span>
                   </div>
-                  <div className="bg-gray-800/60 rounded p-2">
-                    <span className="text-gray-400">Effective PBL </span>
-                    <span className="font-semibold text-gray-200">{dispFrame.coupling.corrected_pbl_height.toFixed(0)}m</span>
+                  <div className="rounded bg-slate-100 p-2">
+                    <span className="text-slate-500">Effective PBL </span>
+                    <span className="font-semibold text-slate-900">{dispFrame.coupling.corrected_pbl_height.toFixed(0)}m</span>
                   </div>
-                  <div className="bg-gray-800/60 rounded p-2">
-                    <span className="text-gray-400">Mean PM2.5 </span>
-                    <span className="font-semibold text-gray-200">{dispFrame.coupling.mean_pm25.toFixed(1)} µg/m³</span>
+                  <div className="rounded bg-slate-100 p-2">
+                    <span className="text-slate-500">Mean PM2.5 </span>
+                    <span className="font-semibold text-slate-900">{dispFrame.coupling.mean_pm25.toFixed(1)} µg/m³</span>
                   </div>
                 </div>
               </div>
               {disp.horizon_hours > 0 && (
-                <p className="text-[11px] text-gray-400 mt-3">
+                <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
                   Numerical core: dC/dt = -u·grad(C) + K·laplacian(C) - (deposition + washout)·C + E. Fire plumes (orange dots) advect
                   downwind while aerosols suppress PBL and deepen stability — an explicit two-way meteorological interlink.
                 </p>
@@ -205,24 +208,24 @@ export default function SpatialForecastPage() {
           )}
 
           <div className="card p-4">
-            <h3 className="font-semibold mb-2">Coupled Two-Way Feedback — {selStation}</h3>
+            <h3 className="mb-2 font-semibold text-slate-900">Coupled Two-Way Feedback — {selStation}</h3>
             {coupled ? (
               <div className="space-y-2 text-sm">
-                <p className="text-gray-400">Mode: <span className="text-emerald-400">{coupled.mode}</span></p>
+                <p className="text-slate-500">Mode: <span className="font-semibold text-emerald-600">{coupled.mode}</span></p>
                 <div className="grid grid-cols-3 gap-2">
                   {coupled.coupled.map(p => (
-                    <div key={p.horizon_hours} className="bg-gray-800/60 rounded p-2">
-                      <p className="text-xs text-gray-400">t+{p.horizon_hours}h</p>
-                      <p className="font-semibold">AQI {p.aqi_pred}</p>
-                      <p className="text-xs text-gray-400">{p.aqi_category}</p>
-                      <p className="text-[10px] text-gray-500">SO2 {p.so2_pred} · CO {p.co_pred}</p>
+                    <div key={p.horizon_hours} className="rounded bg-slate-100 p-2">
+                      <p className="text-xs text-slate-500">t+{p.horizon_hours}h</p>
+                      <p className="font-semibold text-slate-900">AQI {p.aqi_pred}</p>
+                      <p className="text-xs text-slate-500">{p.aqi_category}</p>
+                      <p className="text-[10px] text-slate-500">SO2 {p.so2_pred} · CO {p.co_pred}</p>
                     </div>
                   ))}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 mt-2 mb-1">PBL / stability evolution (feedback path):</p>
+                  <p className="mb-1 mt-2 text-xs font-semibold text-slate-500">PBL / stability evolution (feedback path):</p>
                   {coupled.feedback_path.slice(0, 12).map(pt => (
-                    <div key={pt.t_plus} className="flex justify-between text-xs border-b border-gray-800 py-1">
+                    <div key={pt.t_plus} className="flex justify-between border-b border-slate-200 py-1 text-xs text-slate-600">
                       <span>t+{pt.t_plus}h</span>
                       <span>PM2.5 {pt.pm25}</span>
                       <span>PBL {pt.pbl_effective}m</span>
@@ -232,7 +235,7 @@ export default function SpatialForecastPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-400">Run the coupled forecast to see the two-way weather-chemistry feedback path.</p>
+              <p className="text-sm text-slate-500">Run the coupled forecast to see the two-way weather-chemistry feedback path.</p>
             )}
           </div>
         </div>

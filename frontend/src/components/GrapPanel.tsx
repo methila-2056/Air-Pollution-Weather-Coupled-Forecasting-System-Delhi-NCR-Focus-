@@ -3,7 +3,7 @@ import type { GrapAssessment } from '../types'
 export default function GrapPanel({ data }: { data: GrapAssessment | null }) {
   if (!data) {
     return (
-      <div className="rounded-lg border border-navy-700 bg-navy-900/40 p-6 text-sm text-gray-400">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
         GRAP assessment unavailable — no persisted 24-hour AQI data yet.
       </div>
     )
@@ -21,47 +21,47 @@ export default function GrapPanel({ data }: { data: GrapAssessment | null }) {
         >
           {data.title}
         </span>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-slate-600">
           {data.aqi != null ? `NCR avg AQI ${data.aqi}` : 'No AQI yet'} · {data.aqi_category ?? '—'} · GRAP {data.status === 'ACTIVE' ? 'operative' : 'not invoked'}
         </span>
       </div>
 
-      <p className="text-sm text-gray-300 mt-3">{data.advisory}</p>
+      <p className="text-sm text-slate-700 mt-3">{data.advisory}</p>
 
       {data.inversion_note && (
-        <p className="text-xs text-amber-300 mt-2">🧊 {data.inversion_note}</p>
+        <p className="text-xs text-amber-800 mt-2">🧊 {data.inversion_note}</p>
       )}
       {data.fire_note && (
-        <p className="text-xs text-orange-300 mt-1">🔥 {data.fire_note}</p>
+        <p className="text-xs text-orange-800 mt-1">🔥 {data.fire_note}</p>
       )}
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
             Action measures
           </h4>
           <ul className="space-y-1.5 text-sm">
             {data.measures.map((m, i) => (
-              <li key={i} className="flex gap-2 text-gray-300">
-                <span className="text-white">·</span>
+              <li key={i} className="flex gap-2 text-slate-700">
+                <span className="text-inst-700">·</span>
                 <span>{m}</span>
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
             Why this stage
           </h4>
           <ul className="space-y-1.5 text-sm">
             {data.rationale.map((r, i) => (
-              <li key={i} className="flex gap-2 text-gray-400">
-                <span className="text-white">·</span>
+              <li key={i} className="flex gap-2 text-slate-600">
+                <span className="text-inst-700">·</span>
                 <span>{r}</span>
               </li>
             ))}
           </ul>
-          <p className="text-[10px] text-gray-600 mt-3">{data.source} · {data.assessed_at?.replace('T', ' ').slice(0, 16)}Z</p>
+          <p className="text-[10px] text-slate-400 mt-3">{data.source} · {data.assessed_at?.replace('T', ' ').slice(0, 16)}Z</p>
         </div>
       </div>
     </div>

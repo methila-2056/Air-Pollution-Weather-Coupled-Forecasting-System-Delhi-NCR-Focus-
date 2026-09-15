@@ -6,10 +6,10 @@ interface StatCardProps {
 }
 
 const toneClasses: Record<NonNullable<StatCardProps['tone']>, string> = {
-  default: 'text-white',
-  good: 'text-green-400',
-  warn: 'text-orange-400',
-  bad: 'text-red-400',
+  default: 'text-slate-900',
+  good: 'text-green-700',
+  warn: 'text-amber-700',
+  bad: 'text-red-700',
 }
 
 export default function StatCard({ label, value, sub, tone = 'default' }: StatCardProps) {
@@ -17,7 +17,7 @@ export default function StatCard({ label, value, sub, tone = 'default' }: StatCa
     <div className="card">
       <p className="card-header">{label}</p>
       <p className={`stat-value ${toneClasses[tone]}`}>{value ?? '--'}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
     </div>
   )
 }
