@@ -5,6 +5,7 @@ import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
+import ForecastRiskBand from '../components/ForecastRiskBand'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { fmt } from '../lib/aqi'
 import type { Station, ForecastPoint } from '../types'
@@ -58,7 +59,7 @@ export default function Forecast72h() {
     <div className="space-y-6">
       <PageHeader
         title="72-Hour Forecast"
-        subtitle="Hourly ML forecasts for every NCR monitoring station, with full AQI categorisation"
+        subtitle="Hourly ML forecasts for every NCR monitoring station, with CPCB risk categorisation"
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Forecast' }]}
         lastUpdated={forecast[0]?.timestamp}
         actions={
@@ -84,6 +85,8 @@ export default function Forecast72h() {
       />
 
       {error && <ErrorState title="Forecast unavailable" message={error} onRetry={load} />}
+
+      <ForecastRiskBand forecast={forecast} />
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Pollutant selection">
         {tabs.map((t) => (

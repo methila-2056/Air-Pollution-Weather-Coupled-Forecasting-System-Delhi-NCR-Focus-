@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity,
   AlertTriangle,
   Flame,
-  MapPin,
   Sparkles,
-  TrainFront,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
@@ -24,6 +21,7 @@ import {
   getPollutionHistory,
   getGrapCurrent,
   getSummary,
+  getAlerts,
 } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import AQIBadge from '../components/AQIBadge'
@@ -31,7 +29,13 @@ import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
 import StationMap from '../components/StationMap'
-import GrapPanel from '../components/GrapPanel'
+import AtmosphericState from '../components/AtmosphericState'
+import AtmosphericStory from '../components/AtmosphericStory'
+import DispersionMeter from '../components/DispersionMeter'
+import ForecastRiskBand from '../components/ForecastRiskBand'
+import TransportChain from '../components/TransportChain'
+import AlertsSection from '../components/AlertsSection'
+import ForecastReasonPanel from '../components/ForecastReasonPanel'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import { aqiStyle, fmt, tsFmt } from '../lib/aqi'
 import {
@@ -40,7 +44,7 @@ import {
 import type {
   Station, CurrentAQI, ForecastPoint, Pm25ForecastResponse, Pm25ForecastPoint,
   AtmosphereCurrentResponse, FireActivity, FireHotspot, TransportRiskResponse,
-  ModelPerformanceResponse, PollutionReading, GrapAssessment, SummaryResponse,
+  ModelPerformanceResponse, PollutionReading, Alert, SummaryResponse, GrapAssessment,
 } from '../types'
 
 interface WindVectorInput {
@@ -77,12 +81,12 @@ export default function Dashboard() {
   const [current, setCurrent] = useState<CurrentAQI | null>(null)
   const [forecast, setForecast] = useState<ForecastPoint[]>([])
   const [pm25, setPm25] = useState<Pm25ForecastResponse | null>(null)
-  const [history, setHistory] = useState<PollutionReading[]>([])
   const [atmosphere, setAtmosphere] = useState<AtmosphereCurrentResponse | null>(null)
   const [fireActivity, setFireActivity] = useState<FireActivity | null>(null)
   const [hotspots, setHotspots] = useState<FireHotspot[]>([])
   const [transport, setTransport] = useState<TransportRiskResponse | null>(null)
   const [grap, setGrap] = useState<GrapAssessment | null>(null)
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [modelPerf, setModelPerf] = useState<ModelPerformanceResponse | null>(null)
   const [pollution, setPollution] = useState<PollutionReading[]>([])
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
@@ -114,25 +118,14 @@ export default function Dashboard() {
       getModelPerformance().then((r) => setModelPerf(r.data)).catch(() => setModelPerf(null)),
       getPollutionLatest().then((r) => setPollution(r.data)).catch(() => setPollution([])),
       getGrapCurrent().then((r) => setGrap(r.data)).catch(() => setGrap(null)),
+      getAlerts().then((r) => setAlerts(r.data)).catch(() => setAlerts([])),
     ]).then()
   }, [selected])
 
-  const loadHistory = useCallback(() => {
-    const row = stations.find((s) => s.name === selected)
-    if (!row) return
-    getPollutionHistory(row.id, 24)
-      .then((r) => setHistory(r.data))
-      .catch(() => setHistory([]))
-  }, [selected, stations])
-
   useEffect(() => {
     setLoading(true)
-    Promise.all([refreshAll(), loadHistory()]).finally(() => setLoading(false))
-  }, [refreshAll, loadHistory])
-
-  useEffect(() => {
-    loadHistory()
-  }, [loadHistory])
+    refreshAll().finally(() => setLoading(false))
+  }, [refreshAll])
 
   useIntervalRefresh(refreshAll, 60_000, autoRefresh)
 
@@ -143,42 +136,38 @@ export default function Dashboard() {
     gru: 'GRU',
   }
 
-  const selAtmosphere = atmosphere?.stations.find((s) => s.station === selected) ?? null
   const rankStyle = aqiStyle(current?.aqi ?? null)
-
-  const historySeries = history.map((h) => ({
-    time: tsFmt(h.timestamp),
-    aqi: h.aqi,
-    pm25: h.pm25,
-  }))
-
-  const transportTone =
-    transport?.risk_level === 'HIGH' ? 'bad' : transport?.risk_level === 'MODERATE' ? 'warn' : 'good'
-  const fireTone = fireActivity?.total_fires ? 'warn' : 'default'
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="National Air Quality Dashboard"
-        subtitle="Delhi NCR · live CPCB observations, 72-hour ML forecasts and fire-plume intelligence"
-        breadcrumbs={[{ label: 'Dashboard' }]}
+        title="Atmospheric Intelligence Control Room"
+        subtitle="Delhi NCR · one consolidated view of live CPCB observations, 72-hour ML forecasts, atmospheric physics and regional fire-plume transport"
+        breadcrumbs={[{ label: 'Control Room' }]}
         lastUpdated={summary?.generated_at ?? current?.timestamp}
         actions={
-          <label className="inline-flex cursor-pointer select-none items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="h-3.5 w-3.5 accent-inst-700"
-            />
-            Auto-refresh (1 min)
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer select-none items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="h-3.5 w-3.5 accent-inst-700"
+              />
+              Auto-refresh (1 min)
+            </label>
+            <select value={selected} onChange={(e) => setSelected(e.target.value)} className="select" aria-label="Select monitoring station">
+              {stations.map((s) => (
+                <option key={s.id} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+          </div>
         }
       />
 
       {error && (
         <ErrorState
-          title="Dashboard is unavailable"
+          title="Control room is unavailable"
           message="The API server could not be reached. Verify the backend is running on :8000."
           onRetry={() => {
             setLoading(true)
@@ -187,98 +176,92 @@ export default function Dashboard() {
         />
       )}
 
-      {/* ---------- Regional summary banner ---------- */}
-      {summary && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="card flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-inst-50">
-              <Sparkles className="h-5 w-5 text-inst-700" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-xs text-slate-500">NCR average AQI</p>
-              <div className="flex items-center gap-2">
-                <p className="text-xl font-bold text-slate-900">{fmt(summary.ncr_avg_aqi, 0)}</p>
-                <AQIBadge category={aqiStyle(summary.ncr_avg_aqi).label} aqi={summary.ncr_avg_aqi} />
-              </div>
-            </div>
-          </div>
-
-          <StationRank summary={summary} best />
-          <StationRank summary={summary} />
-
-          <div className="card flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50">
-              <Flame className="h-5 w-5 text-orange-600" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-xs text-slate-500">Active fires (24 h)</p>
-              <p className="text-xl font-bold text-slate-900">{summary.active_fires_24h}</p>
-            </div>
-          </div>
-
-          <div className="card flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50">
-              <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-xs text-slate-500">Open alerts</p>
-              <p className="text-xl font-bold text-slate-900">{summary.open_alerts}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {loading && !current ? (
-        <LoadingState label="Loading dashboard data" rows={3} />
+      {loading && !current && !summary ? (
+        <LoadingState label="Loading control room" rows={3} />
       ) : (
         <>
-          {/* ---------- Station grid ---------- */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Monitoring stations</h2>
-            <select value={selected} onChange={(e) => setSelected(e.target.value)} className="select" aria-label="Select monitoring station">
-              {stations.map((s) => (
-                <option key={s.id} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-            {stations.map((s) => {
-              const r = pollution.find((p) => p.station_id === s.id)
-              const style = aqiStyle(r?.aqi ?? null)
-              const isSel = s.name === selected
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setSelected(s.name)}
-                  aria-pressed={isSel}
-                  className={`rounded-xl border bg-white p-3 text-left shadow-card transition-all ${
-                    isSel ? 'border-inst-600 ring-2 ring-inst-200' : 'border-slate-200 hover:border-inst-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="truncate text-xs font-semibold text-slate-800">{s.name}</p>
-                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.bar}`} aria-hidden="true" />
+          {/* ---------- Regional pulse ---------- */}
+          {summary && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="card flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-inst-50">
+                  <Sparkles className="h-5 w-5 text-inst-700" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-xs text-slate-500">NCR average AQI</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xl font-bold text-slate-900">{fmt(summary.ncr_avg_aqi, 0)}</p>
+                    <AQIBadge category={aqiStyle(summary.ncr_avg_aqi).label} aqi={summary.ncr_avg_aqi} />
                   </div>
-                  <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
-                    {fmt(r?.aqi ?? null, 0)}
-                    <span className="ml-1 text-[10px] font-normal text-slate-400">AQI</span>
-                  </p>
-                  <p className="truncate text-[10px] text-slate-500">
-                    PM2.5 {fmt(r?.pm25 ?? null, 0)}<span className="text-slate-400"> μg/m³</span>
-                  </p>
-                  {r ? (
-                    <p className="truncate text-[10px] font-medium capitalize text-slate-600">{style.label}</p>
-                  ) : (
-                    <p className="truncate text-[10px] italic text-slate-400">Awaiting live data</p>
-                  )}
-                </button>
-              )
-            })}
+                </div>
+              </div>
+
+              <StationRank summary={summary} best />
+              <StationRank summary={summary} />
+
+              <div className="card flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50">
+                  <Flame className="h-5 w-5 text-orange-600" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-xs text-slate-500">Active fires (24 h)</p>
+                  <p className="text-xl font-bold text-slate-900">{summary.active_fires_24h}</p>
+                </div>
+              </div>
+
+              <div className="card flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50">
+                  <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-xs text-slate-500">Open alerts</p>
+                  <p className="text-xl font-bold text-slate-900">{summary.open_alerts}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ---------- Station grid ---------- */}
+          <div>
+            <h2 className="mb-3 text-base font-semibold text-slate-900">Monitoring stations</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-6">
+              {stations.map((s) => {
+                const r = pollution.find((p) => p.station_id === s.id)
+                const style = aqiStyle(r?.aqi ?? null)
+                const isSel = s.name === selected
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelected(s.name)}
+                    aria-pressed={isSel}
+                    className={`rounded-xl border bg-white p-3 text-left shadow-card transition-all ${
+                      isSel ? 'border-inst-600 ring-2 ring-inst-200' : 'border-slate-200 hover:border-inst-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="truncate text-xs font-semibold text-slate-800">{s.name}</p>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.bar}`} aria-hidden="true" />
+                    </div>
+                    <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+                      {fmt(r?.aqi ?? null, 0)}
+                      <span className="ml-1 text-[10px] font-normal text-slate-400">AQI</span>
+                    </p>
+                    <p className="truncate text-[10px] text-slate-500">
+                      PM2.5 {fmt(r?.pm25 ?? null, 0)}<span className="text-slate-400"> μg/m³</span>
+                    </p>
+                    {r ? (
+                      <p className="truncate text-[10px] font-medium capitalize text-slate-600">{style.label}</p>
+                    ) : (
+                      <p className="truncate text-[10px] italic text-slate-400">Awaiting live data</p>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          {/* ---------- Selected station detail ---------- */}
+          {/* ---------- Station banner ---------- */}
           <div className="grid gap-6 lg:grid-cols-3">
             <section className="card lg:col-span-1">
               <div className="flex items-start justify-between gap-2">
@@ -327,78 +310,40 @@ export default function Dashboard() {
               )}
             </section>
 
-            <section className="card lg:col-span-2">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-900">24-hour observed AQI</h2>
-                {history.length > 0 && (
-                  <span className="text-xs text-slate-500">
-                    {history[0]?.timestamp ? tsFmt(history[0].timestamp) : ''} – {history[history.length - 1]?.timestamp ? tsFmt(history[history.length - 1].timestamp) : ''}
-                  </span>
-                )}
-              </div>
-              {historySeries.length ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={historySeries} margin={{ left: -20, right: 8 }}>
-                    <defs>
-                      <linearGradient id="aqiFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0B4F8A" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#0B4F8A" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickFormatter={(v) => v.slice(11, 16)} />
-                    <YAxis stroke="#64748b" fontSize={11} />
-                    <Tooltip {...ChartTooltip()} />
-                    <ReferenceLine y={100} stroke="#d97706" strokeDasharray="4 4" label={{ value: 'Satisfactory→Moderate', position: 'insideTopRight', fill: '#d97706', fontSize: 10 }} />
-                    <Area type="monotone" dataKey="aqi" stroke="#0B4F8A" strokeWidth={2} fill="url(#aqiFill)" name="AQI" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <EmptyState
-                  title="No observed history yet"
-                  hint="Hourly CPCB values will appear once live ingestion begins for this station."
-                />
-              )}
-            </section>
+            <div className="lg:col-span-2">
+              <AtmosphericState atmosphere={atmosphere?.stations.find((s) => s.station === selected) ?? null} />
+            </div>
           </div>
 
-          {/* ---------- Forecast preview ---------- */}
-          <section className="card">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-bold text-slate-900">72-hour forecast — {selected}</h2>
-              {pm25 && <span className="text-xs text-slate-500">{pm25.uncertainty_method} · {pm25.forecast_strategy}</span>}
-              <Link to="/forecast" className="text-xs font-semibold text-inst-700 hover:underline">
-                Open full forecast →
-              </Link>
-            </div>
-            <ForecastPreview point={pm25?.forecasts?.slice(0, 24) ?? forecast.slice(0, 24)} observed={current?.pm25 ?? null} />
-          </section>
-
-          {/* ---------- Atmospheric + GRAP ---------- */}
+          {/* ---------- Atmospheric narrative + dispersion ---------- */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <AtmosphericStrip atmosphere={selAtmosphere} />
+            <AtmosphericStory atmosphere={atmosphere?.stations.find((s) => s.station === selected) ?? null} />
+            <DispersionMeter atmosphere={atmosphere?.stations.find((s) => s.station === selected) ?? null} />
+          </div>
+
+          {/* ---------- 72-hour outlook ---------- */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ForecastRiskBand forecast={forecast} />
             <section className="card">
-              <h2 className="mb-3 text-base font-bold text-slate-900">Graded Response Action Plan</h2>
-              <GrapPanel data={grap} />
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-slate-900">72-hour PM2.5 forecast — {selected}</h2>
+                {pm25 && <span className="text-xs text-slate-500">{pm25.uncertainty_method} · {pm25.forecast_strategy}</span>}
+                <Link to="/forecast" className="text-xs font-semibold text-inst-700 hover:underline">
+                  Open full forecast →
+                </Link>
+              </div>
+              <ForecastPreview point={pm25?.forecasts?.slice(0, 24) ?? forecast.slice(0, 24)} observed={current?.pm25 ?? null} />
             </section>
           </div>
 
-          {/* ---------- Fire intelligence + transport ---------- */}
-          <section className="card">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-bold text-slate-900">Regional fire intelligence & transport</h2>
-              <Link to="/fire-plume" className="text-xs font-semibold text-inst-700 hover:underline">
-                Fire & plume analysis →
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <MiniStat icon={Flame} tone={fireTone} label="Hotspots (24 h)" value={fireActivity?.total_fires ?? hotspots.length} sub={`mean FRP ${fmt(fireActivity?.mean_frp, 1)} MW`} />
-              <MiniStat icon={TrainFront} tone={transportTone} label="Transport risk" value={transport?.risk_level ?? '--'} sub={`score ${fmt(transport?.risk_score, 0)}/100`} />
-              <MiniStat icon={Activity} tone="default" label="Upwind fires" value={transport?.upwind_fire_count ?? '--'} sub="within transport estimate" />
-              <MiniStat icon={MapPin} tone="default" label="Dominant wind" value={String((transport?.dominant_wind_direction as Record<string, unknown> | undefined)?.compass_from ?? '--')} sub={`${fmt((transport?.dominant_wind_direction as Record<string, unknown> | undefined)?.wind_speed_mps as number | undefined, 1) ?? '--'} m/s`} />
-            </div>
-            {transport?.disclaimer && <p className="mt-3 text-[11px] text-slate-500">{transport.disclaimer}</p>}
-          </section>
+          {/* ---------- Why this forecast ---------- */}
+          <ForecastReasonPanel station={selected} />
+
+          {/* ---------- Regional transport ---------- */}
+          <TransportChain transport={transport} fire={fireActivity} />
+
+          {/* ---------- Alerts strip ---------- */}
+          <AlertsSection alerts={alerts} grap={grap} />
 
           {/* ---------- Model performance summary ---------- */}
           <section className="card">
@@ -487,75 +432,6 @@ function StationRank({ summary, best = false }: { summary: SummaryResponse; best
         <p className={`text-xs font-semibold capitalize ${style.text}`}>{style.label} · {fmt(target.aqi, 0)}</p>
       </div>
     </div>
-  )
-}
-
-function MiniStat({
-  icon: Icon, label, value, sub, tone = 'default',
-}: {
-  icon: typeof Flame
-  label: string
-  value: string | number
-  sub?: string
-  tone?: 'default' | 'good' | 'warn' | 'bad'
-}) {
-  const toneClasses: Record<string, string> = {
-    default: 'bg-inst-50 text-inst-700',
-    good: 'bg-green-50 text-green-700',
-    warn: 'bg-amber-50 text-amber-700',
-    bad: 'bg-red-50 text-red-700',
-  }
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className="flex items-center gap-2">
-        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${toneClasses[tone]}`}>
-          <Icon className="h-4 w-4" aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-lg font-bold leading-tight text-slate-900">{value ?? '--'}</p>
-          <p className="truncate text-[10px] text-slate-500">{label}</p>
-        </div>
-      </div>
-      {sub && <p className="mt-1 text-[11px] text-slate-500">{sub}</p>}
-    </div>
-  )
-}
-
-function AtmosphericStrip({ atmosphere }: { atmosphere: AtmosphereCurrentResponse['stations'][number] | null }) {
-  if (!atmosphere) {
-    return (
-      <section className="card">
-        <h2 className="mb-3 text-base font-bold text-slate-900">Atmospheric conditions</h2>
-        <EmptyState
-          title="No atmospheric profile yet"
-          hint="Requires stored weather and pressure-level observations. See the Atmosphere page for wall details."
-        />
-      </section>
-    )
-  }
-  const items = [
-    { label: 'Wind', value: `${fmt(atmosphere.wind.wind_speed_mps, 1)} m/s`, sub: `${atmosphere.wind.compass_from ?? '--'} · ${atmosphere.wind.label}` },
-    { label: 'PBL height', value: `${fmt(atmosphere.pbl.pbl_height_m)} m`, sub: atmosphere.pbl.label },
-    { label: 'Ventilation', value: `${fmt(atmosphere.ventilation.ventilation_coefficient_m2s)} m²/s`, sub: atmosphere.ventilation.label },
-    { label: 'Inversion', value: atmosphere.inversion?.detected ? (atmosphere.inversion.category ?? 'Detected') : 'None', sub: atmosphere.inversion?.dispersion_condition ?? 'No lapse-rate profile' },
-    { label: 'Trapping', value: `${fmt(atmosphere.trapping.score, 2)}`, sub: atmosphere.trapping.label },
-  ]
-  return (
-    <section className="card">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-900">Atmospheric conditions</h2>
-        <Link to="/atmosphere" className="text-xs font-semibold text-inst-700 hover:underline">Full analysis →</Link>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {items.map((it) => (
-          <div key={it.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{it.label}</p>
-            <p className="text-base font-bold text-slate-900">{it.value}</p>
-            <p className="truncate text-[10px] text-slate-500">{it.sub}</p>
-          </div>
-        ))}
-      </div>
-    </section>
   )
 }
 

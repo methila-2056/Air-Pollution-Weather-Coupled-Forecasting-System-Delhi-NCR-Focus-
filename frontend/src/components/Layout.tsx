@@ -3,7 +3,6 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   ChevronDown,
   Cloud,
   CloudSun,
@@ -18,22 +17,23 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import SystemStatus from './SystemStatus'
 
 const primaryNav = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/forecast', label: '72-Hour Forecast', icon: Gauge },
-  { to: '/map', label: 'NCR Map', icon: MapIcon },
+  { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { to: '/forecast', label: '72H Forecast', icon: Gauge },
   { to: '/atmosphere', label: 'Atmosphere', icon: CloudSun },
-  { to: '/fire-plume', label: 'Fire & Plume', icon: Flame },
+  { to: '/fire-plume', label: 'Transport', icon: Flame },
+  { to: '/map', label: 'NCR Map', icon: MapIcon },
   { to: '/alerts', label: 'Alerts', icon: AlertTriangle },
-  { to: '/model-performance', label: 'Model Performance', icon: BarChart3 },
 ]
 
 const tools = [
   { to: '/overview', label: 'Operational Overview' },
-  { to: '/spatial', label: 'Spatial Forecast' },
-  { to: '/explanation', label: 'AI Explanation' },
-  { to: '/data', label: 'Data Tools' },
+  { to: '/explanation', label: 'Forecast Explainability' },
+  { to: '/model-performance', label: 'Model Performance' },
+  { to: '/spatial', label: 'Spatial AQ Outlook' },
+  { to: '/data', label: 'Data & System Sources' },
 ]
 
 function initials(name: string): string {
@@ -191,10 +191,11 @@ export default function Layout({ children }: { children?: ReactNode }) {
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          <span className="ml-auto hidden rounded-full border border-blue-300/40 px-3 py-1 text-xs text-blue-100 md:inline-block">
+          <span className="ml-auto hidden rounded-full border border-blue-300/40 px-3 py-1 text-xs text-blue-100 xl:inline-block">
             SIH 2026 · PS SIH26082
           </span>
-          <div className="ml-auto md:ml-0">
+          <SystemStatus className="ml-auto lg:ml-0 xl:ml-3" />
+          <div className="lg:ml-1">
             <UserMenu />
           </div>
         </div>

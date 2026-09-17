@@ -6,10 +6,11 @@ import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
 import InversionPanel from '../components/InversionPanel'
 import CouplingPanel from '../components/CouplingPanel'
+import DispersionMeter from '../components/DispersionMeter'
 import KpiCard from '../components/KpiCard'
 import { fmt } from '../lib/aqi'
-import { getStations, getWeather, getInversion, getCoupling } from '../api/client'
-import type { Station, WeatherData, InversionData, CouplingData } from '../types'
+import { getStations, getWeather, getInversion, getCoupling, getAtmosphereCurrent } from '../api/client'
+import type { Station, WeatherData, InversionData, CouplingData, AtmosphereCurrentResponse } from '../types'
 
 export default function Atmosphere() {
   const [stations, setStations] = useState<Station[]>([])
@@ -17,6 +18,7 @@ export default function Atmosphere() {
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [inversion, setInversion] = useState<InversionData | null>(null)
   const [coupling, setCoupling] = useState<CouplingData | null>(null)
+  const [atmosphere, setAtmosphere] = useState<AtmosphereCurrentResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -27,6 +29,7 @@ export default function Atmosphere() {
       getWeather(selected).then((r) => setWeather(r.data)).catch(() => setWeather(null)),
       getInversion(selected).then((r) => setInversion(r.data)).catch(() => setInversion(null)),
       getCoupling(selected).then((r) => setCoupling(r.data)).catch(() => setCoupling(null)),
+      getAtmosphereCurrent(selected).then((r) => setAtmosphere(r.data)).catch(() => setAtmosphere(null)),
     ]).then((results) => {
       if (results.every((r) => r.status === 'rejected')) setError('Failed to load atmospheric data')
     }).finally(() => setLoading(false))
@@ -53,7 +56,7 @@ export default function Atmosphere() {
     <div className="space-y-6">
       <PageHeader
         title="Atmospheric Conditions"
-        subtitle="Vertical structure, inversion trapping and weather-chemistry coupling"
+        subtitle="Vertical structure, inversion trapping and the two-way aerosol–PBL coupling that shapes dispersion"
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Atmosphere' }]}
         lastUpdated={weather?.timestamp}
         actions={
@@ -125,6 +128,8 @@ export default function Atmosphere() {
               </ul>
             </div>
           </div>
+
+          <DispersionMeter atmosphere={atmosphere?.stations.find((s) => s.station === selected) ?? null} />
 
           {!weather && !inversion && !coupling && (
             <EmptyState title="No atmospheric data" hint="This station has no weather or vertical-profile observations stored yet." />
