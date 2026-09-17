@@ -43,7 +43,7 @@ export default function PageHeader({ title, subtitle, breadcrumbs, lastUpdated, 
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500">
-              <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" /> Updated {tsFmt(lastUpdated)} UTC
+              <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" /> Updated {tsFmt(lastUpdated)}
             </span>
           )}
           {actions}

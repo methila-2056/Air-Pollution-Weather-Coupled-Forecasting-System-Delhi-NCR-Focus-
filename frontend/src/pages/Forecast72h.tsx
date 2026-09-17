@@ -8,15 +8,8 @@ import EmptyState from '../components/EmptyState'
 import ForecastRiskBand from '../components/ForecastRiskBand'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { fmt } from '../lib/aqi'
+import { CHART, pollutantColor } from '../lib/theme'
 import type { Station, ForecastPoint } from '../types'
-
-const TAB_COLORS: Record<string, string> = {
-  aqi_pred: '#0B4F8A',
-  pm25_pred: '#dc2626',
-  pm10_pred: '#d97706',
-  o3_pred: '#059669',
-  no2_pred: '#7c3aed',
-}
 
 const tabs = [
   { key: 'aqi_pred', label: 'AQI' },
@@ -116,15 +109,15 @@ export default function Forecast72h() {
             </h2>
             <ResponsiveContainer width="100%" height={320}>
               <LineChart data={chartData} margin={{ left: -12, right: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <XAxis dataKey="time" stroke={CHART.axis} fontSize={11} />
+                <YAxis stroke={CHART.axis} fontSize={11} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}
-                  labelStyle={{ color: '#334155' }}
+                  contentStyle={{ backgroundColor: CHART.tooltipBg, border: `1px solid ${CHART.tooltipBorder}`, borderRadius: 8 }}
+                  labelStyle={{ color: CHART.tooltipLabel }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="value" stroke={TAB_COLORS[pollutant] ?? '#0B4F8A'} strokeWidth={2.5} dot={false} name={pollutant.replace('_pred', '').toUpperCase()} />
+                <Line type="monotone" dataKey="value" stroke={pollutantColor(pollutant)} strokeWidth={2.5} dot={false} name={pollutant.replace('_pred', '').toUpperCase()} />
               </LineChart>
             </ResponsiveContainer>
           </div>

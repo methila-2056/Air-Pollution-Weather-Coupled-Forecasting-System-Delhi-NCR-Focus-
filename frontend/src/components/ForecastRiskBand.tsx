@@ -1,6 +1,7 @@
 import { AlarmClock } from 'lucide-react'
 import type { ForecastPoint } from '../types'
-import { aqiStyle, fmt } from '../lib/aqi'
+import { aqiStyle, fmt, tsFmt } from '../lib/aqi'
+import { latestForecastRun } from '../lib/forecast'
 import EmptyState from './EmptyState'
 
 interface Props {
@@ -8,7 +9,11 @@ interface Props {
 }
 
 export default function ForecastRiskBand({ forecast }: Props) {
-  const valid = (forecast ?? []).filter((f) => f.aqi_pred != null && f.aqi_pred > 0)
+  const rows = latestForecastRun(forecast)
+  const valid = rows.filter((f) => f.aqi_pred != null && f.aqi_pred > 0)
+  const latestTs =
+    forecast?.reduce<string | null>((m, f) => (f.timestamp && (!m || f.timestamp > m) ? f.timestamp : m), null) ?? null
+  const coupled = rows.some((f) => f.coupling_mode === 'coupled')
   if (!valid.length) {
     return (
       <section className="card">
@@ -45,13 +50,19 @@ export default function ForecastRiskBand({ forecast }: Props) {
         <div className="flex items-center gap-2">
           <AlarmClock className="h-4 w-4 text-inst-700" aria-hidden="true" />
           <h2 className="text-base font-bold text-slate-900">72-hour risk band</h2>
-          <span className="rounded-full bg-inst-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-inst-800">
-            Estimated outlook
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${peakStyle.chip}`}>
+            Estimated outlook{overallPeak ? ` · ${peakStyle.label}` : ''}
           </span>
+          {coupled && (
+            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+              Coupled two-way
+            </span>
+          )}
         </div>
         {overallPeak && (
           <p className="text-xs text-slate-600">
             Peak <b className={peakStyle.text}>AQI {fmt(overallPeak.aqi_pred, 0)} ({peakStyle.label})</b> at +{overallPeak.horizon_hours}h
+            {latestTs && <span className="ml-2 text-slate-400">run {tsFmt(latestTs)}</span>}
           </p>
         )}
       </div>

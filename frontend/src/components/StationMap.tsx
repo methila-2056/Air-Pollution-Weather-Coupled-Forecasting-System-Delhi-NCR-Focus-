@@ -3,6 +3,8 @@ import 'leaflet/dist/leaflet.css'
 import type { Station, FireHotspot, PollutionReading } from '../types'
 import { aqiStyle } from '../lib/aqi'
 
+const DELHI_CENTER: [number, number] = [28.6139, 77.209]
+
 interface WindVector {
   lat: number
   lon: number
@@ -66,7 +68,20 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
   })
 
   return (
-    <MapContainer center={[28.6139, 77.2090]} zoom={10} className="h-96 rounded-xl z-0">
+    <MapContainer
+      center={DELHI_CENTER}
+      zoom={10}
+      dragging={true}
+      touchZoom={true}
+      scrollWheelZoom={true}
+      doubleClickZoom={true}
+      boxZoom={true}
+      zoomControl={true}
+      inertia={true}
+      worldCopyJump={true}
+      keyboard={false}
+      className="h-96 rounded-xl z-0"
+    >
       <TileLayer
         attribution='&copy; OpenStreetMap contributors &copy; CARTO'
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"

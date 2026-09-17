@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { latestForecastRun } from '../lib/forecast'
 import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials } from '../types'
 
 const TOKEN_KEY = 'aerocast_token'
@@ -52,7 +53,10 @@ export const getPollutionHistory = (stationId: number, limit = 168) =>
   api.get<PollutionReading[]>(`/pollution/${stationId}/history`, { params: { limit } })
 export const ingestPollution = () => api.post<PollutionIngestSummary>('/pollution/ingest')
 export const getCurrentAQI = (station: string) => api.get<CurrentAQI>(`/current/${station}`)
-export const getForecast = (station: string, hours = 72) => api.get<ForecastPoint[]>(`/forecast/${station}`, { params: { hours } })
+export const getForecast = async (station: string, hours = 72) => {
+  const res = await api.get<ForecastPoint[]>(`/forecast/${station}`, { params: { hours } })
+  return { ...res, data: latestForecastRun(res.data) }
+}
 export const getNCRForecast = (hours = 72) => api.get<Record<string, ForecastPoint[]>>(`/forecast/ncr`, { params: { hours } })
 export const getWeather = (station: string) => api.get<WeatherData>(`/weather/${station}`)
 export const getInversion = (station: string) => api.get<InversionData>(`/inversion/${station}`)

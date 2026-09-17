@@ -81,6 +81,7 @@ class ForecastPoint(BaseModel):
     aqi_category: str
     dominant_pollutant: str | None = None
     coupling_stability: float | None = None
+    coupling_mode: str | None = None
 
 class GridForecastPoint(BaseModel):
     timestamp: datetime

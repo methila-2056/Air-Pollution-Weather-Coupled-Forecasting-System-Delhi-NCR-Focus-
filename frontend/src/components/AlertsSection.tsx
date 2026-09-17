@@ -1,6 +1,7 @@
 import { AlertTriangle, Scale } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Alert, GrapAssessment } from '../types'
+import { readableOnHex } from '../lib/aqi'
 import AlertList from './AlertList'
 import EmptyState from './EmptyState'
 
@@ -28,7 +29,7 @@ export default function AlertsSection({ alerts, grap, limit = 3 }: Props) {
           <Scale className="h-5 w-5 shrink-0 text-inst-700" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full px-3 py-0.5 text-xs font-bold text-white" style={{ backgroundColor: grap.color }}>
+              <span className="rounded-full px-3 py-0.5 text-xs font-bold" style={{ backgroundColor: grap.color, color: readableOnHex(grap.color) }}>
                 {grap.title}
               </span>
               <span className="text-xs text-slate-600">

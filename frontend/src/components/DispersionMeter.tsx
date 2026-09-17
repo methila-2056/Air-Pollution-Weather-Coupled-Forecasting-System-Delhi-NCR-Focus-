@@ -1,6 +1,7 @@
 import { Gauge } from 'lucide-react'
 import type { StationAtmosphere } from '../types'
 import { fmt } from '../lib/aqi'
+import { STATUS } from '../lib/theme'
 import EmptyState from './EmptyState'
 
 interface Props {
@@ -30,7 +31,7 @@ export default function DispersionMeter({ atmosphere }: Props) {
   const potential = handicap != null ? Math.max(0, Math.min(100, Math.round((1 - handicap) * 100))) : null
 
   const tone = potential == null ? 'text-slate-400' : potential >= 65 ? 'text-green-700' : potential >= 40 ? 'text-amber-700' : 'text-red-700'
-  const bar = potential == null ? '#cbd5e1' : potential >= 65 ? '#16a34a' : potential >= 40 ? '#d97706' : '#dc2626'
+  const bar = potential == null ? STATUS.muted : potential >= 65 ? STATUS.good : potential >= 40 ? STATUS.warn : STATUS.bad
 
   return (
     <section className="card">

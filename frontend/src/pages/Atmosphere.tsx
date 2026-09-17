@@ -9,6 +9,7 @@ import CouplingPanel from '../components/CouplingPanel'
 import DispersionMeter from '../components/DispersionMeter'
 import KpiCard from '../components/KpiCard'
 import { fmt } from '../lib/aqi'
+import { STATUS } from '../lib/theme'
 import { getStations, getWeather, getInversion, getCoupling, getAtmosphereCurrent } from '../api/client'
 import type { Station, WeatherData, InversionData, CouplingData, AtmosphereCurrentResponse } from '../types'
 
@@ -40,7 +41,7 @@ export default function Atmosphere() {
 
   const pbl = weather?.pbl_height ?? null
   const pblWidth = pbl != null ? Math.max(4, Math.min(100, (pbl / 1500) * 100)) : 0
-  const pblColor = pbl == null ? '#cbd5e1' : pbl < 300 ? '#dc2626' : pbl < 600 ? '#d97706' : '#16a34a'
+  const pblColor = pbl == null ? STATUS.muted : pbl < 300 ? STATUS.bad : pbl < 600 ? STATUS.warn : STATUS.good
   const pblNote =
     pbl == null
       ? 'PBL height data unavailable'

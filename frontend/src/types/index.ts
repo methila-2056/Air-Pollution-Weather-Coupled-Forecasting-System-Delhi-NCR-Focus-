@@ -70,6 +70,7 @@ export interface ForecastPoint {
   aqi_pred: number | null
   aqi_category: string
   coupling_stability?: number | null
+  coupling_mode?: string | null
 }
 
 export interface CouplingDiagnostics {

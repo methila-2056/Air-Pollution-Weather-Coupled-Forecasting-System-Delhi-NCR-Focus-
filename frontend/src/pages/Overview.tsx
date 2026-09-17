@@ -11,6 +11,7 @@ import ExplainabilityPanel from '../components/ExplainabilityPanel'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
+import { CHART } from '../lib/theme'
 import type { Station, PollutionReading, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, CouplingData, SummaryResponse } from '../types'
 
 function aqiCategory(aqi?: number | null): string {
@@ -194,7 +195,7 @@ export default function Overview() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <h2 className="card-header">72-Hour AQI Forecast</h2>
-          <ForecastChart data={forecast} pollutant="aqi_pred" color="#3b82f6" />
+          <ForecastChart data={forecast} pollutant="aqi_pred" color={CHART.brand} />
         </div>
         <InversionPanel data={inversion} />
       </div>

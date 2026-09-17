@@ -1,21 +1,24 @@
 ﻿import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
 import type { ModelPerformanceResponse } from '../types'
+import { CHART } from '../lib/theme'
 
 const MODEL_LABELS: Record<string, string> = {
   persistence: 'Persistence',
   random_forest: 'Random Forest',
   xgboost: 'XGBoost',
+  gru: 'GRU',
 }
 
 const MODEL_COLORS: Record<string, string> = {
   persistence: '#64748b',
   random_forest: '#16a34a',
-  xgboost: '#0B4F8A',
+  xgboost: CHART.brand,
+  gru: '#7c3aed',
 }
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 },
-  labelStyle: { color: '#334155' },
+  contentStyle: { backgroundColor: CHART.tooltipBg, border: `1px solid ${CHART.tooltipBorder}`, borderRadius: 8 },
+  labelStyle: { color: CHART.tooltipLabel },
 }
 
 function fmt(v: number | null | undefined, digits = 2) {
@@ -25,7 +28,11 @@ function fmt(v: number | null | undefined, digits = 2) {
 
 function dateFmt(s: string | null | undefined) {
   if (!s) return '--'
-  return s.replace('T', ' ').slice(0, 16)
+  const cleaned = s.endsWith('Z') || s.includes('+00:00') ? s : `${s}Z`
+  const d = new Date(cleaned)
+  if (Number.isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 16)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 export default function ModelPerformance({ data }: { data: ModelPerformanceResponse }) {
@@ -99,13 +106,13 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
         <h3 className="card-header">Mean Absolute Error by Horizon (lower is better)</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-            <YAxis stroke="#64748b" fontSize={12} />
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+            <XAxis dataKey="name" stroke={CHART.axis} fontSize={11} />
+            <YAxis stroke={CHART.axis} fontSize={12} />
             <Tooltip {...tooltipStyle} />
             <Legend />
             {models.map(m => (
-              <Bar key={m} dataKey={MODEL_LABELS[m] ?? m} fill={MODEL_COLORS[m] ?? '#0B4F8A'} radius={[4, 4, 0, 0]} />
+              <Bar key={m} dataKey={MODEL_LABELS[m] ?? m} fill={MODEL_COLORS[m] ?? CHART.brand} radius={[4, 4, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -116,13 +123,13 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
         <h3 className="card-header">R-squared by Horizon (higher is better)</h3>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={r2Data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-            <YAxis stroke="#64748b" fontSize={12} domain={[0, 1]} />
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+            <XAxis dataKey="name" stroke={CHART.axis} fontSize={11} />
+            <YAxis stroke={CHART.axis} fontSize={12} domain={[0, 1]} />
             <Tooltip {...tooltipStyle} />
             <Legend />
             {models.map(m => (
-              <Line key={m} type="monotone" dataKey={MODEL_LABELS[m] ?? m} stroke={MODEL_COLORS[m] ?? '#0B4F8A'} strokeWidth={2} dot={{ r: 3 }} />
+              <Line key={m} type="monotone" dataKey={MODEL_LABELS[m] ?? m} stroke={MODEL_COLORS[m] ?? CHART.brand} strokeWidth={2} dot={{ r: 3 }} />
             ))}
           </LineChart>
         </ResponsiveContainer>

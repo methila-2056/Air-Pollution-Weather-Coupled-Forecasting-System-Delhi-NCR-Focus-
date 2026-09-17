@@ -18,7 +18,6 @@ import {
   getTransportRisk,
   getModelPerformance,
   getPollutionLatest,
-  getPollutionHistory,
   getGrapCurrent,
   getSummary,
   getAlerts,
@@ -37,7 +36,8 @@ import TransportChain from '../components/TransportChain'
 import AlertsSection from '../components/AlertsSection'
 import ForecastReasonPanel from '../components/ForecastReasonPanel'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
-import { aqiStyle, fmt, tsFmt } from '../lib/aqi'
+import { aqiStyle, fmt, readableOnHex, tsFmt } from '../lib/aqi'
+import { CHART } from '../lib/theme'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
@@ -72,7 +72,10 @@ function buildWindArrows(stations: Station[], atmosphere: AtmosphereCurrentRespo
 }
 
 function ChartTooltip() {
-  return { contentStyle: { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }, labelStyle: { color: '#334155' } }
+  return {
+    contentStyle: { backgroundColor: CHART.tooltipBg, border: `1px solid ${CHART.tooltipBorder}`, borderRadius: 8 },
+    labelStyle: { color: CHART.tooltipLabel },
+  }
 }
 
 export default function Dashboard() {
@@ -240,20 +243,20 @@ export default function Dashboard() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <p className="truncate text-xs font-semibold text-slate-800">{s.name}</p>
+                      <p className="truncate text-xs font-semibold text-slate-900">{s.name}</p>
                       <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.bar}`} aria-hidden="true" />
                     </div>
                     <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
                       {fmt(r?.aqi ?? null, 0)}
-                      <span className="ml-1 text-[10px] font-normal text-slate-400">AQI</span>
+                      <span className="ml-1 text-[10px] font-normal text-slate-500">AQI</span>
                     </p>
-                    <p className="truncate text-[10px] text-slate-500">
-                      PM2.5 {fmt(r?.pm25 ?? null, 0)}<span className="text-slate-400"> μg/m³</span>
+                    <p className="truncate text-xs text-slate-700">
+                      PM2.5 {fmt(r?.pm25 ?? null, 0)}<span className="text-slate-500"> μg/m³</span>
                     </p>
                     {r ? (
-                      <p className="truncate text-[10px] font-medium capitalize text-slate-600">{style.label}</p>
+                      <p className={`truncate text-xs font-semibold capitalize ${style.text}`}>{style.label}</p>
                     ) : (
-                      <p className="truncate text-[10px] italic text-slate-400">Awaiting live data</p>
+                      <p className="truncate text-xs italic text-slate-500">Awaiting live data</p>
                     )}
                   </button>
                 )
@@ -275,7 +278,7 @@ export default function Dashboard() {
               </div>
 
               <div className="mt-3 flex items-center gap-3">
-                <div className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl text-white ${rankStyle.bar}`}>
+                <div className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl ${rankStyle.bar}`} style={{ color: readableOnHex(rankStyle.hex) }}>
                   <span className="text-2xl font-bold leading-none tabular-nums">{fmt(current?.aqi, 0)}</span>
                   <span className="text-[10px] font-medium uppercase">AQI</span>
                 </div>
@@ -284,7 +287,7 @@ export default function Dashboard() {
                   <p className="truncate text-xs text-slate-500">
                     Dominant: {current?.dominant_pollutant ?? '—'}
                   </p>
-                  <p className="text-xs text-slate-500">{tsFmt(current?.timestamp)} UTC</p>
+                  <p className="text-xs text-slate-500">{tsFmt(current?.timestamp)}</p>
                 </div>
               </div>
 
@@ -418,7 +421,7 @@ export default function Dashboard() {
 
 function StationRank({ summary, best = false }: { summary: SummaryResponse; best?: boolean }) {
   const target = best ? summary.best_station : summary.worst_station
-  if (!target || target.aqi == null) return <div className="card" />
+  if (!target || target.aqi == null) return null
   const style = aqiStyle(target.aqi)
   const Icon = best ? TrendingDown : TrendingUp
   return (
@@ -462,16 +465,16 @@ function ForecastPreview({ point, observed }: { point: Pm25ForecastPoint[] | For
       <AreaChart data={rows} margin={{ left: -20, right: 8 }}>
         <defs>
           <linearGradient id="fcastFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#1d5f9c" stopOpacity={0.28} />
-            <stop offset="95%" stopColor="#1d5f9c" stopOpacity={0} />
+            <stop offset="5%" stopColor={CHART.brand} stopOpacity={0.28} />
+            <stop offset="95%" stopColor={CHART.brand} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-        <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-        <YAxis stroke="#64748b" fontSize={11} />
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+        <XAxis dataKey="time" stroke={CHART.axis} fontSize={11} />
+        <YAxis stroke={CHART.axis} fontSize={11} />
         <Tooltip {...tooltip} />
-        <ReferenceLine y={60} stroke="#d97706" strokeDasharray="4 4" label={{ value: 'NAAQS 60', position: 'insideTopRight', fill: '#d97706', fontSize: 10 }} />
-        <Area type="monotone" dataKey="pred" stroke="#1d5f9c" strokeWidth={2} fill="url(#fcastFill)" name="PM2.5 (μg/m³)" />
+        <ReferenceLine y={60} stroke={CHART.naaqsPm25} strokeDasharray="4 4" label={{ value: 'NAAQS 60', position: 'insideTopRight', fill: CHART.naaqsPm25, fontSize: 10 }} />
+        <Area type="monotone" dataKey="pred" stroke={CHART.brand} strokeWidth={2} fill="url(#fcastFill)" name="PM2.5 (μg/m³)" />
       </AreaChart>
     </ResponsiveContainer>
   )

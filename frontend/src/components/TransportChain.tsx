@@ -48,7 +48,7 @@ export default function TransportChain({ transport, fire }: Props) {
       value: String(dw.compass_from ?? '--'),
       sub: `${fmt(dw.wind_speed_mps as number | null | undefined ?? null, 1)} m/s`,
       icon: Wind,
-      tone: 'bg-sky-50 text-sky-600',
+      tone: 'bg-cyan-50 text-cyan-600',
     },
   ]
 

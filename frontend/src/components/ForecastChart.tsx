@@ -1,5 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { ForecastPoint } from '../types'
+import { CHART } from '../lib/theme'
 
 interface Props {
   data: ForecastPoint[]
@@ -8,7 +9,7 @@ interface Props {
   height?: number
 }
 
-export default function ForecastChart({ data, pollutant = 'aqi_pred', color = '#0B4F8A', height = 300 }: Props) {
+export default function ForecastChart({ data, pollutant = 'aqi_pred', color = CHART.brand, height = 300 }: Props) {
   const chartData = data.map((d) => ({
     time: `+${d.horizon_hours}h`,
     value: d[pollutant],
@@ -19,12 +20,12 @@ export default function ForecastChart({ data, pollutant = 'aqi_pred', color = '#
     <div className="card">
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="time" stroke="#64748b" fontSize={12} />
-          <YAxis stroke="#64748b" fontSize={12} />
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+          <XAxis dataKey="time" stroke={CHART.axis} fontSize={12} />
+          <YAxis stroke={CHART.axis} fontSize={12} />
           <Tooltip
-            contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}
-            labelStyle={{ color: '#334155' }}
+            contentStyle={{ backgroundColor: CHART.tooltipBg, border: `1px solid ${CHART.tooltipBorder}`, borderRadius: 8 }}
+            labelStyle={{ color: CHART.tooltipLabel }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} />

@@ -7,7 +7,7 @@
 [![CI](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml/badge.svg)](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-422%20passed-green)](backend/tests)
+[![Tests](https://img.shields.io/badge/tests-501%20passed-green)](backend/tests)
 [![Docker](https://img.shields.io/badge/docker-compose%20ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 
 AeroCast-NCR fuses **official CPCB real-time monitoring (data.gov.in)**,
@@ -55,8 +55,8 @@ that:
    NASA FIRMS, monthly ERA5) through an idempotent, deduplicated refresh
    pipeline.
 2. Trains and serves **per-pollutant, per-horizon ML models** (XGBoost,
-   Random Forest, Persistence, plus a NumPy-only GRU trained and evaluated as
-   a candidate ensemble member) for all six criteria pollutants.
+   Random Forest, Persistence, plus a lazy-import PyTorch GRU trained and
+   evaluated as a candidate ensemble member) for all six criteria pollutants.
 3. Provides a **direct PM2.5 forecast engine** with split-conformal prediction
    intervals and SHAP explanations.
 4. **Couples weather and chemistry** in a feedback loop — aerosol optical

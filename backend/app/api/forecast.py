@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,8 @@ from ..schemas.schemas import (
     ForecastPoint,
 )
 from ..services import alert_service, forecast_service
+
+logger = logging.getLogger("aerocast.forecast")
 
 router = APIRouter()
 
@@ -43,6 +46,7 @@ def _to_forecast_point(f) -> ForecastPoint:
         aqi_category=f.aqi_category or "",
         dominant_pollutant=f.dominant_pollutant,
         coupling_stability=f.coupling_stability,
+        coupling_mode=f.coupling_mode,
     )
 
 @router.post("/forecast/coupled", response_model=dict)
@@ -104,7 +108,18 @@ def generate_forecast(
             raise HTTPException(status_code=503, detail="No stations available; seed the database first")
 
     horizons = list(dict.fromkeys(req.horizons))
-    _, predictions = forecast_service.generate_forecast(db, station.id, horizons)
+
+    # Operational outlook: run the time-stepped two-way coupled forecast so the
+    # served 72h AQI reflects aerosol-radiative PBL/weather feedback (the core
+    # requirement). Falls back to the direct per-horizon ML forecast if the
+    # coupled engine cannot run for any reason.
+    try:
+        result = forecast_service.generate_coupled_forecast(db, station.id, horizons)
+        predictions = result["coupled"]
+        forecast_service.save_coupled_forecasts(db, station.id, predictions)
+    except Exception:
+        logger.warning("coupled forecast failed for %s; falling back to direct ML", station.name, exc_info=True)
+        _, predictions = forecast_service.generate_forecast(db, station.id, horizons)
 
     weather = forecast_service.get_weather_context(db, station.id)
     fire = forecast_service.get_fire_context(db)
@@ -149,6 +164,8 @@ def generate_forecast(
                 co_pred=p.get("co_pred"),
                 aqi_pred=p["aqi_pred"],
                 aqi_category=p["aqi_category"],
+                coupling_stability=p.get("coupling_stability"),
+                coupling_mode="coupled" if p.get("coupling_stability") is not None else "direct",
             )
             for p in predictions
         ],

@@ -1,16 +1,8 @@
 import { useState, useEffect } from 'react'
 import { getGridForecast, getDispersionForecast, generateCoupledForecast, getStations } from '../api/client'
 import PageHeader from '../components/PageHeader'
+import { AQI_CATEGORIES, aqiCategoryHex, aqiStyle } from '../lib/aqi'
 import type { GridForecast, CoupledForecastResult, DispersionForecast, Station, GridCell } from '../types'
-
-const AQI_COLORS: Record<string, string> = {
-  Good: '#22c55e',
-  Satisfactory: '#84cc16',
-  Moderate: '#eab308',
-  Poor: '#f97316',
-  'Very Poor': '#ef4444',
-  Severe: '#7f1d1d',
-}
 
 const HORIZONS = [1, 6, 12, 24, 48, 72]
 const DISP_HORIZONS = [24, 48, 72]
@@ -131,7 +123,7 @@ export default function SpatialForecastPage() {
                 y={y(c.lat)}
                 width={width / 45}
                 height={height / 35}
-                fill={AQI_COLORS[c.aqi_category] ?? '#94a3b8'}
+                fill={c.aqi != null ? aqiStyle(c.aqi).hex : aqiCategoryHex(c.aqi_category)}
                 opacity={0.85}
               />
             ))}
@@ -143,10 +135,10 @@ export default function SpatialForecastPage() {
             ))}
           </svg>
           <div className="mt-3 flex flex-wrap gap-3">
-            {Object.entries(AQI_COLORS).map(([cat, col]) => (
-              <div key={cat} className="flex items-center gap-1 text-xs text-slate-600">
-                <span className="h-3 w-3 rounded" style={{ background: col }} />
-                {cat}
+            {AQI_CATEGORIES.map((cat) => (
+              <div key={cat.label} className="flex items-center gap-1 text-xs text-slate-600">
+                <span className="h-3 w-3 rounded" style={{ background: cat.hex }} />
+                {cat.label}
               </div>
             ))}
           </div>

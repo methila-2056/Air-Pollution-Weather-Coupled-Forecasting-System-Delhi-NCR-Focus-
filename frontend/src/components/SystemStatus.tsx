@@ -42,7 +42,7 @@ export default function SystemStatus({ className = '' }: Props) {
         {offline ? 'API offline' : stale ? 'Data stale' : 'Live'}
       </span>
       {!offline && summary && (
-        <span className="text-blue-100">
+        <span className="text-inst-100">
           NCR AQI {fmt(summary.ncr_avg_aqi, 0)} · {summary.stations_with_readings}/{summary.stations} stations · {tsFmt(summary.generated_at)}
         </span>
       )}

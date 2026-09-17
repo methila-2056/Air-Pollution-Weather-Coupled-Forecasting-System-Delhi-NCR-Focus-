@@ -1,4 +1,5 @@
 import type { GrapAssessment } from '../types'
+import { readableOnHex } from '../lib/aqi'
 
 export default function GrapPanel({ data }: { data: GrapAssessment | null }) {
   if (!data) {
@@ -10,13 +11,15 @@ export default function GrapPanel({ data }: { data: GrapAssessment | null }) {
   }
 
   const active = data.status === 'ACTIVE'
-  const statusColor = active ? { backgroundColor: data.color, color: '#ffffff' } : undefined
+  const statusColor = active
+    ? { backgroundColor: data.color, color: readableOnHex(data.color) }
+    : { backgroundColor: '#e2e8f0', color: '#334155' }
 
   return (
     <div className="mt-4">
       <div className="flex flex-wrap items-center gap-3">
         <span
-          className="inline-flex items-center rounded-full px-4 py-1 text-sm font-bold text-white"
+          className="inline-flex items-center rounded-full px-4 py-1 text-sm font-bold"
           style={statusColor}
         >
           {data.title}

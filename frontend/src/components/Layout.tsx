@@ -76,14 +76,14 @@ function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-700 text-sm font-bold text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-inst-700 text-sm font-bold text-white">
           {initials(user.name)}
         </span>
         <span className="hidden text-left md:block">
           <span className="block text-sm font-semibold leading-tight">{user.name}</span>
-          <span className="block text-[11px] leading-tight text-blue-200">{user.role}</span>
+          <span className="block text-[11px] leading-tight text-inst-200">{user.role}</span>
         </span>
-        <ChevronDown className="h-4 w-4 text-blue-200" aria-hidden="true" />
+        <ChevronDown className="h-4 w-4 text-inst-200" aria-hidden="true" />
       </button>
       {open && (
         <div
@@ -176,7 +176,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold uppercase tracking-wide sm:text-base">AeroCast-NCR</p>
-            <p className="hidden truncate text-xs text-blue-200 sm:block">
+            <p className="hidden truncate text-xs text-inst-200 sm:block">
               National Air Quality Forecasting Unit · Delhi NCR
             </p>
           </div>
@@ -191,7 +191,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          <span className="ml-auto hidden rounded-full border border-blue-300/40 px-3 py-1 text-xs text-blue-100 xl:inline-block">
+          <span className="ml-auto hidden rounded-full border border-inst-300/40 px-3 py-1 text-xs text-inst-100 xl:inline-block">
             SIH 2026 · PS SIH26082
           </span>
           <SystemStatus className="ml-auto lg:ml-0 xl:ml-3" />

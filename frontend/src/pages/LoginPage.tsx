@@ -21,7 +21,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     getDemoCredentials()
-      .then((res) => setDemo(res.data))
+      .then((res) => {
+        setDemo(res.data)
+        setEmail((cur) => (cur === '' ? res.data.email : cur))
+        setPassword((cur) => (cur === '' ? res.data.password : cur))
+      })
       .catch(() => setDemo(null))
   }, [])
 
@@ -29,13 +33,24 @@ export default function LoginPage() {
     return <Navigate to={next && !next.startsWith('/login') ? next : '/dashboard'} replace />
   }
 
+  function signIn(useEmail: string, usePassword: string) {
+    return login(useEmail.trim(), usePassword).then(() => {
+      navigate(next && !next.startsWith('/login') ? next : '/dashboard', { replace: true })
+    })
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    const useEmail = email.trim() || demo?.email || ''
+    const usePassword = password || demo?.password || ''
+    if (!useEmail || !usePassword) {
+      setError('Please enter your email and password.')
+      return
+    }
     setSubmitting(true)
     try {
-      await login(email.trim(), password)
-      navigate(next && !next.startsWith('/login') ? next : '/dashboard', { replace: true })
+      await signIn(useEmail, usePassword)
     } catch {
       setError('Invalid email or password. Please try again.')
     } finally {
@@ -43,25 +58,33 @@ export default function LoginPage() {
     }
   }
 
-  function fillDemo() {
+  async function demoSignIn() {
     if (!demo) return
     setEmail(demo.email)
     setPassword(demo.password)
     setError(null)
+    setSubmitting(true)
+    try {
+      await signIn(demo.email, demo.password)
+    } catch {
+      setError('Demo sign-in failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-blue-50/60">
-      <header className="border-b border-blue-900/20 bg-blue-900 text-white">
+    <div className="flex min-h-screen flex-col bg-inst-50/60">
+      <header className="border-b border-white/10 bg-inst-800 text-white">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-4">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10">
             <Activity className="h-6 w-6 text-cyan-300" aria-hidden="true" />
           </span>
           <div>
             <p className="text-sm font-bold leading-tight uppercase tracking-wide">AeroCast-NCR</p>
-            <p className="text-xs text-blue-200">National Air Quality Forecasting · Delhi NCR</p>
+            <p className="text-xs text-inst-200">National Air Quality Forecasting · Delhi NCR</p>
           </div>
-          <span className="ml-auto hidden rounded-full border border-blue-300/40 px-3 py-1 text-xs text-blue-100 sm:inline-block">
+          <span className="ml-auto hidden rounded-full border border-inst-300/40 px-3 py-1 text-xs text-inst-100 sm:inline-block">
             SIH 2026 · PS SIH26082
           </span>
         </div>
@@ -92,7 +115,7 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="analyst@aerocast.in"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none ring-blue-600/30 focus:border-blue-500 focus:ring-2"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none ring-inst-600/30 focus:border-inst-500 focus:ring-2"
                   />
                 </div>
               </div>
@@ -111,7 +134,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-10 text-sm text-slate-900 outline-none ring-blue-600/30 focus:border-blue-500 focus:ring-2"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-10 text-sm text-slate-900 outline-none ring-inst-600/30 focus:border-inst-500 focus:ring-2"
                   />
                   <button
                     type="button"
@@ -134,10 +157,30 @@ export default function LoginPage() {
                 </div>
               )}
 
+              {demo && (
+                <button
+                  type="button"
+                  onClick={demoSignIn}
+                  disabled={submitting}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-inst-300 bg-inst-50 px-4 py-2.5 text-sm font-semibold text-inst-800 transition-colors hover:bg-inst-100 focus:outline-none focus:ring-2 focus:ring-inst-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Activity className="h-4 w-4" aria-hidden="true" />
+                  Continue with Demo Account
+                </button>
+              )}
+
+              {demo && (
+                <div className="flex items-center gap-3 text-xs text-slate-400">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  OR
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg bg-inst-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-inst-800 focus:outline-none focus:ring-2 focus:ring-inst-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>
@@ -145,19 +188,16 @@ export default function LoginPage() {
           </div>
 
           {demo && (
-            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-6 py-4">
-              <p className="text-sm font-semibold text-blue-900">Hackathon demo access</p>
-              <p className="mt-1 break-all text-xs leading-relaxed text-blue-800">
+            <div className="mt-4 rounded-xl border border-inst-100 bg-inst-50 px-6 py-4">
+              <p className="text-sm font-semibold text-inst-900">Hackathon demo access</p>
+              <p className="mt-1 break-all text-xs leading-relaxed text-inst-800">
                 Email: <span className="font-mono">{demo.email}</span>&nbsp;· Password:{' '}
                 <span className="font-mono">{demo.password}</span>
               </p>
-              <button
-                type="button"
-                onClick={fillDemo}
-                className="mt-2 rounded-lg border border-blue-700 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 transition-colors hover:bg-blue-100"
-              >
-                Autofill demo credentials
-              </button>
+              <p className="mt-1 text-xs text-inst-700">
+                These are pre-filled above — just press Enter or click
+                &quot;Continue with Demo Account&quot; to sign in instantly.
+              </p>
             </div>
           )}
 

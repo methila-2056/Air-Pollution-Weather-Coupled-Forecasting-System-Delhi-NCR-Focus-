@@ -5,7 +5,7 @@ const levelConfig = {
   SEVERE: { icon: AlertTriangle, color: 'text-red-700 bg-red-50 border-red-300' },
   WARNING: { icon: AlertTriangle, color: 'text-orange-700 bg-orange-50 border-orange-300' },
   WATCH: { icon: AlertCircle, color: 'text-amber-700 bg-amber-50 border-amber-300' },
-  INFO: { icon: Info, color: 'text-blue-700 bg-blue-50 border-blue-300' },
+  INFO: { icon: Info, color: 'text-inst-700 bg-inst-50 border-inst-300' },
 }
 
 export default function AlertList({ alerts }: { alerts: Alert[] }) {

@@ -89,7 +89,7 @@ export default function ForecastReasonPanel({ station }: Props) {
           </div>
 
           <p className="mt-4 text-[11px] text-slate-500">
-            {data.explanation_method} on {tsFmt(data.data_as_of)} UTC · base {fmt(data.base_value, 1)} μg/m³ · generated {tsFmt(data.generated_at)} UTC
+            {data.explanation_method} on {tsFmt(data.data_as_of)} · base {fmt(data.base_value, 1)} μg/m³ · generated {tsFmt(data.generated_at)}
           </p>
         </>
       ) : (

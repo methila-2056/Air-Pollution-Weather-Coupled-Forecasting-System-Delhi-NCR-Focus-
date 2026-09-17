@@ -7,6 +7,7 @@ import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
 import AlertList from '../components/AlertList'
 import GrapPanel from '../components/GrapPanel'
+import GrapStagesTable from '../components/GrapStagesTable'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import type { Alert, GrapAssessment } from '../types'
 
@@ -58,6 +59,7 @@ export default function Alerts() {
               <h2 className="text-base font-bold text-slate-900">Graded Response Action Plan</h2>
             </div>
             <GrapPanel data={grap} />
+            <GrapStagesTable />
           </section>
 
           <section className="card">

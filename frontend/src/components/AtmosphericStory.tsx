@@ -69,7 +69,7 @@ export default function AtmosphericStory({ atmosphere }: Props) {
         ))}
       </div>
       <p className="mt-3 text-[11px] text-slate-500">
-        Narrative composed from live station diagnostics · analysed {tsFmt(atmosphere.analyzed_at)} UTC.
+        Narrative composed from live station diagnostics · analysed {tsFmt(atmosphere.analyzed_at)}.
       </p>
     </section>
   )

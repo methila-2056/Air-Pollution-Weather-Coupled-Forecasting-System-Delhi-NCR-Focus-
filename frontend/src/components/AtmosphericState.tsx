@@ -1,6 +1,7 @@
 import { Cloud, Factory, Layers, Mountain, Wind } from 'lucide-react'
 import type { AtmosphereFeatures, StationAtmosphere } from '../types'
 import { fmt, tsFmt } from '../lib/aqi'
+import { STATUS } from '../lib/theme'
 import EmptyState from './EmptyState'
 
 interface Props {
@@ -48,10 +49,10 @@ const DRIVERS: Array<{
 ]
 
 function band(n: number | null): string {
-  if (n == null) return '#cbd5e1'
-  if (n >= 0.7) return '#dc2626'
-  if (n >= 0.45) return '#d97706'
-  return '#16a34a'
+  if (n == null) return STATUS.muted
+  if (n >= 0.7) return STATUS.bad
+  if (n >= 0.45) return STATUS.warn
+  return STATUS.good
 }
 
 export default function AtmosphericState({ atmosphere }: Props) {
@@ -70,7 +71,7 @@ export default function AtmosphericState({ atmosphere }: Props) {
   const norms = DRIVERS.map((d) => d.norm(atmosphere)).filter((v): v is number => v != null)
   const handicap = norms.length ? norms.reduce((s, v) => s + v, 0) / norms.length : null
   const pct = handicap != null ? Math.round(handicap * 100) : null
-  const gaugeColor = pct == null ? '#cbd5e1' : pct >= 70 ? '#dc2626' : pct >= 45 ? '#d97706' : '#16a34a'
+  const gaugeColor = pct == null ? STATUS.muted : pct >= 70 ? STATUS.bad : pct >= 45 ? STATUS.warn : STATUS.good
 
   return (
     <section className="card">
@@ -133,7 +134,7 @@ export default function AtmosphericState({ atmosphere }: Props) {
 
       <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
         Drivers come from live station diagnostics; the aggregate is the mean of available normalised values and is
-        labelled Estimated — it is not an official dispersion metric. Analysed {tsFmt(atmosphere.analyzed_at)} UTC.
+        labelled Estimated — it is not an official dispersion metric. Analysed {tsFmt(atmosphere.analyzed_at)}.
       </p>
     </section>
   )
