@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://aerocast-backend.onrender.com/api/:path*"
+      "destination": "https://air-pollution-weather-coupled.onrender.com/api/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://aerocast-backend.onrender.com/health"
+      "destination": "https://air-pollution-weather-coupled.onrender.com/health"
     },
     {
       "source": "/(.*)",
