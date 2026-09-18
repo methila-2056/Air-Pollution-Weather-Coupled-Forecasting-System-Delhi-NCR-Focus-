@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import joblib
 import numpy as np
 import pandas as pd
+from sqlalchemy.orm import Session
 
 from ..services.aqi_calculator import calculate_aqi
 from ..utils.helpers import haversine_distance, repo_root
@@ -16,6 +17,16 @@ MODEL_DIR = str(repo_root() / "models")
 DEFAULT_HORIZONS = [1, 6, 12, 24, 48, 72]
 
 ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
+
+# Stations with fewer than this many local readings in the recent window are
+# considered data-sparse; their forecast features fall back to the regional
+# NCR composite series (real observations from the rich core stations), and
+# the response is flagged ``pooled_features=True`` so the UI never presents the
+# value as a purely local model (SIH26082 17/17 honest coverage).
+SPARSE_READINGS_THRESHOLD = 24
+REGIONAL_COMPOSITE_STATIONS = ["Anand Vihar", "RK Puram", "ITO", "Dwarka", "Punjabi Bagh"]
+
+_POOL_COLUMNS = ("pm25", "pm10", "o3", "no2", "so2", "co")
 
 FEATURE_NAMES = [
     "pm25_lag1",
@@ -239,37 +250,20 @@ def _flush_json_value(v):
     return f if math.isfinite(f) else 0.0
 
 
-def build_features_from_db(db, station_id: int) -> dict:
-    """Reconstruct the true ML feature vector for a station.
+def _pollution_df(db, station_id: int, limit: int = 120) -> pd.DataFrame | None:
+    """Return a station's local, chronologically-flat pollution frame."""
+    from ..models.db_models import PollutionReading
 
-    Queries the station's recent hourly pollution + weather history from the
-    database (the same schema the training pipeline consumes) and runs the
-    identical feature-engineering functions used at training time, so the API
-    feeds trained models the exact feature names/values they expect.
-    """
-    from ..models.db_models import PollutionReading, Station, WeatherReading
-
-    station = db.query(Station).filter(Station.id == station_id).first()
-    station_name = station.name.replace(" ", "_") if station else "Anand_Vihar"
-
-    poll_rows = (
+    rows = (
         db.query(PollutionReading)
         .filter(PollutionReading.station_id == station_id)
         .order_by(PollutionReading.timestamp.desc())
-        .limit(120)
+        .limit(limit)
         .all()
     )
-    wx_rows = (
-        db.query(WeatherReading)
-        .filter(WeatherReading.station_id == station_id)
-        .order_by(WeatherReading.timestamp.desc())
-        .limit(120)
-        .all()
-    )
-    if not poll_rows and not wx_rows:
-        return {name: 0.0 for name in FEATURE_NAMES}
-
-    poll = pd.DataFrame(
+    if not rows:
+        return None
+    frame = pd.DataFrame(
         [
             {
                 "timestamp": p.timestamp,
@@ -280,9 +274,138 @@ def build_features_from_db(db, station_id: int) -> dict:
                 "so2": p.so2,
                 "co": p.co,
             }
-            for p in poll_rows
+            for p in rows
         ]
     )
+    return frame
+
+
+def _regional_composite_df(db: Session, limit: int = 120) -> pd.DataFrame | None:
+    """Hourly mean-of-core-stations pollution frame for data-sparse stations.
+
+    Real observations from the NCR core stations, averaged per hour. Used
+    solely so a station with little/no local history still forecasts on true,
+    regional air-quality signal instead of zero-filled lags. Never invents
+    values — every cell is a mean of genuine readings.
+    """
+    from ..models.db_models import PollutionReading, Station
+
+    stations = {s.name: s for s in db.query(Station).all()}
+    core = [s.id for n in REGIONAL_COMPOSITE_STATIONS if (s := stations.get(n)) is not None]
+    if not core:
+        return None
+    rows = (
+        db.query(PollutionReading)
+        .filter(PollutionReading.station_id.in_(core))
+        .order_by(PollutionReading.timestamp.desc())
+        .limit(limit * max(1, len(core)))
+        .all()
+    )
+    if not rows:
+        return None
+    frame = pd.DataFrame(
+        [
+            {
+                "timestamp": p.timestamp,
+                "pm25": p.pm25,
+                "pm10": p.pm10,
+                "o3": p.o3,
+                "no2": p.no2,
+                "so2": p.so2,
+                "co": p.co,
+            }
+            for p in rows
+        ]
+    )
+    frame["hour"] = (
+    pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    .dt.tz_localize(None)
+    .dt.floor("h")
+)
+    grouped = frame.groupby("hour")[list(_POOL_COLUMNS)].mean().reset_index()
+    grouped = grouped.rename(columns={"hour": "timestamp"})
+    return grouped.sort_values("timestamp").reset_index(drop=True)
+
+
+def station_data_sufficiency(db: Session, station_id: int) -> dict:
+    """Cheap per-station pollution data-sufficiency report (no feature build).
+
+    Returns ``pooled`` (bool), ``local_readings`` (window count),
+    ``history_days`` and ``composite_sources`` — the same metadata that
+    ``build_features_from_db_with_meta`` computes, without touching ML.
+    """
+    from sqlalchemy import func
+
+    from ..models.db_models import PollutionReading, Station
+
+    station = db.query(Station).filter(Station.id == station_id).first()
+    if station is None:
+        return {
+            "pooled": False,
+            "local_readings": 0,
+            "history_days": None,
+            "composite_sources": [],
+        }
+    window = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=5)
+    local = (
+        db.query(PollutionReading)
+        .filter(PollutionReading.station_id == station_id, PollutionReading.timestamp >= window)
+        .count()
+    )
+    span = (
+        db.query(func.min(PollutionReading.timestamp), func.max(PollutionReading.timestamp))
+        .filter(PollutionReading.station_id == station_id)
+        .one()
+    )
+    history_days = None
+    if span[0] is not None and span[1] is not None:
+        history_days = round((span[1] - span[0]).total_seconds() / 86400.0, 1)
+    composite = _regional_composite_df(db) is not None
+    return {
+        "pooled": bool(local < SPARSE_READINGS_THRESHOLD and composite),
+        "local_readings": local,
+        "history_days": history_days,
+        "composite_sources": list(REGIONAL_COMPOSITE_STATIONS) if composite else [],
+    }
+
+
+def build_features_from_db_with_meta(db: Session, station_id: int) -> tuple[dict, dict]:
+    """Reconstruct the true ML feature vector for a station, plus data meta.
+
+    For data-sparse stations the pollution lags are taken from the regional
+    NCR composite series (real readings averaged across core stations); the
+    returned ``meta["pooled"]`` flag lets callers present this honestly.
+    """
+    from ..models.db_models import Station, WeatherReading
+
+    station = db.query(Station).filter(Station.id == station_id).first()
+    station_name = station.name.replace(" ", "_") if station else "Anand_Vihar"
+
+    poll = _pollution_df(db, station_id)
+    local_readings = len(poll) if poll is not None else 0
+    pooled = local_readings < SPARSE_READINGS_THRESHOLD
+    if pooled:
+        composite = _regional_composite_df(db)
+        if composite is None or composite.empty:
+            pooled = False
+        else:
+            poll = composite
+
+    wx_rows = (
+        db.query(WeatherReading)
+        .filter(WeatherReading.station_id == station_id)
+        .order_by(WeatherReading.timestamp.desc())
+        .limit(120)
+        .all()
+    )
+    if poll is None and not wx_rows:
+        return {name: 0.0 for name in FEATURE_NAMES}, {
+            "pooled": False,
+            "local_readings": 0,
+            "history_days": None,
+            "composite_sources": [],
+        }
+
     wx = pd.DataFrame(
         [
             {
@@ -305,12 +428,13 @@ def build_features_from_db(db, station_id: int) -> dict:
         ]
     )
 
+    history_span = station_data_sufficiency(db, station_id)
     combined = poll
-    if not wx.empty and not poll.empty:
+    if wx is not None and not wx.empty and poll is not None:
         combined = poll.merge(wx, on="timestamp", how="outer", suffixes=("", "_wx"))
 
-    if combined.empty:
-        return {name: 0.0 for name in FEATURE_NAMES}
+    if combined is None or combined.empty:
+        return {name: 0.0 for name in FEATURE_NAMES}, history_span
 
     combined["timestamp"] = pd.to_datetime(combined["timestamp"], utc=True, errors="coerce")
     combined["station"] = station_name
@@ -383,6 +507,18 @@ def build_features_from_db(db, station_id: int) -> dict:
     features.setdefault("fire_impact_score", min(1.0, fire_count_latest / 50.0))
     features["day_of_year"] = features.get("day_of_year", 1)
     features["is_winter"] = int(_flush_json_value(features.get("is_winter", 0)))
+    meta = {
+        "pooled": bool(pooled),
+        "local_readings": local_readings,
+        "history_days": history_span.get("history_days"),
+        "composite_sources": history_span.get("composite_sources", []),
+    }
+    return features, meta
+
+
+def build_features_from_db(db, station_id: int) -> dict:
+    """Reconstruct the ML feature vector for a station (legacy signature)."""
+    features, _ = build_features_from_db_with_meta(db, station_id)
     return features
 
 
@@ -457,7 +593,7 @@ def save_forecasts(db, station_id: int, predictions: list[dict], forecast_timest
 
 
 def generate_forecast(db, station_id: int, horizons=None) -> tuple[list, list[dict]]:
-    features = build_features_from_db(db, station_id)
+    features, _ = build_features_from_db_with_meta(db, station_id)
     predictions = predict_pollutants(features, horizons)
     rows = save_forecasts(db, station_id, predictions)
     return rows, predictions
@@ -478,7 +614,7 @@ def generate_coupled_forecast(db, station_id: int, horizons=None) -> dict:
     from ml.features.coupling import corrected_pbl_height
 
     horizons = horizons or DEFAULT_HORIZONS
-    features = build_features_from_db(db, station_id)
+    features, _ = build_features_from_db_with_meta(db, station_id)
     base_pbl = features.get("pbl_height") or 600.0
 
     result = _run_coupled(

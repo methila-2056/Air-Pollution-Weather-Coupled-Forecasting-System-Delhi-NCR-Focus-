@@ -21,6 +21,7 @@ from .api import (
     forecast,
     grap,
     grid,
+    imd,
     import_,
     inversion,
     model_metrics,
@@ -158,6 +159,7 @@ app.include_router(transport_risk.router, prefix="/api", tags=["Transport Risk"]
 app.include_router(events.router, prefix="/api", tags=["Pollution Events"])
 app.include_router(scenario.router, prefix="/api", tags=["Scenario Analysis"])
 app.include_router(grap.router, prefix="/api", tags=["Graded Response Action Plan"])
+app.include_router(imd.router, prefix="/api", tags=["IMD Weather"])
 
 @app.get("/api/health")
 def health():

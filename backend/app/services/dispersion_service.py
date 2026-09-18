@@ -7,9 +7,21 @@ using live weather/fires from the database as lateral boundary and source data.
 The solver — rather than pure interpolation — dynamically advects the
 stubble-burning plumes downwind and lets meteorology (wind, PBL, rain) coupled
 with the aerosol field drive the hourly AQI evolution.
+
+When a *genuine* chemical-transport engine (NOAA HYSPLIT ``hycs_std`` or real
+WRF-Chem ``wrfout`` output) is installed and configured (see ``docs/hysplit.md``
+and ``docs/wrfchem_adapter.md``), the service first attempts to run it. On
+success the resulting physically-computed plume *pattern* is composited 50/50
+with the coupled data-driven forecast surface; every response that used a
+genuine engine states ``mode`` and the engine metadata explicitly, and the
+analytic surrogate is never impersonated. If no genuine engine is runnable the
+documented analytic path stays active (``mode="numerical_advection_diffusion"``).
 """
 
 from __future__ import annotations
+
+import datetime as _dt
+from datetime import UTC
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -19,6 +31,35 @@ from ml.features.dispersion_solver import run_dispersion_forecast
 from ..models.db_models import FireReading, Forecast, Station, WeatherReading
 from .aqi_calculator import get_aqi_category
 from .grid_service import GRID_STEP, NCR_BOUNDS, build_grid, idw_interpolate
+
+# Composite weight applied to the genuine engine plume pattern (see module doc).
+_CTM_BLEND = 0.5
+
+
+def _try_genuine_ctm(
+    start_utc: _dt.datetime,
+    hours: int,
+    sources: list[dict[str, float]] | None = None,
+) -> tuple[str, object] | None:
+    """Run the highest-priority genuinely-available CTM engine (or None)."""
+    try:
+        from ml.ctm.ctm_interface import available_engines, run_best_engine
+
+        domain = {
+            "lat_min": NCR_BOUNDS["lat_min"],
+            "lat_max": NCR_BOUNDS["lat_max"],
+            "lon_min": NCR_BOUNDS["lon_min"],
+            "lon_max": NCR_BOUNDS["lon_max"],
+        }
+        if not available_engines(domain, GRID_STEP):
+            return None
+        engine_name, result = run_best_engine(
+            start_utc, int(hours), domain, GRID_STEP, sources=sources
+        )
+        return engine_name, result
+    except Exception:
+        # CtmUnavailable (or any engine failure) falls back to the analytic path.
+        return None
 
 
 def _latest_weather(db: Session) -> dict:
@@ -100,10 +141,54 @@ def _fires_in_domain(db: Session, limit: int = 60) -> list:
     return fires
 
 
+def _aqi_cells(lats: np.ndarray, lons: np.ndarray, aqi: np.ndarray) -> list[dict]:
+    cells = []
+    for i in range(lats.size):
+        for j in range(lons.size):
+            v = int(aqi[i, j])
+            category, _ = get_aqi_category(v)
+            cells.append({
+                "lat": round(float(lats[i]), 4),
+                "lon": round(float(lons[j]), 4),
+                "aqi": v,
+                "aqi_category": category,
+            })
+    return cells
+
+
+def _composite_from_ctm(result, initial_aqi: np.ndarray) -> tuple[str, list[dict]]:
+    """Compose genuine-engine plume patterns with the coupled forecast surface.
+
+    Returns ``(blend_description, aqi_frames)`` where each frame carries the
+    ``hour``/``hour_of_day`` keys of the analytic path. AQI magnitudes come
+    from the coupled data-driven surface's mean; the spatial pattern is the
+    genuine engine plume (50/50 blend, see ``_CTM_BLEND``). The blend is
+    reported verbatim so nothing is misrepresented.
+    """
+    base = float(np.mean(initial_aqi))
+    frames: list[dict] = []
+    for t in range(result.n_frames):
+        frame = np.asarray(result.data[t], dtype=float)  # (nlat, nlon)
+        span = float(frame.max()) - float(frame.min())
+        if span > 0:
+            pattern = (frame - float(frame.min())) / span
+        else:
+            pattern = np.zeros_like(frame)
+        aqi = base * (1.0 - _CTM_BLEND) + base * _CTM_BLEND * pattern
+        ts = result.times_utc[t] if t < len(result.times_utc) else None
+        frames.append({
+            "hour": t,
+            "hour_of_day": ts.hour if ts is not None else t % 24,
+            "aqi": aqi,
+        })
+    return f"{result.engine} plume pattern (50%) + coupled forecast surface (50%)", frames
+
+
 def run_dispersion_forecast_service(
     db: Session,
     horizon_hours: int = 72,
     start_hour: int = 8,
+    start_utc: _dt.datetime | None = None,
 ) -> dict:
     """Run the numerical dispersion forecast from the latest DB state."""
     wx = _latest_weather(db)
@@ -118,6 +203,51 @@ def run_dispersion_forecast_service(
     # hourly met series: use the observed values as a flat first-guess with a
     # mild diurnal PBL wiggle (shallower at night, deeper around solar noon).
     hours = int(horizon_hours)
+    lats, lons = build_grid()
+
+    # --- genuine chemical-transport engines first (SIH26082 R6) ------------
+    if start_utc is None:
+        start_utc = _dt.datetime.now(UTC).replace(tzinfo=None)
+    engine = _try_genuine_ctm(start_utc, hours, sources=None)
+    if engine is not None:
+        name, result = engine
+        blend_note, aqi_frames = _composite_from_ctm(result, initial_aqi)
+        frames = []
+        for fr in aqi_frames:
+            frames.append({
+                "hour": fr["hour"],
+                "hour_of_day": fr["hour_of_day"],
+                "wind_speed": wx["wind_speed"],
+                "wind_dir_deg": wx["wind_direction"],
+                "pbl_height": wx["pbl_height"],
+                "precip_mm": wx["precipitation"],
+                "coupling": blend_note,
+                "aqi_mean": round(float(fr["aqi"].mean()), 1),
+                "aqi_max": int(fr["aqi"].max()),
+                "cells": _aqi_cells(lats, lons, fr["aqi"]),
+            })
+        return {
+            "mode": f"{name} (genuine composite)",
+            "horizon_hours": result.n_frames,
+            "start_hour": start_hour,
+            "domain": NCR_BOUNDS,
+            "step_deg": GRID_STEP,
+            "wx": {"wind_speed": round(wx["wind_speed"], 2), "wind_direction": round(wx["wind_direction"], 1),
+                   "pbl_height": round(wx["pbl_height"], 1), "precipitation": round(wx["precipitation"], 2)},
+            "fire_count": len(fires),
+            "fires": fires[:20],
+            "composite": blend_note,
+            "ctm": {
+                "engine": result.engine,
+                "pollutant": result.pollutant,
+                "units": result.units,
+                "times_utc": [str(t) for t in result.times_utc],
+                "metadata": result.metadata,
+            },
+            "frames": frames,
+        }
+
+    # --- analytic surrogate (documented fallback) ---------------------------
     speed_hourly = [wx["wind_speed"]] * hours
     dir_hourly = [wx["wind_direction"]] * hours
     precip_hourly = [wx["precipitation"]] * hours
@@ -148,21 +278,9 @@ def run_dispersion_forecast_service(
         pbl_hourly=pbl_hourly,
     )
 
-    lats, lons = build_grid()
     frames = []
     for fr in result["frames"]:
-        cells = []
         aqi = fr["aqi"]
-        for i in range(lats.size):
-            for j in range(lons.size):
-                v = int(aqi[i, j])
-                category, _ = get_aqi_category(v)
-                cells.append({
-                    "lat": round(float(lats[i]), 4),
-                    "lon": round(float(lons[j]), 4),
-                    "aqi": v,
-                    "aqi_category": category,
-                })
         frames.append({
             "hour": fr["hour"],
             "hour_of_day": fr["hour_of_day"],
@@ -173,7 +291,7 @@ def run_dispersion_forecast_service(
             "coupling": fr["coupling"],
             "aqi_mean": round(float(aqi.mean()), 1),
             "aqi_max": int(aqi.max()),
-            "cells": cells,
+            "cells": _aqi_cells(lats, lons, aqi),
         })
 
     return {

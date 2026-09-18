@@ -4,6 +4,24 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class ImdForecastDay(BaseModel):
+    day: int
+    date: str | None = None
+    max_temp_c: float | None = None
+    min_temp_c: float | None = None
+    condition: str = ""
+
+
+class ImdForecastResponse(BaseModel):
+    available: bool
+    reasons: list[str] = Field(default_factory=list)
+    station_id: str | None = None
+    station_name: str | None = None
+    fetched_at: str | None = None
+    source: str | None = None
+    days: list[ImdForecastDay] = Field(default_factory=list)
+
+
 class StationResponse(BaseModel):
     id: int
     name: str
@@ -25,6 +43,7 @@ class PollutionReadingResponse(BaseModel):
     so2: float | None
     co: float | None
     aqi: int | None
+    data_source: str | None = None
 
 class PollutionIngestResponse(BaseModel):
     records_fetched: int
@@ -36,6 +55,25 @@ class PollutionIngestResponse(BaseModel):
     station_created: int
     station_updated: int
     errors: list[str]
+
+class StationPollutionCoverage(BaseModel):
+    station_id: int
+    station: str
+    city: str | None = None
+    readings: int
+    last_timestamp: datetime | None = None
+    hours_since_last: float | None = None
+    history_days: float | None = None
+    sufficiency: str
+    sources: list[str] = Field(default_factory=list)
+
+class PollutionCoverageResponse(BaseModel):
+    stations_total: int
+    stations_with_readings: int
+    stations_recent: int
+    stations_insufficient: int
+    coverage_pct: float
+    stations: list[StationPollutionCoverage]
 
 class StationAQISummary(BaseModel):
     name: str
@@ -100,6 +138,12 @@ class ForecastGenerateResponse(BaseModel):
     generated_at: datetime
     horizons: list[int]
     forecasts: list[ForecastPoint]
+    # "Pooled" flags: set when the station's own pollution history is too thin
+    # for a stable local model, so the forecast is driven by the NCR regional
+    # composite series instead (honest fallback, never invented values).
+    pooled_features: bool = False
+    local_readings: int = 0
+    history_days: float | None = None
 
 class ForecastComparisonPoint(BaseModel):
     timestamp: datetime

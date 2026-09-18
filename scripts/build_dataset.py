@@ -14,6 +14,7 @@ WEATHER_DIR = PROJECT_ROOT / "data" / "weather"
 POLLUTION_DIR = PROJECT_ROOT / "data" / "pollution"
 FIRE_DIR = PROJECT_ROOT / "data" / "fire"
 ATMOSPHERE_DIR = PROJECT_ROOT / "data" / "atmosphere"
+IMD_DIR = PROJECT_ROOT / "data" / "imd"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "processed"
 
 STATIONS = ["Anand_Vihar", "RK_Puram", "ITO", "Dwarka", "Punjabi_Bagh"]
@@ -129,24 +130,61 @@ def load_fire(fire_dir: Path) -> pd.DataFrame:
 
 
 def load_atmosphere(atmo_dir: Path) -> pd.DataFrame:
-    """Load ERA5 atmosphere data if available."""
-    nc_path = atmo_dir / "era5_atmosphere.nc"
+    """Load real ERA5 atmosphere data if available (WS-2, gated and honest).
+
+    Preference order:
+      1. ``era5_atmosphere.csv`` — per-station, per-hour ERA5 rows written by
+         ``scripts/download_atmosphere.py`` after CDS retrieval.
+      2. ``era5_atmosphere.nc`` / ``era5_atmosphere_*.nc`` — genuine CDS-era5
+         single-level NetCDF sampled at the 17 NCR stations by the shared
+         reader (``ml.features.era5_surface``).
+
+    Absent real data yields an empty DataFrame; the pipeline therefore keeps
+    the Open-Meteo weather fields and records an honest provenance note.
+    """
+    from ml.features.era5_surface import (
+        era5_reasons,
+        load_era5_csv,
+        load_era5_surface,
+    )
+
     csv_path = atmo_dir / "era5_atmosphere.csv"
+    nc_path = atmo_dir / "era5_atmosphere.nc"
 
+    reasons = era5_reasons(nc_path)
+    df = load_era5_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+    if not df.empty:
+        return df
     if nc_path.exists():
-        try:
-            ds = pd.read_xarray(nc_path)  # type: ignore
-            # Convert to DataFrame — specifics depend on variable names
-            return ds.to_dataframe().reset_index()
-        except Exception:
-            pass
-
-    if csv_path.exists():
-        df = pd.read_csv(csv_path, parse_dates=["time"], comment="#")
+        df = load_era5_surface(nc_path)
         if not df.empty:
             return df
-
+    if not reasons:
+        reasons = ["no real ERA5 file present under data/atmosphere"]
+    print(f"WARNING: ERA5 atmosphere unavailable ({'; '.join(reasons)}); "
+          "using Open-Meteo weather only.")
     return pd.DataFrame()
+
+
+def load_imd(imd_dir: Path) -> pd.DataFrame:
+    """Load genuine IMD city forecasts if present (WS-3, gated and honest).
+
+    Reads ``data/imd/imd_forecast.csv`` written by
+    ``scripts/fetch_imd_weather.py`` after a successful api.imd.gov.in call.
+    Absent/empty file (or a failed 401-fetch) yields an empty frame and an
+    honest warning — the dataset then keeps Open-Meteo weather only.
+    """
+    csv_path = imd_dir / "imd_forecast.csv"
+    if not csv_path.exists():
+        print("WARNING: IMD forecasts unavailable (data/imd/imd_forecast.csv not "
+              "found — run scripts/fetch_imd_weather.py); using Open-Meteo only.")
+        return pd.DataFrame()
+    df = pd.read_csv(csv_path, parse_dates=["time"])
+    if df.empty or not {"station", "imd_max_temp_c"}.issubset(df.columns):
+        print("WARNING: IMD forecast file is empty/invalid; using Open-Meteo only.")
+        return pd.DataFrame()
+    df["station"] = df["station"].astype(str)
+    return df
 
 
 def normalize_timestamps(df: pd.DataFrame, time_col: str = "time") -> pd.DataFrame:
@@ -186,8 +224,10 @@ def merge_datasets(
     pollution: pd.DataFrame,
     fire: pd.DataFrame,
     atmosphere: pd.DataFrame,
+    imd: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Merge all data sources on (time, station)."""
+    imd = imd if imd is not None else pd.DataFrame()
     # Start with weather as the base
     if weather.empty:
         print("WARNING: weather data is empty — cannot build coupled dataset.")
@@ -216,6 +256,12 @@ def merge_datasets(
         atm_keep = [c for c in atmosphere.columns if c in ["time", "station"] or c.startswith("era5_")]
         atmosphere = atmosphere[atm_keep]
         base = base.merge(atmosphere, on=["time", "station"], how="left")
+
+    # Merge genuine IMD forecasts (WS-3) — real values only, skipped when absent
+    if not imd.empty and "time" in imd.columns and "station" in imd.columns:
+        imd_keep = [c for c in imd.columns if c in ["time", "station"] or c.startswith("imd_")]
+        imd = imd[imd_keep]
+        base = base.merge(imd, on=["time", "station"], how="left")
 
     return base
 
@@ -298,6 +344,7 @@ def main():
     parser.add_argument("--pollution-dir", default=str(POLLUTION_DIR))
     parser.add_argument("--fire-dir", default=str(FIRE_DIR))
     parser.add_argument("--atmosphere-dir", default=str(ATMOSPHERE_DIR))
+    parser.add_argument("--imd-dir", default=str(IMD_DIR))
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
     parser.add_argument(
         "--max-ffill",
@@ -311,6 +358,7 @@ def main():
     pollution_dir = Path(args.pollution_dir)
     fire_dir = Path(args.fire_dir)
     atmo_dir = Path(args.atmosphere_dir)
+    imd_dir = Path(args.imd_dir)
     output_dir = Path(args.output_dir)
 
     print("Building coupled dataset ...")
@@ -337,6 +385,10 @@ def main():
     print("Loading atmosphere data ...")
     atmosphere = load_atmosphere(atmo_dir)
     print(f"  {len(atmosphere):,} rows")
+
+    print("Loading IMD weather data ...")
+    imd = load_imd(imd_dir)
+    print(f"  {len(imd):,} rows")
     print()
 
     # --- Normalize ---
@@ -351,7 +403,7 @@ def main():
 
     # --- Merge ---
     print("\nMerging datasets ...")
-    coupled = merge_datasets(weather, pollution, fire, atmosphere)
+    coupled = merge_datasets(weather, pollution, fire, atmosphere, imd)
 
     if coupled.empty:
         print("Coupled dataset is empty — nothing to save.")

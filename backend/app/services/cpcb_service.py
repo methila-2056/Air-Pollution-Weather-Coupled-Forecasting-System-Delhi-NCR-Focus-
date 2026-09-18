@@ -30,6 +30,10 @@ from ..config import get_settings
 
 logger = logging.getLogger("aerocast.cpcb")
 
+# Provenance tag stored on every row this service upserts (see
+# ``pollution_observations.data_source``).
+POLLUTION_SOURCE = "data_gov_in"
+
 IST = ZoneInfo("Asia/Kolkata")
 TIMESTAMP_FORMAT = "%d-%m-%Y %H:%M:%S"
 HTTP_TIMEOUT = 30
@@ -64,13 +68,36 @@ _VALUE_COLUMNS: tuple[tuple[str, ...], ...] = (
 
 # Monitor display names published by CPCB differ from the canonical station
 # names in the database. Lower-cased source short name -> canonical DB name.
+# Every one of the 17 curated stations is mapped so the official feed covering
+# any NCR monitor lands on the canonical row (SIH26082 17/17 coverage).
 _STATION_ALIASES = {
     "imd lodhi road": "Lodhi Road",
+    "lodhi road": "Lodhi Road",
     "r k puram": "RK Puram",
+    "rk puram": "RK Puram",
     "dwarka-sector 8": "Dwarka",
+    "dwarka": "Dwarka",
+    "punjabi bagh": "Punjabi Bagh",
+    "anand vihar": "Anand Vihar",
+    "ito": "ITO",
+    "sirifort": "Sirifort",
+    "shadipur": "Shadipur",
+    "okhla phase-2": "Okhla Phase-2",
+    "ashok vihar": "Ashok Vihar",
+    "mundka": "Mundka",
+    "jahangirpuri": "Jahangirpuri",
+    "aya nagar": "Aya Nagar",
+    "vivek vihar": "Vivek Vihar",
+    # Teri Gram is the HSDP/DPCC monitor that covers the Teri Gram (Gurugram)
+    # site; both the exact monitor name and "Vikas Sadan, Gurugram" map here.
+    "teri gram": "Teri Gram",
+    "vikas sadan": "Teri Gram",
     "sector - 62": "Noida Sector-62",
     "sector-62": "Noida Sector-62",
+    "sector 62": "Noida Sector-62",
+    "noida sector-62": "Noida Sector-62",
     "sector 11": "Faridabad",  # Sector 11 monitor represents the Faridabad city point
+    "faridabad": "Faridabad",
 }
 
 
@@ -386,6 +413,7 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
         db.flush()
 
     _SIX = ("pm25", "pm10", "o3", "no2", "so2", "co")
+    source = POLLUTION_SOURCE
     for station, obs in matched:
         ts = obs.timestamp.replace(tzinfo=None)  # store IST wall-clock (matches app convention)
         existing = (
@@ -410,6 +438,8 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
             for k, v in values.items():
                 setattr(existing, k, v)
             existing.aqi = aqi
+            if not existing.data_source:
+                existing.data_source = source
             counters["updated"] += 1
         else:
             db.add(
@@ -418,6 +448,7 @@ def upsert_ncr_data(db, observations: list[NormalizedObservation]) -> dict[str, 
                     timestamp=ts,
                     **values,
                     aqi=aqi,
+                    data_source=source,
                 )
             )
             counters["inserted"] += 1

@@ -25,6 +25,25 @@ class Settings(BaseSettings):
     data_gov_ncr_cities: str = "Delhi,Gurugram,Noida,Ghaziabad,Faridabad"
     data_gov_timeout: int = 30
 
+    # --- Chemical transport model (CTM) engines (SIH26082 R6) ---
+    # Physical copy of NOAA HYSPLIT (e.g. C:\hysplit4). When set and a real
+    # `exec/hycs_std(.exe)` plus GDAS/EDAS met files exist, dispersion runs use
+    # genuine HYSPLIT output; otherwise the analytic surrogate stays active.
+    hysplit_home: str = ""
+    hysplit_met_dir: str = ""
+    # Directory holding genuine WRF-Chem `wrfout_d01_*.nc` output from an
+    # external run to be absorbed as the CTM surface (never fabricated).
+    wrf_output_dir: str = ""
+
+    # --- IMD official weather API (SIH26082 R9) ---
+    # api.imd.gov.in requires registration + key/IP whitelisting (returns 401
+    # otherwise). When set, `/api/imd/forecast` fetches *real* IMD outputs;
+    # otherwise it reports honest reasons and the Open-Meteo path stays.
+    imd_api_key: str = ""
+    # Delhi/Safdarjung (the anchor IMD city for the NCR domain).
+    imd_station_id: str = "42182"
+    imd_api_base: str = "https://api.imd.gov.in/api/v1"
+
     # --- Authentication (SIH26082 UI login layer) ---
     secret_key: str = "aerocast-dev-secret-change-me-in-production"
     access_token_expire_minutes: int = 480  # 8 hours — one operational shift

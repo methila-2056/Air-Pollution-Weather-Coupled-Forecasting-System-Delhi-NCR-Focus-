@@ -159,6 +159,10 @@ def apply_migrations():
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_pollution_station_ts"
                     " ON pollution_observations (station_id, timestamp)"
                 ))
+        # Provenance tag for pollution readings (SIH26082 coverage audit).
+        if "data_source" not in pr_cols:
+            with engine.begin() as conn:
+                conn.execute(sa.text("ALTER TABLE pollution_observations ADD COLUMN data_source VARCHAR"))
 
     # weather_observations vertical profile columns
     if "weather_observations" in table_names:

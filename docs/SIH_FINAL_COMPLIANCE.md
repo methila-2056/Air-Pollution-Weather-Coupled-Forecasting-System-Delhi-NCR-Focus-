@@ -20,10 +20,10 @@
 | R3 | **PBL classification / dispersion condition** | `low_pbl_flag`, `pbl_category` (strong/moderate/weak trapping, good dispersion), `dispersion_condition` (TRAPPED/LIMITED/MODERATE/GOOD/UNKNOWN) computed from `pbl_height`; merged with lapse-rate analysis; exposed via API + frontend. | `ml/features/atmospheric_profile.py` (`classify_pbl`, `combine_inversion`), `backend/app/api/inversion.py`, `frontend/src/components/InversionPanel.tsx` | ✅ | Classification thresholds are heuristic (150/300/500 m) and documented as such. |
 | R4 | **Fire (stubble-burning) transport impact** | Cross-border FIRMS ingestion + per-station impact: `fire_count`, `fire_impact_score`, `nearest_fire_distance`, `wind_aligned_fire_count`, **`wind_alignment_pct`**, **`transport_time_hours`** (nearest-fire distance ÷ wind speed), **`transport_risk` (0–1) + `transport_risk_level`**, **`stubble_impact_score`** (0–1 smoke-driven PM proxy). All derived from real FIRMS + wind; clearly an *advective estimate*, not a dispersion simulation. New `/api/fire/hotspots` endpoint feeds the map overlay. | `ml/features/fire_impact.py`, `backend/app/api/fire.py` (`/plume-risk`, `/fire/hotspots`), `backend/app/schemas/schemas.py` (`PlumeRiskResponse`, `FireHotspotsResponse`), `frontend/src/pages/NCRMap.tsx`, `frontend/src/components/StationMap.tsx` | ✅ | Transport time is a straight advective arrival proxy (no boundary-layer diffusion); the separate 2D PDE solver (`ml/features/dispersion_solver.py`) remains the numerical dispersion tool. |
 | R5 | **Two-way air-pollution ↔ weather coupling** | Analytic aerosol→radiation→PBL→stability feedback (`aod_est`, `radiation_transmittance`, `pbl_suppression_factor`, `corrected_pbl_height`, `stability_coupling_index`, `feedback_multiplier`) already existed and is preserved; now additionally reads lapse-rate `dispersion_condition` context in the coupled loop. | `ml/features/coupling.py`, `ml/features/coupled_loop.py`, `backend/app/api/coupling.py` | ✅ | Pure-Python analytic surrogate; a coupled CTM like WRF-Chem would be the full 3D realization (see R6). |
-| R6 | **WRF-Chem / coupled CTM** | Not installed, configured, or executed. **Honest scope**: a pure-Python surrogate (analytic coupling + 2D finite-difference dispersion solver) is provided, and WRF-Chem is only ever referenced as a comparison point. No fake WRF-Chem results are produced or claimed. | `docs/SIH_GAP_AUDIT.md` §C5, `README.md` "Honest Scope", `docs/methodology.md` §9 | ⚠️ (documented gap) | Requires HPC/GSL + ERA5 CDS; out of prototype scope. Replace the surrogate with real WRF-Chem for the production build. |
+| R6 | **WRF-Chem / coupled CTM** | **First-party real-engine integration layer (WS-4, 1.6.0).** `ml/ctm/` implements a plug-in CTM registry (`CtmResult`, `CtmUnavailable`, `run_best_engine`) with two honest adapters: **HYSPLIT (NOAA)** — writes a standard CONTROL file (layout mirrors ARL utilhysplit), launches the real `hycs_std(.exe)` from `HYSPLIT_HOME`, and parses the binary concentration dump using ARL's own record layout (validated byte-for-byte against the real `cdump.bin` archived in `noaa-oar-arl/utilhysplit`); and **WRF-Chem** — consumes genuine external `wrfout_d01_*.nc` NetCDF output (requires `netCDF4`+`xarray`). Both are strictly gated (`executable` present + real met files / real output files present) and **never simulate**: `run()` raises `CtmUnavailable` and the documented analytic surrogate (`numerical_advection_diffusion`) stays active otherwise. The dispersion service attempts real engines first and, when one runs, composites its physically-computed plume *pattern* 50/50 with the coupled forecast surface (mode/units disclosed). GDAS1 ARL met files are fetched by `scripts/download_hysplit_gdas.py` from the verified ready.noaa.gov archive. | `ml/ctm/ctm_interface.py`, `ml/ctm/hysplit_adapter.py`, `ml/ctm/wrfchem_adapter.py`, `ml/ctm/regrid.py`, `backend/app/services/dispersion_service.py` (`_try_genuine_ctm`), `scripts/download_hysplit_gdas.py`, `backend/tests/unit/test_ctm_engines.py`, `docs/hysplit.md`, `docs/wrfchem_adapter.md` | ✅ (engine-gated) | A genuine engine is exercised in this environment only when an operator installs HYSPLIT / points at real WRF-Chem output (both paths are exercised end-to-end via synthetic but spec-exact cdump fixtures and availability tests). WRF-Chem model runs themselves (HPC) remain external by design. |
 | R7 | **72-hour multi-pollutant forecasting for Delhi NCR** | Persistence / Random Forest / XGBoost, 6 pollutants (PM2.5, PM10, O3, NO2, SO2, CO) × horizons {1,6,12,24,48,72}; **chronological** train/val/test split (no random shuffle); models served by `/api/forecast/{station}?hours=72` and `/api/forecast/ncr`; SHAP explanation on `/api/explanation/{station}`. | `ml/training/trainer.py:76`, `ml/inference/predictor.py`, `backend/app/services/forecast_service.py`, `metrics_eval_summary` files under `models/` | ✅ | Baseline R² (2023–2025) verified: 1h 0.749–0.949 across pollutants; 72h NO2/SO2 weaker (0.21/0.15). Periodic retrain recommended as new vertical+transport features accumulate. |
 | R8 | **GRU / LSTM deep-learning model** | **Trained** using a lazy-import PyTorch implementation (the module imports `torch` only when the GRU is instantiated, so the rest of the pipeline stays dependency-light): 2-layer GRU, hidden=128, seq_len=48, 6 pollutants × 6 horizons, chronological train/val/test split. Honestly underperforms tree ensemble (h-1: GRU R²=0.336 vs XGBoost 0.879); results are in the shared 4-model evaluation. Trained GRU artifacts are retained as a candidate ensemble member; the live API serves the higher-accuracy XGBoost direct models. | `ml/training/train_gru.py`, `ml/models/gru_model.py`, `ml/training/evaluate_pm25.py`, `models/pm25/gru/`, `models/pm25/evaluation.json` | ✅ | Honest gap: GRU weaker than XGBoost at all horizons (see evaluation.json); the tree-based pipeline is the serving model. |
-| R9 | **Data ingestion (CPCB + IMD + ERA5/ecmwf + FIRMS)** | CPCB pollution (opencity.in CKAN) confirmed real; Open-Meteo weather + pressure levels (verified live, UTC, HTTP 200); NASA FIRMS fires; IMD radar is referenced via Open-Meteo precipitation proxy (documented). | `scripts/download_*.py`, `backend/app/services/refresh_service.py` | ✅ | IMD raw radar not directly consumed; ERA5 optional via CDS. |
+| R9 | **Data ingestion (CPCB + IMD + ERA5/ecmwf + FIRMS)** | CPCB pollution (opencity.in CKAN) confirmed real; Open-Meteo weather + pressure levels (verified live, UTC, HTTP 200); NASA FIRMS fires; **IMD** official gateway adapter (`api.imd.gov.in/api/v1/cityforecast`, station 42182 Delhi/Safdarjung) gated on key/IP whitelist — verified 401 unauthenticated, honest `reasons`, `/api/imd/forecast` + offline `data/imd/imd_forecast.csv` (`imd_*` dataset columns, WS-3); **ERA5** single-level reanalysis (CDS `reanalysis-era5-single-levels`: `t2m`/`sp`/`blh`) sampled at the 17 NCR stations into the offline coupled dataset (WS-2, 1.7.0). | `scripts/download_*.py`, `backend/app/services/imd_weather.py`, `backend/app/api/imd.py`, `ml/features/era5_surface.py` (gated CDS NetCDF reader, scipy/no-extra-dep), `backend/app/services/refresh_service.py` | ✅ | IMD key/IP whitelist is operator-gated (401 otherwise — never fabricated); IMD raw radar still not directly consumed (Open-Meteo precipitation proxy); real ERA5 requires a free CDS account + `cdsapi` (honestly gated, empty placeholder otherwise). |
 | R10 | **Validated / backtested forecasts (chronological)** | Evaluation machinery with chronological holdout; metrics persisted to `model_metrics` and `models/*.json`. | `ml/training/evaluator.py`, `backend/app/api/model_metrics.py`, `backend/tests/integration/test_full_pipeline.py` | ✅ | Re-run evaluation when retraining with new features; 72h smoke/NO2 remain the weakest horizons. |
 | R11 | **Indian AQI (CPCB breakpoints)** | Breakpoint AQI calculator produces `aqi`, `aqi_category`, `dominant_pollutant` on current + forecast data. | `backend/app/services/aqi_calculator.py`, `backend/app/api/current.py` | ✅ | — |
 | R12 | **Explainability** | Real `shap.TreeExplainer` when a tree model is loaded; honest fallback when not. | `backend/app/services/explanation_service.py`, `frontend/src/pages/AIExplanation.tsx` | ✅ | SHAP on tree models only (not persistence). |
@@ -91,7 +91,7 @@ These are **advective transport estimates**, not dispersion simulations. The 2D 
 
 | Check | Command | Result |
 |-------|---------|--------|
-| Full backend test suite | `python -m pytest backend/tests -q` | **501 passed** |
+| Full backend test suite | `python -m pytest backend/tests -q` | **541 passed** |
 | Lint (changed files) | `python -m ruff check <files> --config pyproject.toml` | **All checks passed** |
 | Frontend TypeScript + build | `cd frontend && npm run build` | **build succeeds** (tsc + vite) |
 | Live pressure-level fetch | Open-Meteo `temperature_{1000,925,850,700}hPa` + `geopotential_height_{925,850}hPa` | HTTP 200, real values |
@@ -99,6 +99,14 @@ These are **advective transport estimates**, not dispersion simulations. The 2D 
 | Inversion API (live) | `GET /api/inversion/{station}` | `inversion_source: lapse_rate` when vertical data present, `pbl_proxy` fallback otherwise |
 | Fire endpoints (live) | `/api/fire-activity`, `/api/plume-risk`, `/api/fire/hotspots`, `/api/fire/transport` | HTTP 200, real FIRMS+wind data |
 | Migration | `apply_migrations()` / additive ALTER | weather_readings gained 6 pressure-level columns, existing rows preserved |
+| CTM suite | `python -m pytest backend/tests/unit/test_ctm_engines.py -q` | **14 passed** (CONTROL lines, cdump round-trip, surface regrid, malformed-record rejection, availability gating, engine registry, genuine-CTM composite) |
+| cdump reader vs real ARL file | read the `cdump.bin` archived in `noaa-oar-arl/utilhysplit` (`testing/test_isoch`) | parsed: `model_id=GFSG`, grid 301×601, levels [500], 12 time blocks → NCR-regridded surface (12, 36, 46) |
+| GDAS1 archive reachability | HEAD `https://www.ready.noaa.gov/data/archives/gdas1/gdas1.jan26.w1` | HTTP 200, Content-Length ~599 MB (real archive, urllib-verified) |
+| ERA5 reader (synthetic CDS-style NetCDF3) | `python -m pytest backend/tests/unit/test_era5_surface.py -q` | **8 passed** (missing-file gating, multi-year glob, nearest-cell sampling + K→°C/Pa→hPa conversions, descending-latitude grids, `expver` dim, empty-placeholder vs real CSV, `build_dataset.py` glue) — nothing fabricated |
+| ERA5 downloader (planning) | `python -m scripts.download_atmosphere --no-download ...` | prints the exact `reanalysis-era5-single-levels` request per year; quiet clear placeholder path on absent credentials |
+| IMD gateway reachability (live) | GET `https://api.imd.gov.in/api/v1/cityforecast?id=42182` (no key) | **HTTP 401 Unauthorized** — confirmed the gateway needs key/IP whitelist; adapter reports this honestly |
+| IMD adapter suite | `python -m pytest backend/tests/unit/test_imd_weather.py -q` | **13 passed** (no-key/401 reasons, real-shape parsing, malformed/non-JSON/HTTP-error rejection, router available/unavailable, dataset merge glue) — nothing fabricated |
+| IMD offline CLI | `python -m scripts.fetch_imd_weather --station-id 42182` | honest "401 Unauthorized — set IMD_API_KEY and/or get your IP whitelisted"; writes empty placeholder |
 
 ---
 
@@ -132,6 +140,40 @@ These are **advective transport estimates**, not dispersion simulations. The 2D 
 - `backend/app/api/grap.py` — `/api/grap/stages`, `/api/grap/current`, `/api/grap/{station}`
 - `backend/tests/unit/test_grap.py`, `backend/tests/unit/test_grap_api.py` — stage matrix + endpoint tests
 - `frontend/src/components/GrapPanel.tsx` — dashboard GRAP panel
+
+**Created (1.6.0 — WS-4 / R6 CTM engines)**
+- `ml/ctm/ctm_interface.py`, `ml/ctm/hysplit_adapter.py`, `ml/ctm/wrfchem_adapter.py`, `ml/ctm/regrid.py`
+- `scripts/download_hysplit_gdas.py` — GDAS1 ARL archive fetcher (ready.noaa.gov, idempotent)
+- `backend/tests/unit/test_ctm_engines.py` — 14 CTM engine/dump/service tests
+- `docs/hysplit.md`, `docs/wrfchem_adapter.md`
+
+**Modified (1.6.0 — WS-4)**
+- `backend/app/services/dispersion_service.py` — genuine-engine-first wiring + disclosed composite
+- `backend/app/config.py` — `hysplit_home`, `hysplit_met_dir`, `wrf_output_dir` settings
+- `docs/SIH_FINAL_COMPLIANCE.md` (R6 ✅), `docs/SIH_GAP_AUDIT.md` (C5 resolved), `CHANGELOG.md` (1.6.0)
+
+**Created (1.7.0 — WS-2 / R9 ERA5)**
+- `ml/features/era5_surface.py` — gated CDS-era5 single-level reader (station sampling, unit conversions, `expver`, honest reasons)
+- `docs/era5.md`
+- `backend/tests/unit/test_era5_surface.py` — 8 reader/downloader/glue tests
+
+**Modified (1.7.0 — WS-2)**
+- `scripts/download_atmosphere.py` — real per-year CDS request + station-CSV extraction, `--no-download`/`--force`, empty placeholder when CDS is unavailable
+- `scripts/build_dataset.py` — `load_atmosphere` consumes real NetCDF samples via the shared reader (previously non-functional) + warning with reasons
+- `docs/SIH_FINAL_COMPLIANCE.md` (R9 note), `docs/SIH_GAP_AUDIT.md`, `CHANGELOG.md` (1.7.0)
+
+**Created (1.8.0 — WS-3 / R9 IMD)**
+- `backend/app/services/imd_weather.py` — gated api.imd.gov.in adapter (fetch/parse/reasons, never fabricates)
+- `backend/app/api/imd.py` — `GET /api/imd/forecast` (registered in `main.py`)
+- `scripts/fetch_imd_weather.py` — offline CLI → `data/imd/imd_forecast.csv`
+- `docs/imd.md`
+- `backend/tests/unit/test_imd_weather.py` — 13 adapter/router/glue tests
+
+**Modified (1.8.0 — WS-3)**
+- `backend/app/schemas/schemas.py` — `ImdForecastDay`, `ImdForecastResponse`
+- `backend/app/config.py` — `imd_api_key`, `imd_station_id`, `imd_api_base`
+- `scripts/build_dataset.py` — `load_imd()` + `imd_*` merge (honest skip)
+- `docs/SIH_FINAL_COMPLIANCE.md` (R9 note), `docs/SIH_GAP_AUDIT.md`, `CHANGELOG.md` (1.8.0)
 
 **Modified (1.2.0 — GRAP)**
 - `backend/app/schemas/schemas.py` — `GrapStageResponse`, `GrapAssessmentResponse`
@@ -176,11 +218,14 @@ python -m ml.training.trainer
 
 # 5. Tests + lint
 python -m pytest backend/tests -q
-python -m ruff check ml backend --config pyproject.toml
+python -m ruff check ml backend
 
 # 6. Train GRU (custom NumPy, no PyTorch required)
 python -m ml.training.train_gru
 
 # 7. Full PM2.5 evaluation (persistence / RF / XGBoost / GRU)
 python -m ml.training.evaluate_pm25
+
+# 8. Real ERA5 atmospheric reanalysis (offline feature pipeline; CDS account + cdsapi)
+python -m scripts.download_atmosphere --start-date 2023-01-01 --end-date 2024-12-31
 ```

@@ -78,6 +78,8 @@ def generate_coupled_forecast(
     result = forecast_service.generate_coupled_forecast(db, station.id, horizons)
     rows = forecast_service.save_coupled_forecasts(db, station.id, result["coupled"])
 
+    coverage = forecast_service.station_data_sufficiency(db, station.id)
+
     return {
         "station": station.name,
         "generated_at": datetime.now(UTC).replace(tzinfo=None),
@@ -87,6 +89,9 @@ def generate_coupled_forecast(
         "uncoupled": result["uncoupled"],
         "feedback_path": result["feedback_path"],
         "saved_points": len(rows),
+        "pooled_features": bool(coverage["pooled"]),
+        "local_readings": int(coverage["local_readings"]),
+        "history_days": coverage.get("history_days"),
     }
 
 @router.post("/forecast/generate", response_model=ForecastGenerateResponse)
@@ -108,6 +113,7 @@ def generate_forecast(
             raise HTTPException(status_code=503, detail="No stations available; seed the database first")
 
     horizons = list(dict.fromkeys(req.horizons))
+    coverage = forecast_service.station_data_sufficiency(db, station.id)
 
     # Operational outlook: run the time-stepped two-way coupled forecast so the
     # served 72h AQI reflects aerosol-radiative PBL/weather feedback (the core
@@ -152,6 +158,9 @@ def generate_forecast(
         station=station.name,
         generated_at=datetime.now(UTC).replace(tzinfo=None),
         horizons=horizons,
+        pooled_features=bool(coverage["pooled"]),
+        local_readings=int(coverage["local_readings"]),
+        history_days=coverage.get("history_days"),
         forecasts=[
             ForecastPoint(
                 timestamp=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=p["horizon_hours"]),

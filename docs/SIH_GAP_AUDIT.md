@@ -36,11 +36,11 @@
 
 | # | Requirement | Status | Detail |
 |---|-------------|--------|--------|
-| C1 | **Vertical (pressure-level) atmospheric data** | ❌ | `data/atmosphere/` is empty. ERA5 downloader only requests *single-level* fields. No 1000/925/850/700 hPa temperature/geopotential. No `metpy`/`xarray`/`cfgrib`. |
+| C1 | **Vertical (pressure-level) atmospheric data** | ⚠️→❌ | **Single-level ERA5 pathway is now gated-functional (WS-2, 1.7.0)** — `download_atmosphere.py` fetches genuine CDS `reanalysis-era5-single-levels` and `ml/features/era5_surface.py` samples `t2m/sp/blh` at the 17 NCR stations (no fabrication; empty placeholder when CDS is unavailable). **Still missing:** 1000/925/850/700 hPa temperature/geopotential *profiles* (vertical). No `metpy`/`xarray`/`cfgrib` required — CDS NetCDF3 is read via scipy with zero extra deps. |
 | C2 | **Inversion from vertical temperature (lapse rate)** | ❌ | Inversion is inferred purely from a PBL-height threshold proxy, not from a vertical temperature profile. |
 | C3 | **PBL category / dispersion condition** | ⚠️ | `pbl_height` exists but only as a raw value; no `low_pbl_flag`, `pbl_category`, `dispersion_condition`. |
 | C4 | **Full fire-transport feature set** | ⚠️ | Missing `wind_alignment_%`, `transport_time`, `transport_risk`, `stubble_impact_score`. |
-| C5 | **WRF-Chem or a coupled CTM** | ❌ | Not installed / configured / executed anywhere. Referenced 24× only as a *comparison point*. Documented as a pure-Python surrogate. |
+| C5 | **WRF-Chem or a coupled CTM** | ⚠️→✅ (1.6.0 / WS-4) | Real-engine integration layer added: `ml/ctm/` registry + honest HYSPLIT (`hycs_std`) and WRF-Chem (`wrfout_d01_*.nc`) adapters, both strictly gated and never simulated; dispersion service tries them first and falls back to the documented analytic surrogate. An operator still has to install HYSPLIT or point at genuine WRF-Chem output for a live engine run (see `docs/hysplit.md`, `docs/wrfchem_adapter.md`); WRF-Chem model runs themselves remain external HPC by design. |
 | C6 | **GRU / LSTM model** | ✅ | Custom NumPy GRU trained: 2-layer, hidden=64, seq_len=48; honestly underperforms XGBoost at all horizons (h-1 R²: GRU 0.336 vs RF/XGB 0.879); retained as a candidate ensemble member while the live API serves the higher-accuracy XGBoost direct models. See `models/pm25/evaluation.json`. |
 | C7 | **FIRMS fire + wind + transport layers on the Leaflet map** | ✅ | Leaflet NCR map renders FIRMS hotspots (FRP-sized/colored circles) + stations; StubblePlume summary card shows headline risk, wind-aligned %, smoke arrival time. Transport risk fetched from `/api/transport-risk/current`. |
 
@@ -102,8 +102,9 @@
 
 | Concern | Verified status |
 |---------|-----------------|
-| WRF-Chem integrated? | **No** — not installed/configured/executed; only a documented pure-Python surrogate. (Matches "do not fake WRF-Chem results" requirement.) |
-| Vertical atmospheric data exists? | **No** — `data/atmosphere/` empty; only single-level PBL. |
+| WRF-Chem integrated? | **Engine layer yes; live engine operator-gated.** 1.6.0 ships honest HYSPLIT + WRF-Chem adapters (`ml/ctm/`) that run only real executables/real NetCDF output — nothing fabricated — and the analytic surrogate remains the fallback. ("Do not fake WRF-Chem results" holds.) |
+| IMD integrated? | **Gated adapter yes (1.8.0 / WS-3).** `api.imd.gov.in` city forecast adapter + `/api/imd/forecast` + offline `data/imd/imd_forecast.csv`; gateway verified 401 without key/IP whitelist and reported honestly; Open-Meteo stays when IMD unavailable. IMD raw radar still not directly consumed. |
+| Vertical atmospheric data exists? | **Partial** — single-level ERA5 (`t2m/sp/blh`) ingestion is wired and gated-functional (WS-2/1.7.0, real CDS grids sampled at the 17 NCR stations; empty placeholder when no CDS account/download). Vertical pressure-level *profiles* remain outstanding (C1). |
 | PBL height exists? | **Yes (single value)** — from Open-Meteo archive, ~16.6% missing, not independently validated. |
 | Inversion strength exists? | **Partial** — PBL-threshold proxy, not vertical lapse-rate analysis. |
 | Plume transport exists? | **Partial** — heuristic risk + 2D dispersion solver; transport feature set incomplete, map lacks fire overlay. |

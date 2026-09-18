@@ -37,6 +37,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import sqlalchemy as sa  # noqa: E402
+
 from backend.app.database import SessionLocal  # noqa: E402
 from backend.app.models.db_models import Station, WeatherReading  # noqa: E402
 from backend.app.services.refresh_service import STATIONS, _to_float  # noqa: E402

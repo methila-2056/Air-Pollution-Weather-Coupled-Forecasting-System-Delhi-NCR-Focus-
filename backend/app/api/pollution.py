@@ -3,7 +3,13 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.db_models import PollutionReading, Station
-from ..schemas.schemas import PollutionIngestResponse, PollutionReadingResponse, StationResponse
+from ..schemas.schemas import (
+    PollutionCoverageResponse,
+    PollutionIngestResponse,
+    PollutionReadingResponse,
+    StationPollutionCoverage,
+    StationResponse,
+)
 from ..services import cpcb_service
 from ..services.cpcb_service import CpcbError
 
@@ -38,6 +44,7 @@ def pollution_latest(db: Session = Depends(get_db)):
             so2=reading.so2,
             co=reading.co,
             aqi=reading.aqi,
+            data_source=reading.data_source,
         ))
     return latest
 
@@ -74,6 +81,7 @@ def pollution_history(station_id: int, limit: int = 168, db: Session = Depends(g
             so2=reading.so2,
             co=reading.co,
             aqi=reading.aqi,
+            data_source=reading.data_source,
         )
         for reading in readings
     ]
@@ -89,3 +97,88 @@ def pollution_ingest(db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Pollution ingestion failed: {exc}") from exc
     return summary
+
+
+@router.get("/pollution/coverage", response_model=PollutionCoverageResponse)
+def pollution_coverage(db: Session = Depends(get_db)):
+    """Per-station monitoring-network coverage report (SIH26082 17/17 audit).
+
+    Reports how many readings each station has, its data sources, recency and
+    sufficiency, so incomplete coverage is visible and actionable instead of
+    silently producing placeholder forecasts.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    cutoff = now - timedelta(hours=48)
+    stations = db.query(Station).order_by(Station.city, Station.name).all()
+    rows = {}
+    for station in stations:
+        readings = (
+            db.query(PollutionReading)
+            .filter(PollutionReading.station_id == station.id)
+            .order_by(PollutionReading.timestamp.desc())
+            .all()
+        )
+        if not readings:
+            rows[station.id] = {
+                "last": None,
+                "count": 0,
+                "sources": set(),
+                "history_days": None,
+                "recent": 0,
+            }
+            continue
+        last = readings[0].timestamp
+        recent = sum(1 for r in readings if r.timestamp is not None and r.timestamp >= cutoff)
+        sources = {r.data_source or "legacy" for r in readings if r.data_source or True}
+        span = (last - readings[-1].timestamp).total_seconds() / 86400.0
+        rows[station.id] = {
+            "last": last,
+            "count": len(readings),
+            "sources": sources,
+            "history_days": round(abs(span), 1),
+            "recent": recent,
+        }
+
+    def _sufficiency(info: dict) -> str:
+        if info["count"] == 0:
+            return "no_data"
+        if info["recent"] == 0:
+            return "stale"
+        if info["recent"] < 8:
+            return "limited"
+        if info["count"] < 96:
+            return "insufficient_history"
+        return "adequate"
+
+    stations_report = [
+        StationPollutionCoverage(
+            station_id=s.id,
+            station=s.name,
+            city=s.city,
+            readings=rows[s.id]["count"],
+            last_timestamp=rows[s.id]["last"],
+            hours_since_last=(
+                round((now - rows[s.id]["last"]).total_seconds() / 3600.0, 1)
+                if rows[s.id]["last"] is not None
+                else None
+            ),
+            history_days=rows[s.id]["history_days"],
+            sufficiency=_sufficiency(rows[s.id]),
+            sources=sorted(rows[s.id]["sources"]),
+        )
+        for s in stations
+    ]
+    with_readings = sum(1 for r in stations_report if r.readings > 0)
+    recent = sum(1 for r in stations_report if r.hours_since_last is not None and r.hours_since_last <= 48)
+    insufficient = sum(1 for r in stations_report if r.sufficiency != "adequate")
+    total = max(1, len(stations_report))
+    return PollutionCoverageResponse(
+        stations_total=len(stations_report),
+        stations_with_readings=with_readings,
+        stations_recent=recent,
+        stations_insufficient=insufficient,
+        coverage_pct=round(100.0 * recent / total, 1),
+        stations=stations_report,
+    )

@@ -3,6 +3,111 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.0] - 2026-09
+
+### Added
+- **Gated IMD official weather API adapter (WS-3, R9).**
+  - `backend/app/services/imd_weather.py`: fetches genuine 7-day city forecasts
+    from `api.imd.gov.in/api/v1/cityforecast` (station `42182`
+    Delhi/Safdarjung, the NCR anchor). The gateway authenticates via key/IP
+    whitelist and returns **HTTP 401 otherwise** — verified live with urllib in
+    this environment; `imd_reasons()`/`IMDApiUnavailable` report exactly that,
+    and nothing is ever fabricated.
+  - `backend/app/api/imd.py` — `GET /api/imd/forecast` returns `{available,
+    station, days:[7d max/min/condition], reasons}` (registered in `main.py`);
+    schemas `ImdForecastDay`/`ImdForecastResponse`; config `imd_api_key`,
+    `imd_station_id`, `imd_api_base`.
+  - `scripts/fetch_imd_weather.py` — offline CLI writing
+    `data/imd/imd_forecast.csv` (empty placeholder + honest reason on failure);
+    `scripts/build_dataset.py` gains `load_imd()` and merges `imd_*` columns
+    into the coupled dataset when real rows exist, warning + Open-Meteo
+    fallback otherwise.
+  - New `docs/imd.md`; `SIH_FINAL_COMPLIANCE.md` R9 note; 13 new unit tests
+    (`backend/tests/unit/test_imd_weather.py`: 401/no-key reasons, real-shape
+    parsing, malformed/non-JSON/HTTP-error rejection, router response,
+    dataset glue).
+
+## [1.7.0] - 2026-09
+
+### Added
+- **Real ERA5 reanalysis ingestion (WS-2, R9 subset).**
+  - New gated reader `ml/features/era5_surface.py`: samples genuine
+    Copernicus-CDS `reanalysis-era5-single-levels` NetCDF grids (`blh`, `t2m`,
+    `sp`) at the 17 curated NCR stations (nearest grid cell), converts units
+    (K→°C, Pa→hPa), and returns per-station, per-hour rows
+    (`time, station, era5_temperature, era5_surface_pressure, era5_blh`).
+    Reads NetCDF3-classic via `scipy.io.netcdf_file` with **zero extra
+    dependencies** (prefers netCDF4/xarray if installed); handles the CDS
+    `expver` split; reports honest `era5_reasons()` and returns an empty frame
+    when no real file exists — nothing is ever fabricated.
+  - `scripts/download_atmosphere.py` rewritten: proper CDS request (one NetCDF
+    per archive year, idempotent, `--no-download`/`--force`), then extracts the
+    station CSV through the shared reader; unreachable/unauthorised CDS writes
+    a clearly-empty placeholder so `build_dataset.py` keeps using Open-Meteo.
+  - `scripts/build_dataset.py::load_atmosphere` now consumes the real NetCDF
+    samples via the shared reader (previously the NetCDF path was
+    non-functional — downloaded `blh/t2m/sp` grids never became `era5_*`
+    columns), with an honest "ERA5 atmosphere unavailable" warning + reason.
+  - New `docs/era5.md`; `SIH_FINAL_COMPLIANCE.md` R9 note + 8 new unit tests
+    (`backend/tests/unit/test_era5_surface.py`: gating, multi-year glob,
+    nearest-cell sampling/units, descending latitude, expver, CSV glue).
+
+**528 tests pass** (was 520). No DB migration, no frontend change.
+
+## [1.6.0] - 2026-09
+
+### Added
+- **Real chemical-transport engine layer — NOAA HYSPLIT + WRF-Chem (WS-4, R6).**
+  - New `ml/ctm/` package: `ctm_interface.py` (`CtmResult`, `CtmUnavailable`,
+    `register`, `run_best_engine` with deterministic WRFChem→HYSPLIT priority),
+    `regrid.py` (IDW gridding for sparse plumes).
+  - `hysplit_adapter.py`: renders a standard HYSPLIT CONTROL file (line layout
+    mirrors NOAA ARL `utilhysplit`), runs the real `exec/hycs_std(.exe)`, and
+    parses the binary `cdump` using ARL's own record layout — validated against
+    the real `cdump.bin` archived in `noaa-oar-arl/utilhysplit` — then regrids
+    the plume onto the NCR domain. Strictly gated on executable + genuine ARL
+    met files; never simulates; `CtmUnavailable` otherwise.
+  - `wrfchem_adapter.py`: consumes genuine external `wrfout_d01_*.nc` output
+    (xarray/netCDF4), units taken verbatim from the file.
+  - `scripts/download_hysplit_gdas.py`: idempotent GDAS1 ARL archive fetcher
+    from the verified ready.noaa.gov file scheme (`gdas1.<mon><yy>.w<k>`).
+  - `dispersion_service.py` now tries genuine engines first and, on success,
+    composites the engine plume *pattern* 50/50 with the coupled forecast
+    surface (`mode`, `composite`, and `ctm` blocks disclose engine/units; the
+    analytic surrogate stays the documented fallback when no engine is
+    runnable). `mode="numerical_advection_diffusion"` fallback unchanged.
+  - New `docs/hysplit.md` and `docs/wrfchem_adapter.md`; `SIH_FINAL_COMPLIANCE.md`
+    R6 now ✅ (engine-gated). 14 new unit tests (`test_ctm_engines.py`) covering
+    CONTROL layout, cdump round-trip + malformed rejection, surface regrid,
+    gating, registry order, and composite logic.
+
+## [1.5.0] - 2026-09
+
+### Added
+- **Pollution coverage for all 17 curated NCR stations (WS-1).**
+  - New careful aliases map every data.gov.in / CPSB station name to the 17
+    canonical monitors (adds Lodhi Road, Sirifort, Shadipur, Okhla Phase-2,
+    Ashok Vihar, Mundka, Jahangirpuri, Aya Nagar, Vivek Vihar, Teri Gram /
+    Vikas Sadan, Noida Sector-62, Faridabad/Sector 11).
+  - Provenance tagging: every `pollution_observations` row now carries
+    `data_source` (`data_gov_in`, `opencity_ckan`, `cpcb_dataset`); additive
+    schema change only (alembic `d3e5f7a4b8c2` + SQLite `apply_migrations`).
+  - New `scripts/backfill_pollution.py`: keyless, idempotent historical AQI
+    backfill from the community CPCB hourly-AQI dataset (Vonter/india-cpcb-aqi,
+    ODbL) for all sparse/empty stations; network-gated, offline-safe, honest
+    (hourly AQI only, never fabricated).
+  - Sparse-station resilience in forecasting: when a station has fewer than 24
+    local readings it falls back to a regional composited signal from the five
+    core stations (Anand Vihar, RK Puram, ITO, Dwarka, Punjabi Bagh) so the
+    72-hour model is never run on empty history.
+  - New `GET /api/pollution/coverage` endpoint reporting per-station reading
+    counts, first/last timestamps, source breakdown, and sufficiency status
+    (adequate / limited / insufficient_history / stale / no_data); model
+    responses for `/api/forecast/generate` and `/api/forecast/coupled` now
+    surface `pooled_features`, `local_readings`, and `history_days`.
+  - Unit + API tests for aliases, coverage endpoint, and pooled fallback (506
+    passing).
+
 ## [1.4.0] - 2026-09
 
 ### Added

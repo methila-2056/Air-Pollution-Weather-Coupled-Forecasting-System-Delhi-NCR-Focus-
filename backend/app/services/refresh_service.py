@@ -375,6 +375,7 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
                     so2=vals.get("so2"),
                     co=vals.get("co"),
                     aqi=aqi_val,
+                    data_source="opencity_ckan",
                 )
             )
             existing.add(ts)

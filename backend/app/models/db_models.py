@@ -25,6 +25,10 @@ class PollutionReading(Base):
     so2 = Column(Float)
     co = Column(Float)
     aqi = Column(Integer)
+    # Provenance tag: which official source produced this reading
+    # (data_gov_in | opencity_ckan | cpcb_dataset | cpcb_live). NULL for legacy
+    # rows ingested before the column existed.
+    data_source = Column(String)
     __table_args__ = (
         UniqueConstraint("station_id", "timestamp", name="uq_pollution_station_ts"),
         Index("idx_pollution_station_time", "station_id", "timestamp"),
