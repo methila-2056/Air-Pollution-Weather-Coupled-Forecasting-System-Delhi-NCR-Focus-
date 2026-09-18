@@ -18,6 +18,7 @@ node_modules/
 
 # frontend build output (produced by npm run build / inside the Docker image)
 frontend/dist/
+frontend/*.tsbuildinfo
 
 # The 120MB row-export exceeds GitHub's 100MB push limit.
 # It is committed (byte-identical) as part1 + part2; see data/processed/SPLIT_NOTE.txt

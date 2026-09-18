@@ -118,6 +118,15 @@ async def lifespan(app: FastAPI):
             settings.live_refresh_interval_hours,
         )
 
+    # 4. Optional demo-data hydration (opt-in; runs once in the background when
+    #    pollution or weather has no reading in the last 24h). Never blocks the
+    #    readiness probe, so Render health checks are unaffected.
+    hydrate_task = None
+    if getattr(settings, "demo_hydrate_empty_db", False):
+        from .services.demo_hydration import hydrate_demo_if_empty
+        hydrate_task = asyncio.create_task(hydrate_demo_if_empty(_refresh_stop))
+        logger.info("Demo hydration task scheduled (DEMO_HYDRATE_EMPTY_DB=true)")
+
     logger.info("AeroCast-NCR backend ready")
     yield
 
@@ -127,6 +136,12 @@ async def lifespan(app: FastAPI):
         refresh_task.cancel()
         try:
             await refresh_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    if hydrate_task is not None:
+        hydrate_task.cancel()
+        try:
+            await hydrate_task
         except (asyncio.CancelledError, Exception):
             pass
     logger.info("AeroCast-NCR backend shutting down")

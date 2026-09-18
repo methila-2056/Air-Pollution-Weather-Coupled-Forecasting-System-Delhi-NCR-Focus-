@@ -23,8 +23,6 @@ export default function LoginPage() {
     getDemoCredentials()
       .then((res) => {
         setDemo(res.data)
-        setEmail((cur) => (cur === '' ? res.data.email : cur))
-        setPassword((cur) => (cur === '' ? res.data.password : cur))
       })
       .catch(() => setDemo(null))
   }, [])
@@ -195,7 +193,7 @@ export default function LoginPage() {
                 <span className="font-mono">{demo.password}</span>
               </p>
               <p className="mt-1 text-xs text-inst-700">
-                These are pre-filled above — just press Enter or click
+                These are shown for reference — just press Enter or click
                 &quot;Continue with Demo Account&quot; to sign in instantly.
               </p>
             </div>

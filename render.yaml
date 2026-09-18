@@ -53,3 +53,9 @@ services:
         value: "true"
       - key: LIVE_REFRESH_INTERVAL_HOURS
         value: "3"
+      # Opt-in demo self-hydration: loads the bundled coupled dataset + model
+      # metrics + alerts and re-stamps recent observations into the last 24h
+      # whenever pollution or weather has no reading in that window, so a fresh
+      # or stale database renders a live-looking dashboard without manual steps.
+      - key: DEMO_HYDRATE_EMPTY_DB
+        value: "true"

@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     nasa_firms_map_key: str = ""
     live_refresh_enabled: bool = False
     live_refresh_interval_hours: int = 3
+    # Optional demo self-hydration: when true, the app loads the bundled coupled
+    # dataset + model metrics + alerts and re-stamps recent observations into the
+    # last 24h whenever pollution or weather has no reading in that window. This
+    # makes a brand-new or stale database render a live-looking demo with no
+    # manual steps (see backend/app/services/demo_hydration.py).
+    demo_hydrate_empty_db: bool = False
     # data.gov.in / CPCB "Real time Air Quality Index from various locations"
     data_gov_api_key: str = ""
     data_gov_api_url: str = "https://api.data.gov.in"
