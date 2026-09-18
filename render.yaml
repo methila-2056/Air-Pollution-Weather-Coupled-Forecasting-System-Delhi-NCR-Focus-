@@ -1,0 +1,55 @@
+# AeroCast-NCR Render Blueprint
+#
+# Deploys the FastAPI backend as a long-running Web Service. The frontend is
+# hosted separately on Vercel (see frontend/vercel.json).
+#
+# Usage:
+#   1. Create a Neon (neon.tech) or Supabase PostgreSQL database and copy its
+#      pooled/external connection string.
+#   2. Import this repo on Render: New > Blueprint, or create the Web Service
+#      manually using the same build/start commands below.
+#   3. Fill in the `sync: false` secrets from the Render dashboard:
+#        DATABASE_URL     = postgresql://user:pass@host/db?sslmode=require
+#        CORS_ORIGINS     = https://<your-app>.vercel.app
+#        SECRET_KEY       = a long random string
+#        NASA_FIRMS_MAP_KEY / DATA_GOV_API_KEY / IMD_API_KEY  (optional)
+#        DEMO_USER_PASSWORD  = a strong demo-seed password
+#
+# NOTE: The repo-root working directory is intentional. Uvicorn starts as
+# `backend.app.main:app` so that `ml/`, `models/`, `data/` and `alembic.ini`
+# resolve from the repository root (models/joblib files are not baked into a
+# Docker image; they ship inside the git checkout).
+
+services:
+  - type: web
+    name: aerocast-backend
+    runtime: python
+    plan: free
+    pythonVersion: 3.11.9
+    healthCheckPath: /health
+    autoDeploy: true
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SECRET_KEY
+        sync: false
+      - key: NASA_FIRMS_MAP_KEY
+        sync: false
+      - key: DATA_GOV_API_KEY
+        sync: false
+      - key: IMD_API_KEY
+        sync: false
+      - key: DEMO_USER_PASSWORD
+        sync: false
+      - key: LIVE_REFRESH_ENABLED
+        value: "true"
+      - key: LIVE_REFRESH_INTERVAL_HOURS
+        value: "3"

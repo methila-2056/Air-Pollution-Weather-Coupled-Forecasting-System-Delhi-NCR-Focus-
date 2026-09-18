@@ -300,6 +300,29 @@ Convenience targets: `make test`, `make test-unit`, `make test-integration`,
 
 ## Deployment & CI/CD
 
+### Vercel + Render (managed cloud)
+
+Production is split across two platforms — see
+[`render.yaml`](render.yaml) and [`frontend/vercel.json`](frontend/vercel.json):
+
+| App | Host | How |
+|-----|------|-----|
+| **Frontend** (React SPA) | **Vercel** | Import the repo, root dir = `frontend`, framework preset *Vite*, build `npm run build`, output dir `dist`. `vercel.json` rewrites `/api/*` → the Render backend URL (update that URL after the service exists) and falls back to `index.html` for SPA routes. |
+| **Backend** (FastAPI) | **Render Web Service** | Blueprint `render.yaml` → build `pip install -r backend/requirements.txt`, start `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT` (repo-root cwd so `ml/`, `models/`, `data/`, `alembic.ini` resolve), health check `/health`. |
+| **Database** | **Neon / Supabase** | External Postgres. Set `DATABASE_URL` on Render (an overriding it disables the SQLite default and triggers migrations + seeding at boot). |
+
+Mandatory env vars on Render: `DATABASE_URL`, `CORS_ORIGINS`
+(`https://<your-app>.vercel.app`), `SECRET_KEY` (long random). Optional:
+`NASA_FIRMS_MAP_KEY`, `DATA_GOV_API_KEY`, `IMD_API_KEY`,
+`LIVE_REFRESH_ENABLED=true`, `DEMO_USER_PASSWORD`.
+
+> Free-tier caveats: Render free Postgres expires after 90 days, and the free
+> web service idles after ~15 min (cold start = migrations + model load, a few
+> seconds). The repository ships ~1.5 GB of committed `models/` + `data/`, so
+> clones are slow; keep `data/` lean if builds become a bottleneck.
+
+### CI/CD
+
 - **Compose runbook** — [`docs/deployment.md`](docs/deployment.md) (migration
   flow, live refresh, reverse-proxy/HTTPS, `pgdata` backup/restore,
   first-boot checks).
