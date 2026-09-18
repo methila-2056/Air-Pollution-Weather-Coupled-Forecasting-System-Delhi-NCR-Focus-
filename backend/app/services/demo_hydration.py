@@ -52,20 +52,17 @@ def _load_demo_data() -> None:
     db = SessionLocal()
     try:
         counts = demo.load_coupled_data(db, csv_path)
-        n_fire = demo.load_fire_data(db, fire_csv)
-        n_metrics = demo.load_metrics(db, metrics_path)
-        n_alerts = demo.load_alerts_seed(db)
-        logger.info(
-            "demo data load complete: pollution=%d weather=%d fire=%d metrics=%d alerts=%d",
-            counts["pollution"],
-            counts["weather"],
-            n_fire,
-            n_metrics,
-            n_alerts,
-        )
     finally:
         db.close()
+    logger.info(
+        "demo coupled load complete: pollution=%d weather=%d",
+        counts["pollution"],
+        counts["weather"],
+    )
 
+    # Re-stamp NOW so the dashboard goes live-looking before the slower fire
+    # archive load finishes (firms_fires.csv can be hundreds of MB on a cold
+    # cache; a fresh/edge database should still render a live scenario fast).
     anchor_minute = 0
     db = SessionLocal()
     try:
@@ -79,6 +76,30 @@ def _load_demo_data() -> None:
         n_poll = bootstrap_recent.bootstrap_pollution(db, anchor_minute)
         n_wx = bootstrap_recent.bootstrap_weather(db, anchor_minute)
         logger.info("demo re-stamp into last 24h: pollution=%d weather=%d", n_poll, n_wx)
+    finally:
+        db.close()
+
+    # Optional auxiliary payloads; each one is tolerated on failure so a
+    # transient FIRMS/metrics problem can never leave the app without its core
+    # demo picture.
+    db = SessionLocal()
+    try:
+        try:
+            n_fire = demo.load_fire_data(db, fire_csv)
+        except Exception:
+            n_fire = -1
+            logger.exception("demo fire load failed (continuing)")
+        try:
+            n_metrics = demo.load_metrics(db, metrics_path)
+        except Exception:
+            n_metrics = -1
+            logger.exception("demo metrics load failed (continuing)")
+        try:
+            n_alerts = demo.load_alerts_seed(db)
+        except Exception:
+            n_alerts = -1
+            logger.exception("demo alerts load failed (continuing)")
+        logger.info("demo auxiliary payloads complete: fire=%d metrics=%d alerts=%d", n_fire, n_metrics, n_alerts)
     finally:
         db.close()
 

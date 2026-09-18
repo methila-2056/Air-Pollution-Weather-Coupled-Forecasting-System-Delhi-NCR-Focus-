@@ -34,16 +34,19 @@ HTTP_TIMEOUT = 60
 # monsoon / stubble season. Coordinates are (min_lon, min_lat, max_lon, max_lat).
 FIRMS_REGION = {"min_lon": 73.5, "min_lat": 27.5, "max_lon": 78.5, "max_lat": 33.0}
 
-# Official FIRMS area API. `area` is west,south,east,north (decimal degrees).
-FIRMS_API_AREA_CSV = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{map_key}/{source}/{day}/{area}"
+# Official FIRMS area API. `area` is west,south,east,north (decimal degrees);
+# the current API expects {map_key}/{source}/{area}/{day_range}.
+FIRMS_API_AREA_CSV = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{map_key}/{source}/{area}/{day}"
 
-# All active satellites exposed by the FIRMS area API.
+# All active satellites exposed by the FIRMS area API (valid source names as of
+# the 2026 API docs — NRT flavours + MODIS_SP; bare-named/VIIRS_NRT and
+# MODIS_Aqua are rejected with HTTP 400).
 FIRMS_API_SOURCES = [
-    "VIIRS_SNPP",
-    "VIIRS_NOAA20",
-    "VIIRS_NOAA21",
+    "VIIRS_SNPP_NRT",
+    "VIIRS_NOAA20_NRT",
+    "VIIRS_NOAA21_NRT",
     "MODIS_SP",
-    "MODIS_Aqua",
+    "MODIS_NRT",
 ]
 
 # Public FIRMS daily-24h CSV contributions (no API key required).
@@ -52,8 +55,8 @@ PUBLIC_CSV_URLS = [
     "https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv",
 ]
 
-DEFAULT_API_DAYS = 7
-MAX_API_DAYS = 10
+DEFAULT_API_DAYS = 5
+MAX_API_DAYS = 5
 
 _CONFIDENCE_VALUES = {"low", "nominal", "high"}
 

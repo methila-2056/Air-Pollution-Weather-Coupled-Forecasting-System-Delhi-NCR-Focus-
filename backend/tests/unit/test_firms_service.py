@@ -110,7 +110,8 @@ class TestFetch:
 
         def fake_get(url, **kwargs):
             assert "/api/area/csv/" in url
-            assert url.split("/")[-1] == fs.region_area()
+            assert f"/{fs.region_area()}/" in url
+            assert url.split("/")[-1] == "5"  # day range clamped to MAX_API_DAYS
             return FakeResp(text=csv_text)
 
         with mock.patch.object(fs.requests, "get", side_effect=fake_get):
