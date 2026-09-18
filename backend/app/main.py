@@ -78,20 +78,33 @@ async def lifespan(app: FastAPI):
     verify_postgres_connection()
 
     # 2. Database migrations + schema
+    # Each stage is guarded independently so a failure in one (e.g. an Alembic
+    # revision error on PostgreSQL) can never skip the others. In particular
+    # `create_all` runs unconditionally — it is idempotent and guarantees the
+    # tables exist even when versioned migrations fail, so data endpoints and
+    # the live-refresh scheduler never 500 on a missing table.
     try:
         migrated = run_migrations()
+        if migrated:
+            logger.info("Alembic migrations applied at startup")
+    except Exception:
+        logger.exception("Alembic migrations failed at startup (schema fallback below)")
+
+    try:
         apply_migrations()
         Base.metadata.create_all(bind=engine)
+    except Exception:
+        logger.exception("Schema creation failed at startup")
+
+    try:
         with SessionLocal() as db:
             seeded = seed_data(db)
             if seeded:
                 logger.info("Seeded %d default Delhi NCR stations", seeded)
             from .api.auth import ensure_demo_user
             ensure_demo_user(db)
-            if migrated:
-                logger.info("Alembic migrations applied at startup")
-    except Exception as exc:
-        logger.warning("Startup database initialisation skipped: %s", exc)
+    except Exception:
+        logger.exception("Station/demo-user seeding failed at startup")
 
     # 3. Optional live-refresh scheduler
     refresh_task = None
