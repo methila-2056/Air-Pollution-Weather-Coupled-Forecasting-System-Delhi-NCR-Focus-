@@ -13,6 +13,7 @@ import argparse
 import gc
 import json
 import logging
+from datetime import UTC
 from pathlib import Path
 
 import pandas as pd
@@ -21,6 +22,14 @@ import backend.app.models.db_models as dbm  # noqa: E402, F401  (registers table
 from backend.app.database import Base, SessionLocal, engine  # noqa: E402
 
 logger = logging.getLogger("aerocast.load_data")
+
+# Natural unique keys per model; used for idempotent ``ON CONFLICT DO NOTHING``
+# inserts so re-hydrating a partially-filled database never raises or drops data.
+_CONFLICT_COLUMNS = {
+    "PollutionReading": ["station_id", "timestamp"],
+    "WeatherReading": ["station_id", "timestamp"],
+    "FireReading": ["satellite", "latitude", "longitude", "acq_date"],
+}
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CSV = PROJECT_ROOT / "data" / "processed" / "coupled_dataset.csv"
@@ -66,11 +75,17 @@ def load_coupled_data(db, csv_path: Path, chunksize: int = 25_000) -> dict:
 
     existing_ts: dict[int, set] = {}
     for sid, ts in db.query(PollutionReading.station_id, PollutionReading.timestamp).all():
-        existing_ts.setdefault(sid, set()).add(ts)
+        existing_ts.setdefault(sid, set()).add(_as_utc(ts))
 
     total_poll = 0
     total_wx = 0
     for df in pd.read_csv(csv_path, parse_dates=["timestamp"], chunksize=chunksize):
+        ts_col = df["timestamp"]
+        if ts_col.dt.tz is None:
+            df["timestamp"] = ts_col.dt.tz_localize("UTC")
+        else:
+            df["timestamp"] = ts_col.dt.tz_convert("UTC")
+        df = df[df["timestamp"].notna()]
         df["station_name"] = df["station"].map(raw_to_display).fillna(df["station"])
         df["station_id"] = df["station_name"].map({s.name: s.id for s in stations.values()})
         df = df[df["station_id"].notna()]
@@ -93,8 +108,16 @@ def load_coupled_data(db, csv_path: Path, chunksize: int = 25_000) -> dict:
 
         poll_payloads = []
         weather_payloads = []
+        seen: set[tuple[int, object]] = set()
         for i, head in enumerate(df.itertuples(index=False)):
             sid = int(head.station_id)
+            key = (sid, head.timestamp)
+            if key in seen:
+                # Coupled CSV carries a few duplicated station-hour rows; dropping
+                # them here (instead of letting a later batch violate the Postgres
+                # unique constraint) avoids losing the whole 2k batch.
+                continue
+            seen.add(key)
             poll_payloads.append({
                 "station_id": sid,
                 "timestamp": head.timestamp,
@@ -123,7 +146,10 @@ def load_coupled_data(db, csv_path: Path, chunksize: int = 25_000) -> dict:
         total_poll += _insert_batches(db, PollutionReading, poll_payloads)
         total_wx += _insert_batches(db, WeatherReading, weather_payloads)
 
-        del df, keep, poll_payloads, weather_payloads, aqi
+        for sid, ts in seen:
+            existing_ts.setdefault(sid, set()).add(ts)
+
+        del df, keep, poll_payloads, weather_payloads, aqi, seen
         if chunksize < 100_000:
             gc.collect()
 
@@ -302,28 +328,56 @@ def _clean(v):
     return v
 
 
-def _insert_batches(db, model, payloads, batch_size: int = 2_000) -> int:
-    """Insert payload rows in small resilient batches.
+def _as_utc(ts):
+    """Normalise a datetime to tz-aware UTC (naive -> UTC) for dedup keys.
 
-    Each batch is committed on its own so a single server-side failure (Neon
-    free-tier statement limits, timeouts, dropped connections) skips only that
-    batch, logs it, and lets the remaining batches finish.
+    pandas parses `parse_dates` columns as naive, but Postgres `timestamptz`
+    columns read back tz-aware UTC. `naive != aware` silently defeats the
+    existing-row dedup, so every run resubmits already-persisted rows and the
+    unique constraint turns each rerun into a losing batch of integrity errors.
     """
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=UTC)
+    return ts.astimezone(UTC)
+
+
+def _insert_batches(db, model, payloads, batch_size: int = 2_000) -> int:
+    """Insert payload rows in small idempotent batches.
+
+    Each batch is committed on its own and uses ``ON CONFLICT DO NOTHING`` on the
+    model's natural unique key, so reruns against a partially-hydrated database
+    (or rows with legacy timezone representations) never raise integrity errors
+    and never lose a whole batch. A batch-level failure (Neon-free-tier limits,
+    timeouts) still skips only that batch, logs it, and lets the rest finish.
+
+    Returns the number of rows handed to the database (conflicts are skipped
+    server-side, so this is a lower bound of distinct data actually stored).
+    """
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    conflict_cols = _CONFLICT_COLUMNS[model.__name__]
+    if db.get_bind().dialect.name == "sqlite":
+        upsert = sqlite.insert(model).on_conflict_do_nothing(index_elements=conflict_cols)
+    else:
+        upsert = postgresql.insert(model).on_conflict_do_nothing(index_elements=conflict_cols)
     inserted = 0
     for start in range(0, len(payloads), batch_size):
         batch = payloads[start : start + batch_size]
         try:
-            db.bulk_insert_mappings(model, batch)
+            db.execute(upsert, batch)
             db.commit()
             inserted += len(batch)
-        except Exception:  # noqa: BLE001 - keep hydrating despite a bad batch
+        except Exception as e:  # noqa: BLE001 - keep hydrating despite a bad batch
             db.rollback()
             logger.warning(
-                "skipped %d rows for %s (batch %d..%d)",
+                "skipped %d rows for %s (batch %d..%d): %s",
                 len(batch),
                 model.__name__,
                 start,
                 start + len(batch),
+                str(e)[:160],
             )
     return inserted
 

@@ -79,14 +79,52 @@ class TestLoadCoupledDataChunked:
         csv_path = tmp_path / "coupled.csv"
         _coupled_csv(csv_path, n=5)
         load_coupled_data(db_session, csv_path, chunksize=2)
-        counts = load_coupled_data(db_session, csv_path, chunksize=2)
-        assert counts == {"pollution": 0, "weather": 0}
+        p1, w1 = _pollution_count(db_session), _weather_count(db_session)
+        load_coupled_data(db_session, csv_path, chunksize=2)
+        assert _pollution_count(db_session) == p1
+        assert _weather_count(db_session) == w1
 
     def test_chunk_boundaries_do_not_duplicate(self, db_session, tmp_path):
         csv_path = tmp_path / "coupled.csv"
         _coupled_csv(csv_path, n=7)
         counts = load_coupled_data(db_session, csv_path, chunksize=3)
         assert counts == {"pollution": 7, "weather": 7}
+
+    def test_intra_chunk_duplicates_insert_once(self, db_session, tmp_path):
+        base = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=5)
+        csv_path = tmp_path / "coupled.csv"
+        stamps = [(base + timedelta(hours=i)).isoformat() for i in range(7)]
+        rows = [
+            {
+                "timestamp": stamp,
+                "temperature_2m": 22.0,
+                "relative_humidity_2m": 61.0,
+                "pressure_msl": 1013.0,
+                "surface_pressure": 993.0,
+                "wind_speed_10m": 1.5,
+                "wind_direction_10m": 315.0,
+                "precipitation": 0.0,
+                "cloud_cover": 40.0,
+                "boundary_layer_height": 180.0,
+                "station": "Anand Vihar",
+                "latitude": 28.6492,
+                "longitude": 77.2918,
+                "pm25": 120.0,
+                "pm10": 200.0,
+                "no2": 60.0,
+                "o3": 40.0,
+                "so2": 10.0,
+                "co": 2.0,
+            }
+            for stamp in stamps
+        ]
+        rows.append({**rows[1], "pm25": 175.0})
+        pd.DataFrame(rows).to_csv(csv_path, index=False)
+
+        p0, w0 = _pollution_count(db_session), _weather_count(db_session)
+        load_coupled_data(db_session, csv_path, chunksize=2)
+        assert _pollution_count(db_session) == p0 + 7
+        assert _weather_count(db_session) == w0 + 7
 
 
 class TestLoadFireDataChunked:
@@ -101,7 +139,9 @@ class TestLoadFireDataChunked:
         csv_path = tmp_path / "fires.csv"
         _fire_csv(csv_path, n=3)
         load_fire_data(db_session, csv_path, chunksize=2)
-        assert load_fire_data(db_session, csv_path, chunksize=2) == 0
+        after_first = db_session.query(FireReading).count()
+        load_fire_data(db_session, csv_path, chunksize=2)
+        assert db_session.query(FireReading).count() == after_first
 
     def test_missing_file_is_empty(self, db_session, tmp_path):
         assert load_fire_data(db_session, tmp_path / "nope.csv") == 0
