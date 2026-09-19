@@ -21,6 +21,11 @@ if not os.environ.get("DATABASE_URL"):
 REDIRECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(REDIRECT_ROOT) not in sys.path:
     sys.path.insert(0, str(REDIRECT_ROOT))
+# Prefer the real `app` package under backend/ over the repo-root Render shim
+# (app/ re-export), which shadows it and breaks `from app.database import ...`.
+BACKEND_ROOT = pathlib.Path(__file__).resolve().parent
+if str(BACKEND_ROOT) not in sys.path[:1]:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.database import Base, SessionLocal, engine, seed_data
 from app.main import app
