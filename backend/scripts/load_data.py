@@ -3,8 +3,10 @@
 Usage:
     python -m backend.scripts.load_data [--csv data/processed/coupled_dataset.csv]
 
-Memory note: both CSV loaders stream in chunks and insert in batches so a
-512 MB free-tier instance can hydrate the demo DB without being OOM-killed.
+Memory note: both CSV loaders stream in chunks and insert in small batches so
+a 512 MB free-tier instance can hydrate the demo DB without being OOM-killed,
+and so a single Neon-free-tier statement/connection hiccup skips only one
+batch instead of aborting the whole hydration.
 """
 
 import argparse
@@ -87,7 +89,6 @@ def load_coupled_data(db, csv_path: Path, chunksize: int = 25_000) -> dict:
         for col in ("pm25", "pm10", "o3", "no2", "so2", "co"):
             df[col] = pd.to_numeric(df.get(col), errors="coerce")
 
-        n = len(df)
         aqi = [calculate_aqi(head.pm25, head.pm10, head.o3, head.no2, head.so2, head.co)[0] for head in df.itertuples(index=False)]
 
         poll_payloads = []
@@ -119,11 +120,8 @@ def load_coupled_data(db, csv_path: Path, chunksize: int = 25_000) -> dict:
                 "pbl_height": _clean(getattr(head, "boundary_layer_height", None)),
             })
 
-        db.bulk_insert_mappings(PollutionReading, poll_payloads)
-        db.bulk_insert_mappings(WeatherReading, weather_payloads)
-        db.commit()
-        total_poll += n
-        total_wx += n
+        total_poll += _insert_batches(db, PollutionReading, poll_payloads)
+        total_wx += _insert_batches(db, WeatherReading, weather_payloads)
 
         del df, keep, poll_payloads, weather_payloads, aqi
         if chunksize < 100_000:
@@ -188,9 +186,7 @@ def load_fire_data(db, fire_csv: Path, chunksize: int = 50_000) -> int:
             existing.add(key)
 
         if payloads:
-            db.bulk_insert_mappings(FireReading, payloads)
-            db.commit()
-            total += len(payloads)
+            total += _insert_batches(db, FireReading, payloads)
 
         del df, payloads, dt
         if chunksize < 100_000:
@@ -304,6 +300,32 @@ def _clean(v):
     if v is None or (isinstance(v, float) and v != v):
         return None
     return v
+
+
+def _insert_batches(db, model, payloads, batch_size: int = 2_000) -> int:
+    """Insert payload rows in small resilient batches.
+
+    Each batch is committed on its own so a single server-side failure (Neon
+    free-tier statement limits, timeouts, dropped connections) skips only that
+    batch, logs it, and lets the remaining batches finish.
+    """
+    inserted = 0
+    for start in range(0, len(payloads), batch_size):
+        batch = payloads[start : start + batch_size]
+        try:
+            db.bulk_insert_mappings(model, batch)
+            db.commit()
+            inserted += len(batch)
+        except Exception:  # noqa: BLE001 - keep hydrating despite a bad batch
+            db.rollback()
+            logger.warning(
+                "skipped %d rows for %s (batch %d..%d)",
+                len(batch),
+                model.__name__,
+                start,
+                start + len(batch),
+            )
+    return inserted
 
 
 if __name__ == "__main__":

@@ -11,9 +11,11 @@ All notable changes to **AeroCast-NCR** are documented here. Format follows
   pandas on a 512 MB instance, OOM-killing the container every boot (the
   intermittent **502** that made demo sign-in fail). The loaders
   (`backend/scripts/load_data.py`) now **stream CSV in chunks (25k/50k rows)
-  and insert in batches** with `gc.collect()` between chunks; the hydration
-  task (`demo_hydration.py`) is deferred by a 45 s boot-grace so it never
-  competes with Render's health-check window.
+  and insert in small resilient batches** (2k rows each) with `gc.collect()`
+  between chunks — a Neon-free-tier statement/connection hiccup skips one batch
+  instead of aborting the whole hydration; the hydration task
+  (`demo_hydration.py`) is deferred by a 45 s boot-grace so it never competes
+  with Render's health-check window.
 - **Demo sign-in resilient to cold starts** — the login page auto-retries once
   (~12 s) after a transient 502/503/504 or network timeout (Render free back-
   ends sleep after ~15 min idle), showing "server is waking up …" instead of an
