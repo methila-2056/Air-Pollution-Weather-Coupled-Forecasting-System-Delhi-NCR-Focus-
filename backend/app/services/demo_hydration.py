@@ -22,6 +22,7 @@ from ..utils.helpers import haversine_distance
 logger = logging.getLogger("aerocast.hydration")
 
 RECENCY_WINDOW_HOURS = 24
+BOOT_GRACE_SECONDS = 45
 
 
 def _demo_observation_is_stale(db) -> bool:
@@ -44,7 +45,8 @@ def _demo_observation_is_stale(db) -> bool:
 
 def _load_demo_data() -> None:
     from backend.app.models.db_models import PollutionReading
-    from backend.scripts import bootstrap_recent, load_data as demo
+    from backend.scripts import bootstrap_recent
+    from backend.scripts import load_data as demo
 
     csv_path = Path(demo.DEFAULT_CSV)
     fire_csv = Path(demo.MODELS_DIR).parent / "data" / "fire" / "firms_fires.csv"
@@ -52,7 +54,7 @@ def _load_demo_data() -> None:
 
     db = SessionLocal()
     try:
-        counts = demo.load_coupled_data(db, csv_path)
+        counts = demo.load_coupled_data(db, csv_path, chunksize=25_000)
     finally:
         db.close()
     logger.info(
@@ -88,7 +90,7 @@ def _load_demo_data() -> None:
     db = SessionLocal()
     try:
         try:
-            n_fire = demo.load_fire_data(db, fire_csv)
+            n_fire = demo.load_fire_data(db, fire_csv, chunksize=50_000)
         except Exception:
             n_fire = -1
             logger.exception("demo fire load failed (continuing)")
@@ -214,9 +216,19 @@ def _fill_missing_stations(db, anchor_minute: int) -> tuple[int, int]:
 
 
 async def hydrate_demo_if_empty(stop: asyncio.Event) -> None:
-    """Load demo data once when observations are missing or stale (background)."""
+    """Load demo data once when observations are missing or stale (background).
+
+    The load is deferred by ``BOOT_GRACE_SECONDS`` so it never competes with
+    Render's boot/health-check window on a 512 MB free instance — the service
+    comes up hot and responsive first, then hydrates quietly with chunked,
+    batched inserts (see :mod:`backend.scripts.load_data`). If it were allowed
+    to spike memory during startup it would OOM-kill the container (the crash
+    loop that made the deployed demo intermittently 502).
+    """
     del stop
     try:
+        await asyncio.sleep(BOOT_GRACE_SECONDS)
+
         db = SessionLocal()
         try:
             stale = _demo_observation_is_stale(db)

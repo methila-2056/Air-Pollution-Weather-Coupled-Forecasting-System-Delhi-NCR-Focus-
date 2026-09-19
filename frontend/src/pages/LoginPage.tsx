@@ -31,10 +31,32 @@ export default function LoginPage() {
     return <Navigate to={next && !next.startsWith('/login') ? next : '/dashboard'} replace />
   }
 
-  function signIn(useEmail: string, usePassword: string) {
-    return login(useEmail.trim(), usePassword).then(() => {
-      navigate(next && !next.startsWith('/login') ? next : '/dashboard', { replace: true })
-    })
+  function isTransient(error: any) {
+    if (!error || !error.response) return true
+    const status = error.response.status
+    return status === 0 || status === 502 || status === 503 || status === 504
+  }
+
+  async function signIn(useEmail: string, usePassword: string) {
+    // Render free back-ends sleep after ~15 min idle and can take tens of
+    // seconds to wake; a first attempt is often answered with a gateway 502.
+    // Retry once after a pause so demo sign-in works on the first click even
+    // right after a cold start.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await login(useEmail.trim(), usePassword)
+        navigate(next && !next.startsWith('/login') ? next : '/dashboard', { replace: true })
+        return
+      } catch (err) {
+        if (attempt === 1 && isTransient(err)) {
+          setError('Air-quality server is waking up — signing you in shortly…')
+          setSubmitting(true)
+          await new Promise((r) => setTimeout(r, 12000))
+          continue
+        }
+        throw err
+      }
+    }
   }
 
   async function handleSubmit(e: FormEvent) {

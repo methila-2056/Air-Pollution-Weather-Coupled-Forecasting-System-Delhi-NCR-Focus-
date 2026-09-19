@@ -3,6 +3,24 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.1] - 2026-09
+
+### Fixed (deployed demo stability)
+- **OOM crash-loop on Render free-tier** — the startup demo self-hydration
+  read the ~131k-row coupled dataset and ~383k-row FIRMS archive fully into
+  pandas on a 512 MB instance, OOM-killing the container every boot (the
+  intermittent **502** that made demo sign-in fail). The loaders
+  (`backend/scripts/load_data.py`) now **stream CSV in chunks (25k/50k rows)
+  and insert in batches** with `gc.collect()` between chunks; the hydration
+  task (`demo_hydration.py`) is deferred by a 45 s boot-grace so it never
+  competes with Render's health-check window.
+- **Demo sign-in resilient to cold starts** — the login page auto-retries once
+  (~12 s) after a transient 502/503/504 or network timeout (Render free back-
+  ends sleep after ~15 min idle), showing "server is waking up …" instead of an
+  immediate "Demo sign-in failed".
+- New `backend/tests/unit/test_load_data.py` (6 tests) locking chunked insert,
+  idempotency and missing-file behaviour.
+
 ## [1.8.0] - 2026-09
 
 ### Added

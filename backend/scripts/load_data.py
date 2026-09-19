@@ -2,10 +2,15 @@
 
 Usage:
     python -m backend.scripts.load_data [--csv data/processed/coupled_dataset.csv]
+
+Memory note: both CSV loaders stream in chunks and insert in batches so a
+512 MB free-tier instance can hydrate the demo DB without being OOM-killed.
 """
 
 import argparse
+import gc
 import json
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -13,12 +18,14 @@ import pandas as pd
 import backend.app.models.db_models as dbm  # noqa: E402, F401  (registers tables)
 from backend.app.database import Base, SessionLocal, engine  # noqa: E402
 
+logger = logging.getLogger("aerocast.load_data")
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CSV = PROJECT_ROOT / "data" / "processed" / "coupled_dataset.csv"
 MODELS_DIR = PROJECT_ROOT / "models"
 
 
-def load_coupled_data(db, csv_path: Path) -> dict:
+def load_coupled_data(db, csv_path: Path, chunksize: int = 25_000) -> dict:
     from backend.app.models.db_models import PollutionReading, Station, WeatherReading
     from backend.app.services.aqi_calculator import calculate_aqi
 
@@ -59,120 +66,137 @@ def load_coupled_data(db, csv_path: Path) -> dict:
     for sid, ts in db.query(PollutionReading.station_id, PollutionReading.timestamp).all():
         existing_ts.setdefault(sid, set()).add(ts)
 
-    df = pd.read_csv(csv_path, parse_dates=["timestamp"])
-    df["station_name"] = df["station"].map(raw_to_display).fillna(df["station"])
-    df["station_id"] = df["station_name"].map({s.name: s.id for s in stations.values()})
-    df = df[df["station_id"].notna()].copy()
-    if df.empty:
-        return {"pollution": 0, "weather": 0}
+    total_poll = 0
+    total_wx = 0
+    for df in pd.read_csv(csv_path, parse_dates=["timestamp"], chunksize=chunksize):
+        df["station_name"] = df["station"].map(raw_to_display).fillna(df["station"])
+        df["station_id"] = df["station_name"].map({s.name: s.id for s in stations.values()})
+        df = df[df["station_id"].notna()]
+        if df.empty:
+            continue
 
-    df = df[~df.apply(lambda r: r["timestamp"] in existing_ts.get(int(r["station_id"]), set()), axis=1)]
-    if df.empty:
-        return {"pollution": 0, "weather": 0}
+        # Vectorised dedup vs. what is already persisted (kept light per chunk).
+        keep = [
+            ts not in existing_ts.get(int(sid), set())
+            for sid, ts in zip(df["station_id"], df["timestamp"], strict=True)
+        ]
+        df = df[keep]
+        if df.empty:
+            continue
 
-    for col in ("pm25", "pm10", "o3", "no2", "so2", "co"):
-        df[col] = pd.to_numeric(df.get(col), errors="coerce")
+        for col in ("pm25", "pm10", "o3", "no2", "so2", "co"):
+            df[col] = pd.to_numeric(df.get(col), errors="coerce")
 
-    aqi = [
-        calculate_aqi(head.pm25, head.pm10, head.o3, head.no2, head.so2, head.co)[0]
-        for head in df.itertuples(index=False)
-    ]
+        n = len(df)
+        aqi = [calculate_aqi(head.pm25, head.pm10, head.o3, head.no2, head.so2, head.co)[0] for head in df.itertuples(index=False)]
 
-    poll_payloads = []
-    weather_payloads = []
-    for i, head in enumerate(df.itertuples(index=False)):
-        sid = int(head.station_id)
-        poll_payloads.append({
-            "station_id": sid,
-            "timestamp": head.timestamp,
-            "pm25": _clean(head.pm25),
-            "pm10": _clean(head.pm10),
-            "o3": _clean(head.o3),
-            "no2": _clean(head.no2),
-            "so2": _clean(head.so2),
-            "co": _clean(head.co),
-            "aqi": aqi[i],
-        })
-        weather_payloads.append({
-            "station_id": sid,
-            "timestamp": head.timestamp,
-            "temperature": _clean(getattr(head, "temperature_2m", None)),
-            "humidity": _clean(getattr(head, "relative_humidity_2m", None)),
-            "pressure_msl": _clean(getattr(head, "pressure_msl", None)),
-            "surface_pressure": _clean(getattr(head, "surface_pressure", None)),
-            "wind_speed": _clean(getattr(head, "wind_speed_10m", None)),
-            "wind_direction": _clean(getattr(head, "wind_direction_10m", None)),
-            "precipitation": _clean(getattr(head, "precipitation", None)),
-            "cloud_cover": _clean(getattr(head, "cloud_cover", None)),
-            "pbl_height": _clean(getattr(head, "boundary_layer_height", None)),
-        })
+        poll_payloads = []
+        weather_payloads = []
+        for i, head in enumerate(df.itertuples(index=False)):
+            sid = int(head.station_id)
+            poll_payloads.append({
+                "station_id": sid,
+                "timestamp": head.timestamp,
+                "pm25": _clean(head.pm25),
+                "pm10": _clean(head.pm10),
+                "o3": _clean(head.o3),
+                "no2": _clean(head.no2),
+                "so2": _clean(head.so2),
+                "co": _clean(head.co),
+                "aqi": aqi[i],
+            })
+            weather_payloads.append({
+                "station_id": sid,
+                "timestamp": head.timestamp,
+                "temperature": _clean(getattr(head, "temperature_2m", None)),
+                "humidity": _clean(getattr(head, "relative_humidity_2m", None)),
+                "pressure_msl": _clean(getattr(head, "pressure_msl", None)),
+                "surface_pressure": _clean(getattr(head, "surface_pressure", None)),
+                "wind_speed": _clean(getattr(head, "wind_speed_10m", None)),
+                "wind_direction": _clean(getattr(head, "wind_direction_10m", None)),
+                "precipitation": _clean(getattr(head, "precipitation", None)),
+                "cloud_cover": _clean(getattr(head, "cloud_cover", None)),
+                "pbl_height": _clean(getattr(head, "boundary_layer_height", None)),
+            })
 
-    db.bulk_insert_mappings(PollutionReading, poll_payloads)
-    db.bulk_insert_mappings(WeatherReading, weather_payloads)
-    db.commit()
+        db.bulk_insert_mappings(PollutionReading, poll_payloads)
+        db.bulk_insert_mappings(WeatherReading, weather_payloads)
+        db.commit()
+        total_poll += n
+        total_wx += n
 
-    return {"pollution": len(poll_payloads), "weather": len(weather_payloads)}
+        del df, keep, poll_payloads, weather_payloads, aqi
+        if chunksize < 100_000:
+            gc.collect()
+
+    return {"pollution": total_poll, "weather": total_wx}
 
 
-def load_fire_data(db, fire_csv: Path) -> int:
+def load_fire_data(db, fire_csv: Path, chunksize: int = 50_000) -> int:
     if not fire_csv.exists():
         return 0
     from backend.app.models.db_models import FireReading
-
-    df = pd.read_csv(fire_csv, low_memory=False)
-
-    acq_time = (
-        pd.to_numeric(df.get("acq_time"), errors="coerce")
-        .fillna(0)
-        .astype(int)
-        .astype(str)
-        .str.zfill(4)
-    )
-    dt = pd.to_datetime(
-        df["acq_date"].astype(str) + " " + acq_time,
-        format="%Y-%m-%d %H%M",
-        errors="coerce",
-    )
-    dt = dt.fillna(pd.to_datetime(df["acq_date"], errors="coerce"))
-
-    lat = pd.to_numeric(df.get("latitude"), errors="coerce")
-    lon = pd.to_numeric(df.get("longitude"), errors="coerce")
 
     existing = {
         (r.latitude, r.longitude)
         for r in db.query(FireReading.latitude, FireReading.longitude).all()
     }
 
-    payloads = []
-    for ax, ny, ts, conf, frp_v, sat, dn in zip(
-        lat,
-        lon,
-        dt,
-        df.get("confidence", pd.Series(dtype="str")),
-        df.get("frp"),
-        df.get("satellite", pd.Series(dtype="str")),
-        df.get("daynight", pd.Series(dtype="str")),
-        strict=True,
-    ):
-        key = (_clean(ax), _clean(ny))
-        if key[0] is None or key[1] is None or key in existing:
-            continue
-        ts_v = None if pd.isna(ts) else ts
-        payloads.append({
-            "latitude": key[0],
-            "longitude": key[1],
-            "acq_date": ts_v,
-            "confidence": "" if conf is None else str(conf),
-            "frp": _clean(frp_v),
-            "satellite": _clean(sat),
-            "daynight": _clean(dn),
-        })
-        existing.add(key)
+    total = 0
+    for df in pd.read_csv(fire_csv, low_memory=False, chunksize=chunksize):
+        acq_time = (
+            pd.to_numeric(df.get("acq_time"), errors="coerce")
+            .fillna(0)
+            .astype(int)
+            .astype(str)
+            .str.zfill(4)
+        )
+        dt = pd.to_datetime(
+            df["acq_date"].astype(str) + " " + acq_time,
+            format="%Y-%m-%d %H%M",
+            errors="coerce",
+        )
+        dt = dt.fillna(pd.to_datetime(df["acq_date"], errors="coerce"))
 
-    if payloads:
-        db.bulk_insert_mappings(FireReading, payloads)
-        db.commit()
-    return len(payloads)
+        lat = pd.to_numeric(df.get("latitude"), errors="coerce")
+        lon = pd.to_numeric(df.get("longitude"), errors="coerce")
+
+        payloads = []
+        for ax, ny, ts, conf, frp_v, sat, dn in zip(
+            lat,
+            lon,
+            dt,
+            df.get("confidence", pd.Series(dtype="str")),
+            df.get("frp"),
+            df.get("satellite", pd.Series(dtype="str")),
+            df.get("daynight", pd.Series(dtype="str")),
+            strict=True,
+        ):
+            key = (_clean(ax), _clean(ny))
+            if key[0] is None or key[1] is None or key in existing:
+                continue
+            ts_v = None if pd.isna(ts) else ts
+            payloads.append({
+                "latitude": key[0],
+                "longitude": key[1],
+                "acq_date": ts_v,
+                "confidence": "" if conf is None else str(conf),
+                "frp": _clean(frp_v),
+                "satellite": _clean(sat),
+                "daynight": _clean(dn),
+            })
+            existing.add(key)
+
+        if payloads:
+            db.bulk_insert_mappings(FireReading, payloads)
+            db.commit()
+            total += len(payloads)
+
+        del df, payloads, dt
+        if chunksize < 100_000:
+            gc.collect()
+
+    return total
 
 
 def load_metrics(db, metrics_path: Path) -> int:
