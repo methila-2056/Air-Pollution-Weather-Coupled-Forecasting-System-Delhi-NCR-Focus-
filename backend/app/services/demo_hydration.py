@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ..database import SessionLocal
+from ..utils.helpers import haversine_distance
 
 logger = logging.getLogger("aerocast.hydration")
 
@@ -76,6 +77,8 @@ def _load_demo_data() -> None:
         n_poll = bootstrap_recent.bootstrap_pollution(db, anchor_minute)
         n_wx = bootstrap_recent.bootstrap_weather(db, anchor_minute)
         logger.info("demo re-stamp into last 24h: pollution=%d weather=%d", n_poll, n_wx)
+        n_pf, n_wf = _fill_missing_stations(db, anchor_minute)
+        logger.info("demo neighbor-fill: pollution=%d weather=%d", n_pf, n_wf)
     finally:
         db.close()
 
@@ -102,6 +105,112 @@ def _load_demo_data() -> None:
         logger.info("demo auxiliary payloads complete: fire=%d metrics=%d alerts=%d", n_fire, n_metrics, n_alerts)
     finally:
         db.close()
+
+
+def _fill_missing_stations(db, anchor_minute: int) -> tuple[int, int]:
+    """Give every station a last-24h pollution+weather picture.
+
+    The bundled CPCB dataset covers only the five anchor monitoring sites, so a
+    brand-new database would otherwise leave the other stations' cards on
+    "Awaiting live data". This demo proxy copies the *nearest data-bearing
+    station's* latest readings onto the missing stations' hourly slots (the
+    same re-stamp used by :mod:`bootstrap_recent`). It is marked with
+    ``data_source='demo_proxy'`` so it can never be mistaken for a genuine
+    feed reading, and it only ever back-fills a station, never overwrites.
+    """
+    from backend.app.models.db_models import PollutionReading, Station, WeatherReading
+    from backend.scripts import bootstrap_recent
+
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=RECENCY_WINDOW_HOURS)
+    slots = bootstrap_recent._aligned_slots(RECENCY_WINDOW_HOURS, anchor_minute)
+
+    stations = db.query(Station).all()
+    by_id = {s.id: s for s in stations}
+
+    def _anchor_ids(model) -> set[int]:
+        rows = (
+            db.query(model.station_id)
+            .filter(model.timestamp >= cutoff)
+            .distinct()
+            .all()
+        )
+        return {r[0] for r in rows}
+
+    def _existing(model, sid: int) -> set:
+        rows = (
+            db.query(model.timestamp)
+            .filter(model.station_id == sid, model.timestamp >= cutoff)
+            .all()
+        )
+        return {r[0] for r in rows}
+
+    def _nearest(id_pool: set[int], target) -> int | None:
+        best, best_d = None, float("inf")
+        for sid in id_pool:
+            s = by_id[sid]
+            d = haversine_distance(target.latitude, target.longitude, s.latitude, s.longitude)
+            if d < best_d:
+                best, best_d = sid, d
+        return best
+
+    def _latest(model, sid: int):
+        return (
+            db.query(model)
+            .filter(model.station_id == sid)
+            .order_by(model.timestamp.desc())
+            .first()
+        )
+
+    poll_anchors = _anchor_ids(PollutionReading)
+    wx_anchors = _anchor_ids(WeatherReading)
+
+    poll_rows, wx_rows = [], []
+    for s in stations:
+        if s.id not in poll_anchors:
+            src = _nearest(poll_anchors, s)
+            latest = _latest(PollutionReading, src) if src is not None else None
+            if latest is not None:
+                existing = _existing(PollutionReading, s.id)
+                for ts in slots:
+                    if ts in existing:
+                        continue
+                    poll_rows.append(PollutionReading(
+                        station_id=s.id, timestamp=ts,
+                        pm25=latest.pm25, pm10=latest.pm10, o3=latest.o3,
+                        no2=latest.no2, so2=latest.so2, co=latest.co,
+                        aqi=latest.aqi, data_source="demo_proxy",
+                    ))
+                    existing.add(ts)
+
+        if s.id not in wx_anchors:
+            wsrc = _nearest(wx_anchors, s)
+            wlatest = _latest(WeatherReading, wsrc) if wsrc is not None else None
+            if wlatest is not None:
+                wexisting = _existing(WeatherReading, s.id)
+                for ts in slots:
+                    if ts in wexisting:
+                        continue
+                    wx_rows.append(WeatherReading(
+                        station_id=s.id, timestamp=ts,
+                        temperature=wlatest.temperature,
+                        humidity=wlatest.humidity,
+                        pressure_msl=wlatest.pressure_msl,
+                        surface_pressure=wlatest.surface_pressure,
+                        wind_speed=wlatest.wind_speed,
+                        wind_direction=wlatest.wind_direction,
+                        precipitation=wlatest.precipitation,
+                        cloud_cover=wlatest.cloud_cover,
+                        pbl_height=wlatest.pbl_height,
+                    ))
+                    wexisting.add(ts)
+
+    if poll_rows:
+        db.bulk_save_objects(poll_rows)
+    if wx_rows:
+        db.bulk_save_objects(wx_rows)
+    if poll_rows or wx_rows:
+        db.commit()
+    return len(poll_rows), len(wx_rows)
 
 
 async def hydrate_demo_if_empty(stop: asyncio.Event) -> None:

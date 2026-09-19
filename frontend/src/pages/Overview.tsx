@@ -106,15 +106,7 @@ export default function Overview() {
             >
               Export CSV
             </a>
-            <select
-              value={selectedStation}
-              onChange={e => setSelectedStation(e.target.value)}
-              className="select"
-              aria-label="Select station"
-            >
-              {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-              {!stations.length && <option>Anand Vihar</option>}
-            </select>
+            
           </div>
         }
       />
