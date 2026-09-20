@@ -352,6 +352,13 @@ def _insert_batches(db, model, payloads, batch_size: int = 2_000) -> int:
     and never lose a whole batch. A batch-level failure (Neon-free-tier limits,
     timeouts) still skips only that batch, logs it, and lets the rest finish.
 
+    Batches are issued as a *single multi-VALUES statement* rather than an
+    executemany loop: executemany sends one round-trip per row, which costs
+    ~0.06 s/row against a remote Neon database (a 2,000-row batch took 129 s),
+    while one ``INSERT ... VALUES (...),(...)...`` statement over the same rows
+    takes ~0.5 s. This is what keeps demo hydration feasible on a free-tier
+    Postgres.
+
     Returns the number of rows handed to the database (conflicts are skipped
     server-side, so this is a lower bound of distinct data actually stored).
     """
@@ -366,7 +373,7 @@ def _insert_batches(db, model, payloads, batch_size: int = 2_000) -> int:
     for start in range(0, len(payloads), batch_size):
         batch = payloads[start : start + batch_size]
         try:
-            db.execute(upsert, batch)
+            db.execute(upsert.values(batch))
             db.commit()
             inserted += len(batch)
         except Exception as e:  # noqa: BLE001 - keep hydrating despite a bad batch
