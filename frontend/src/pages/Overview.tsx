@@ -197,10 +197,7 @@ export default function Overview() {
         <ExplainabilityPanel data={explanation} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <CouplingPanel data={coupling} />
-        <InversionPanel data={inversion} />
-      </div>
+      <CouplingPanel data={coupling} />
     </div>
   )
 }

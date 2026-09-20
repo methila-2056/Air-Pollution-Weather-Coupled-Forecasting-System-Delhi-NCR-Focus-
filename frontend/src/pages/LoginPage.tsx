@@ -46,24 +46,27 @@ export default function LoginPage() {
     return status === 0 || status === 502 || status === 503 || status === 504
   }
 
+  // Render free back-ends sleep after ~15 min idle and can take 45-90 s to
+  // wake; the first sign-in attempts are answered with gateway 502/503/504
+  // while the container boots. Keep retrying inside that wake window so demo
+  // sign-in works on the first click even right after a cold start, instead of
+  // giving up after one short pause.
+  const WAKE_RETRY_DELAY_MS = 8000
+  const WAKE_MAX_ATTEMPTS = 11
+
   async function signIn(useEmail: string, usePassword: string) {
-    // Render free back-ends sleep after ~15 min idle and can take tens of
-    // seconds to wake; a first attempt is often answered with a gateway 502.
-    // Retry once after a pause so demo sign-in works on the first click even
-    // right after a cold start.
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= WAKE_MAX_ATTEMPTS; attempt++) {
       try {
         await login(useEmail.trim(), usePassword)
         navigate(next && !next.startsWith('/login') ? next : '/dashboard', { replace: true })
         return
       } catch (err) {
-        if (attempt === 1 && isTransient(err)) {
-          setError('Air-quality server is waking up — signing you in shortly…')
-          setSubmitting(true)
-          await new Promise((r) => setTimeout(r, 12000))
-          continue
+        if (attempt === WAKE_MAX_ATTEMPTS || !isTransient(err)) {
+          throw err
         }
-        throw err
+        setError('Air-quality server is waking up — signing you in shortly…')
+        setSubmitting(true)
+        await new Promise((r) => setTimeout(r, WAKE_RETRY_DELAY_MS))
       }
     }
   }
@@ -80,8 +83,12 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await signIn(useEmail, usePassword)
-    } catch {
-      setError('Invalid email or password. Please try again.')
+    } catch (err) {
+      if (isTransient(err)) {
+        setError('Server is still waking up — please try again in a moment.')
+      } else {
+        setError('Invalid email or password. Please try again.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -92,8 +99,12 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await signIn(demo.email, demo.password)
-    } catch {
-      setError('Demo sign-in failed. Please try again.')
+    } catch (err) {
+      if (isTransient(err)) {
+        setError('Server is still waking up — please try again in a moment.')
+      } else {
+        setError('Demo sign-in failed. Please try again.')
+      }
     } finally {
       setSubmitting(false)
     }

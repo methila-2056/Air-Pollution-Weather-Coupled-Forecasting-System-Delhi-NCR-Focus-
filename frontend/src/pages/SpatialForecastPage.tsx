@@ -44,6 +44,9 @@ export default function SpatialForecastPage() {
   const width = 480
   const height = 420
   const { lats_min, lats_max, lons_min, lons_max } = grid?.extent ?? { lats_min: 28.2, lats_max: 28.9, lons_min: 76.6, lons_max: 77.5 }
+  const stepDeg = grid?.step_deg ?? 0.02
+  const gridCols = grid?.step_deg ? Math.max(1, Math.round((lons_max - lons_min) / grid.step_deg)) : 45
+  const gridRows = grid?.step_deg ? Math.max(1, Math.round((lats_max - lats_min) / grid.step_deg)) : 35
   const x = (lon: number) => ((lon - lons_min) / (lons_max - lons_min)) * width
   const y = (lat: number) => height - ((lat - lats_min) / (lats_max - lats_min)) * height
 
@@ -121,8 +124,8 @@ export default function SpatialForecastPage() {
                 key={i}
                 x={x(c.lon)}
                 y={y(c.lat)}
-                width={width / 45}
-                height={height / 35}
+                width={width / gridCols}
+                height={height / gridRows}
                 fill={c.aqi != null ? aqiStyle(c.aqi).hex : aqiCategoryHex(c.aqi_category)}
                 opacity={0.85}
               />
