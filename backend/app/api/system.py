@@ -1,0 +1,131 @@
+from datetime import UTC, datetime
+from pathlib import Path
+
+from fastapi import APIRouter
+
+from ..config import get_settings
+from ..database import engine
+
+router = APIRouter()
+
+
+@router.get("/system")
+def system_status():
+    """Honest engine + integration status for the architecture page.
+
+    Reports which real third-party systems are wired in via environment
+    configuration. Nothing is fabricated: an engine shows as ``available`` only
+    when the corresponding setting was actually provided by the deployment.
+    """
+    settings = get_settings()
+
+    def _dir_exists(raw: str) -> bool:
+        return bool(raw and Path(raw).expanduser().is_dir())
+
+    def _file_exists(raw: str) -> bool:
+        return bool(raw and Path(raw).expanduser().exists())
+
+    # Chemical-transport engines (SIH26082 R6). A HYSPLIT executable only counts
+    # as usable when it physically exists alongside its meteorological inputs.
+    hysplit_bin = ""
+    hysplit_usable = False
+    if settings.hysplit_home and settings.hysplit_met_dir:
+        for candidate in ("hycs_std", "hycs_std.exe", "hycs_std_32766"):
+            p = Path(settings.hysplit_home).expanduser() / "exec" / candidate
+            if p.exists():
+                hysplit_bin = str(p)
+                hysplit_usable = _dir_exists(settings.hysplit_met_dir)
+                break
+        if not hysplit_bin and _file_exists(settings.hysplit_home):
+            hysplit_bin = settings.hysplit_home
+
+    # WRFs chem/CTM surface: only real `wrfout_d01_*.nc` output is ever absorbed.
+    wrf_nc = ""
+    if _dir_exists(settings.wrf_output_dir):
+        matches = sorted(Path(settings.wrf_output_dir).expanduser().glob("wrfout_d01_*.nc"))
+        if matches:
+            wrf_nc = str(matches[-1])
+
+    # Official IMD weather API (SIH26082 R9): key must have been provided.
+    imd_configured = bool(settings.imd_api_key)
+
+    # CPCB / data.gov.in live AQ feed.
+    cpcb_configured = bool(settings.data_gov_api_key)
+
+    # NASA FIRMS fire archive.
+    firms_configured = bool(settings.nasa_firms_map_key)
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+        db_status = "connected"
+    except Exception:
+        db_status = "disconnected"
+
+    engines = {
+        "weather_forecast": {
+            "source": "Open-Meteo",
+            "status": "active",
+            "note": "Ambient plus 900/1000 hPa vertical profile for every NCR station. Used by atmosphere, inversion and feature builder.",
+        },
+        "ctm_hysplit": {
+            "source": "NOAA HYSPLIT",
+            "status": "usable" if hysplit_usable else "surrogate",
+            "note": (
+                f"Binary {hysplit_bin} with GDAS/EDAS met found -> genuine dispersion runs."
+                if hysplit_usable
+                else "No HYSPLIT install supplied; analytic dispersion surrogate is active (feature-flagged in the UI)."
+            ),
+        },
+        "ctm_wrf_chem": {
+            "source": "WRF-Chem",
+            "status": "available" if wrf_nc else "gated",
+            "note": (
+                f"Absorbed real surface from {wrf_nc}."
+                if wrf_nc
+                else "Set WRF_OUTPUT_DIR to a folder of wrfout_d01_*.nc from an external run to absorb the CTM surface here."
+            ),
+        },
+        "imd": {
+            "source": "IMD api.imd.gov.in",
+            "status": "configured" if imd_configured else "not-configured",
+            "note": (
+                "Official IMD forecast key present; real IMD outputs are fetched."
+                if imd_configured
+                else "No IMD key supplied (the API returns 401 without registration/IP whitelisting); Open-Meteo path stays active. Honest reason is surfaced on /api/imd/forecast."
+            ),
+        },
+        "cpcb": {
+            "source": "CPCB / data.gov.in",
+            "status": "configured" if cpcb_configured else "archive",
+            "note": (
+                "Live CPCB AQ feed configured."
+                if cpcb_configured
+                else "Live feed key not supplied; persisted CPCB-format archive drives the dashboard."
+            ),
+        },
+        "firms": {
+            "source": "NASA FIRMS",
+            "status": "configured" if firms_configured else "archive",
+            "note": (
+                "FIRMS map key configured; live VIIRS fire pull."
+                if firms_configured
+                else "No FIRMS key supplied; bundled VIIRS fire archive (58k+ detections) drives plume risk."
+            ),
+        },
+    }
+
+    return {
+        "generated_at": datetime.now(UTC).replace(tzinfo=None),
+        "service": "AeroCast-NCR",
+        "database": db_status,
+        "run_mode": {
+            "environment": settings.environment,
+            "live_refresh_enabled": getattr(settings, "live_refresh_enabled", False),
+            "live_refresh_interval_hours": getattr(settings, "live_refresh_interval_hours", 3),
+            "demo_hydrate_empty_db": getattr(settings, "demo_hydrate_empty_db", False),
+            "explanation": "live_refresh_enabled re-pulls upstream feeds on a schedule; demo_hydrate_empty_db re-stamps the historical archive into the recent window for a fresh database.",
+        },
+        "engines": engines,
+        "schema_version": "1.0.0",
+    }

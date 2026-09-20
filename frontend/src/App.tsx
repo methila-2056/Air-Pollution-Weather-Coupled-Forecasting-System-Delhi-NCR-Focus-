@@ -14,6 +14,7 @@ import ModelPerformancePage from './pages/ModelPerformancePage'
 import SpatialForecastPage from './pages/SpatialForecastPage'
 import DataTools from './pages/DataTools'
 import PollutionEvents from './pages/PollutionEvents'
+import ArchitecturePage from './pages/Architecture'
 import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/performance" element={<ModelPerformancePage />} />
         <Route path="/model-performance" element={<ModelPerformancePage />} />
         <Route path="/spatial" element={<SpatialForecastPage />} />
+        <Route path="/architecture" element={<ArchitecturePage />} />
         <Route path="/data" element={<DataTools />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Dashboard />} />

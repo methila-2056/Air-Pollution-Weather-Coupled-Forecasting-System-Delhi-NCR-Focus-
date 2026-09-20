@@ -34,6 +34,7 @@ const tools = [
   { to: '/explanation', label: 'Forecast Explainability' },
   { to: '/model-performance', label: 'Model Performance' },
   { to: '/spatial', label: 'Spatial AQ Outlook' },
+  { to: '/architecture', label: 'Architecture & System Status' },
   { to: '/data', label: 'Data & System Sources' },
 ]
 

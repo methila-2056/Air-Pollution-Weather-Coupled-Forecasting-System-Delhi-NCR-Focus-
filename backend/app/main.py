@@ -32,6 +32,7 @@ from .api import (
     scenario,
     stations,
     summary,
+    system,
     transport_risk,
     weather,
 )
@@ -189,6 +190,7 @@ app.include_router(events.router, prefix="/api", tags=["Pollution Events"])
 app.include_router(scenario.router, prefix="/api", tags=["Scenario Analysis"])
 app.include_router(grap.router, prefix="/api", tags=["Graded Response Action Plan"])
 app.include_router(imd.router, prefix="/api", tags=["IMD Weather"])
+app.include_router(system.router, prefix="/api", tags=["System"])
 
 @app.get("/", include_in_schema=False)
 def root():

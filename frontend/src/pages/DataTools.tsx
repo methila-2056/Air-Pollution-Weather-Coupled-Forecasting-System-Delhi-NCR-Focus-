@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   getStations,
   getForecastExportUrl,
@@ -125,6 +126,9 @@ export default function DataTools() {
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Data Tools' }]}
         actions={
           <div className="flex flex-wrap items-center gap-3">
+            <Link to="/architecture" className="text-xs font-semibold text-inst-700 hover:underline">
+              Architecture & engine status →
+            </Link>
             <select value={selStation} onChange={e => setSelStation(e.target.value)} className="select" aria-label="Select station">
               {stations.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>

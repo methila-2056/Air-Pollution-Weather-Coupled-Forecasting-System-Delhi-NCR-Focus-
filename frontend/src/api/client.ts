@@ -1,6 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { latestForecastRun } from '../lib/forecast'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials, PollutionEventsCurrent, DataQualityResponse } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials, PollutionEventsCurrent, DataQualityResponse, SystemResponse } from '../types'
 
 const TOKEN_KEY = 'aerocast_token'
 const USER_KEY = 'aerocast_user'
@@ -115,6 +115,7 @@ export const getSummary = () => api.get<SummaryResponse>('/summary')
 export const getEvents = (station?: string, hours = 48) =>
   api.get<PollutionEventsCurrent>('/events/current', { params: { station_name: station, hours } })
 export const getDataQuality = () => api.get<DataQualityResponse>('/data-quality')
+export const getSystemStatus = () => api.get<SystemResponse>('/system')
 export const getGrapCurrent = () => api.get<GrapAssessment>('/grap/current')
 export const getGrapStages = () => api.get<GrapStagesResponse>('/grap/stages')
 

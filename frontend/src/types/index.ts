@@ -408,6 +408,29 @@ export interface SummaryResponse {
   data_mode_note?: string
 }
 
+export interface SystemEngineStatus {
+  source: string
+  status: string
+  note: string
+}
+
+export interface SystemRunMode {
+  environment: string
+  live_refresh_enabled: boolean
+  live_refresh_interval_hours: number
+  demo_hydrate_empty_db: boolean
+  explanation: string
+}
+
+export interface SystemResponse {
+  generated_at: string
+  service: string
+  database: string
+  run_mode: SystemRunMode
+  engines: Record<string, SystemEngineStatus>
+  schema_version: string
+}
+
 export interface ModelPerformanceSplitRange {
   start: string | null
   end: string | null
