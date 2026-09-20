@@ -19,23 +19,30 @@ router = APIRouter()
 @router.get("/pollution/latest", response_model=list[PollutionReadingResponse])
 def pollution_latest(db: Session = Depends(get_db)):
     stations = {s.id: s for s in db.query(Station).all()}
+    from sqlalchemy import func
+    from sqlalchemy.orm import aliased
+
+    latest_ts = (
+        db.query(
+            PollutionReading.station_id,
+            func.max(PollutionReading.timestamp).label("max_ts"),
+        )
+        .group_by(PollutionReading.station_id)
+        .subquery()
+    )
+    pr = aliased(PollutionReading)
     readings = (
-        db.query(PollutionReading)
-        .order_by(PollutionReading.station_id, PollutionReading.timestamp.desc())
+        db.query(pr)
+        .join(latest_ts, (pr.station_id == latest_ts.c.station_id) & (pr.timestamp == latest_ts.c.max_ts))
+        .order_by(pr.station_id)
         .all()
     )
-    seen: set[int] = set()
-    latest = []
-    for reading in readings:
-        if reading.station_id in seen:
-            continue
-        seen.add(reading.station_id)
-        station = stations.get(reading.station_id)
-        latest.append(PollutionReadingResponse(
+    return [
+        PollutionReadingResponse(
             station_id=reading.station_id,
-            station=station.name if station else str(reading.station_id),
-            city=station.city if station else None,
-            state=station.state if station else None,
+            station=stations[reading.station_id].name if reading.station_id in stations else str(reading.station_id),
+            city=stations[reading.station_id].city if reading.station_id in stations else None,
+            state=stations[reading.station_id].state if reading.station_id in stations else None,
             timestamp=reading.timestamp,
             pm25=reading.pm25,
             pm10=reading.pm10,
@@ -45,8 +52,9 @@ def pollution_latest(db: Session = Depends(get_db)):
             co=reading.co,
             aqi=reading.aqi,
             data_source=reading.data_source,
-        ))
-    return latest
+        )
+        for reading in readings
+    ]
 
 
 @router.get("/pollution/stations", response_model=list[StationResponse])

@@ -20,11 +20,24 @@ export default function LoginPage() {
   const [demo, setDemo] = useState<DemoCredentials | null>(null)
 
   useEffect(() => {
-    getDemoCredentials()
-      .then((res) => {
-        setDemo(res.data)
-      })
-      .catch(() => setDemo(null))
+    // Retry the demo-credentials fetch once after a pause: the Render free
+    // backend often answers the very first request after a cold start with a
+    // gateway 502, which would otherwise hide the "Continue with Demo Account"
+    // button until a manual refresh.
+    const load = (attempt: number) => {
+      getDemoCredentials()
+        .then((res) => {
+          setDemo(res.data)
+        })
+        .catch(() => {
+          if (attempt < 2) {
+            setTimeout(() => load(attempt + 1), 8000)
+          } else {
+            setDemo(null)
+          }
+        })
+    }
+    load(1)
   }, [])
 
   if (user && token) {

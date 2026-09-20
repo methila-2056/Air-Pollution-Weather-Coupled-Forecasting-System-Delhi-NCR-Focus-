@@ -26,9 +26,12 @@ export const clearSession = () => {
   localStorage.removeItem(USER_KEY)
 }
 
+// Render free-tier instances sleep after ~15 min idle and take tens of
+// seconds to wake; a page load right after a cold start must not drop every
+// panel because of the client timeout.
 const api = axios.create({
   baseURL: '/api',
-  timeout: 15000,
+  timeout: 60000,
 })
 
 api.interceptors.request.use((config) => {
