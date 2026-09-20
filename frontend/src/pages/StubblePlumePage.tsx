@@ -11,6 +11,16 @@ import KpiCard from '../components/KpiCard'
 import { fmt } from '../lib/aqi'
 import type { PlumeRisk, FireActivity, FireHotspot } from '../types'
 
+function fetchAll() {
+  return Promise.allSettled([
+    getPlumeRisk().then((r) => r.data).catch(() => null as PlumeRisk | null),
+    getFireActivity().then((r) => r.data).catch(() => null as FireActivity | null),
+    getFireHotspots()
+      .then((r) => r.data.hotspots)
+      .catch(() => [] as FireHotspot[]),
+  ])
+}
+
 export default function StubblePlumePage() {
   const [risk, setRisk] = useState<PlumeRisk | null>(null)
   const [fire, setFire] = useState<FireActivity | null>(null)
@@ -18,18 +28,27 @@ export default function StubblePlumePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(() => {
+  const load = useCallback((attempt = 1) => {
     setLoading(true)
     setError(null)
-    Promise.allSettled([
-      getPlumeRisk().then((r) => setRisk(r.data)).catch(() => setRisk(null)),
-      getFireActivity().then((r) => setFire(r.data)).catch(() => setFire(null)),
-      getFireHotspots()
-        .then((r) => setHotspots(r.data.hotspots))
-        .catch(() => setHotspots([])),
-    ]).then((results) => {
-      if (results.every((r) => r.status === 'rejected')) setError('Failed to load fire data')
-    }).finally(() => setLoading(false))
+    fetchAll().then((results) => {
+      const ok = results.filter(
+        (r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled',
+      ).length
+      setRisk((results[0] as any)?.value ?? null)
+      setFire((results[1] as any)?.value ?? null)
+      setHotspots((results[2] as any)?.value ?? [])
+
+      // A waking Render free backend answers the first burst of requests with
+      // gateway errors; retry once after a pause so the page never stays on a
+      // spinner (or zeros) just because it raced the cold start.
+      if (ok === 0 && attempt < 2) {
+        setTimeout(() => load(attempt + 1), 10000)
+        return
+      }
+      if (ok === 0) setError('Failed to load fire data')
+      setLoading(false)
+    })
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -43,9 +62,9 @@ export default function StubblePlumePage() {
         lastUpdated={fire?.date ?? undefined}
       />
 
-      {error && <ErrorState title="Fire data unavailable" message={error} onRetry={load} />}
+      {error && <ErrorState title="Fire data unavailable" message={error} onRetry={() => load()} />}
 
-      {loading && !fire ? (
+      {loading ? (
         <LoadingState label="Loading fire intelligence" rows={2} />
       ) : (
         <>
