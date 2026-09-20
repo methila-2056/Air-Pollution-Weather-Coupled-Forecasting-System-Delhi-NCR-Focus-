@@ -92,6 +92,8 @@ class SummaryResponse(BaseModel):
     open_alerts: int
     models_trained: int
     forecast_coverage: dict
+    data_mode: str = "static_archive"
+    data_mode_note: str = ""
 
 class CurrentAQI(BaseModel):
     station: str

@@ -44,10 +44,11 @@ export default function SystemStatus({ className = '' }: Props) {
         <span className={`relative inline-flex h-2 w-2 rounded-full ${dot}`} />
       </span>
       <span className="font-semibold uppercase tracking-wide">
-        {offline ? 'API offline' : stale ? 'Data stale' : 'Live'}
+        {offline ? 'API offline' : stale ? 'Data stale' : summary?.data_mode === 'live' ? 'Live' : summary?.data_mode === 'demo_seeded' ? 'Demo-seeded' : 'Live'}
       </span>
       {!offline && summary && (
-        <span className="text-inst-100">
+        <span className="text-inst-100" title={summary.data_mode_note ?? undefined}>
+          {summary.data_mode === 'demo_seeded' ? 'archive → now' : ''}
           NCR AQI {fmt(summary.ncr_avg_aqi, 0)} · {summary.stations_with_readings}/{summary.stations} stations · {tsFmt(summary.generated_at)}
         </span>
       )}

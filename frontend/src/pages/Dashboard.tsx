@@ -18,6 +18,7 @@ import {
   getTransportRisk,
   getModelPerformance,
   getPollutionLatest,
+  getPollutionHistory,
   getGrapCurrent,
   getSummary,
   getAlerts,
@@ -40,7 +41,7 @@ import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import { aqiStyle, fmt, readableOnHex, tsFmt } from '../lib/aqi'
 import { CHART } from '../lib/theme'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, Legend,
+  ComposedChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, Legend,
 } from 'recharts'
 import type {
   Station, CurrentAQI, ForecastPoint, Pm25ForecastResponse, Pm25ForecastPoint,
@@ -95,9 +96,12 @@ export default function Dashboard() {
   const [pollution, setPollution] = useState<PollutionReading[]>([])
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
   const [dataQuality, setDataQuality] = useState<DataQualityResponse | null>(null)
+  const [history, setHistory] = useState<PollutionReading[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
+
+  const stationId = stations.find((s) => s.name === selected)?.id ?? null
 
   useEffect(() => {
     getStations()
@@ -122,11 +126,14 @@ export default function Dashboard() {
       getTransportRisk().then((r) => setTransport(r.data)).catch(() => setTransport(null)),
       getModelPerformance().then((r) => setModelPerf(r.data)).catch(() => setModelPerf(null)),
       getPollutionLatest().then((r) => setPollution(r.data)).catch(() => setPollution([])),
+      stationId != null
+        ? getPollutionHistory(stationId, 168).then((r) => setHistory(r.data)).catch(() => setHistory([]))
+        : Promise.resolve(),
       getGrapCurrent().then((r) => setGrap(r.data)).catch(() => setGrap(null)),
       getAlerts().then((r) => setAlerts(r.data)).catch(() => setAlerts([])),
       getDataQuality().then((r) => setDataQuality(r.data)).catch(() => setDataQuality(null)),
     ]).then()
-  }, [selected])
+  }, [selected, stationId])
 
   useEffect(() => {
     setLoading(true)
@@ -232,9 +239,23 @@ export default function Dashboard() {
             <section className="card">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-base font-bold text-slate-900">Data sources & freshness</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                {(summary?.data_mode === 'live' || summary?.data_mode === 'demo_seeded') && (
+                  <span
+                    title={summary.data_mode_note}
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      summary.data_mode === 'live'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        : 'border-amber-300 bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {summary.data_mode === 'live' ? 'Live data' : 'Demo-seeded — not real-time'}
+                  </span>
+                )}
                 <Link to="/data" className="text-xs font-semibold text-inst-700 hover:underline">
                   Data & system sources →
                 </Link>
+              </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -383,6 +404,9 @@ export default function Dashboard() {
 
           {/* ---------- Why this forecast ---------- */}
           <ForecastReasonPanel station={selected} />
+
+          {/* ---------- Observed vs forecast verification ---------- */}
+          <VerificationChart history={history} pm25={pm25} />
 
           {/* ---------- Regional transport ---------- */}
           <TransportChain transport={transport} fire={fireActivity} />
@@ -544,5 +568,106 @@ function ForecastPreview({ point, observed, uncertaintyMethod }: { point: Pm25Fo
         </p>
       )}
     </div>
+  )
+}
+
+interface VerifyRow {
+  h: number
+  obs: number | null
+  fct: number | null
+  lo: number | null
+  hi: number | null
+}
+
+function buildVerifyRows(history: PollutionReading[], pm25: Pm25ForecastResponse | null): VerifyRow[] {
+  if (!pm25) return []
+  const anchor = new Date(pm25.release_time).getTime()
+  if (Number.isNaN(anchor)) return []
+  const perHour = new Map<number, number>()
+  for (const r of history) {
+    if (r.pm25 === null || r.pm25 === undefined) continue
+    const t = new Date(r.timestamp).getTime()
+    if (Number.isNaN(t)) continue
+    const h = Math.round((t - anchor) / 3_600_000)
+    if (h < -168 || h > 0) continue
+    if (!perHour.has(h)) perHour.set(h, r.pm25)
+  }
+  const rows: VerifyRow[] = []
+  for (let h = -168; h <= 0; h++) {
+    rows.push({ h, obs: perHour.get(h) ?? null, fct: null, lo: null, hi: null })
+  }
+  for (const p of pm25.forecasts) {
+    rows.push({ h: p.forecast_horizon, obs: null, fct: p.predicted_pm25, lo: p.pm25_lower_bound, hi: p.pm25_upper_bound })
+  }
+  return rows
+}
+
+function VerificationChart({ history, pm25 }: { history: PollutionReading[]; pm25: Pm25ForecastResponse | null }) {
+  const rows = buildVerifyRows(history, pm25)
+  const observedCount = rows.filter((r) => r.obs != null).length
+  const hasForecast = rows.some((r) => r.fct != null)
+  const hasBand = rows.some((r) => r.lo != null && r.hi != null && r.hi > r.lo)
+  if (!hasForecast || observedCount === 0) {
+    return (
+      <section className="card">
+        <h2 className="mb-3 text-base font-bold text-slate-900">Verification — observed vs forecast (last 7 days)</h2>
+        <p className="text-sm text-slate-500">
+          Observed-vs-forecast series becomes available once pollution history and a PM2.5 forecast are loaded for the selected station.
+        </p>
+      </section>
+    )
+  }
+  const tooltip = ChartTooltip()
+  return (
+    <section className="card">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-bold text-slate-900">Verification — observed vs forecast (last 7 days)</h2>
+        <span className="text-xs text-slate-500">Amber = CPCB observed · brand = model forecast · shaded band = conformal interval</span>
+      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <ComposedChart data={rows} margin={{ left: -20, right: 8 }}>
+          <defs>
+            <linearGradient id="obsFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={CHART.naaqsPm25} stopOpacity={0.22} />
+              <stop offset="95%" stopColor={CHART.naaqsPm25} stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="vfyBand" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={CHART.brand} stopOpacity={0.18} />
+              <stop offset="95%" stopColor={CHART.brand} stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+          <XAxis
+            dataKey="h"
+            type="number"
+            domain={[-168, 72]}
+            ticks={[-168, -120, -72, -48, -24, 0, 24, 48, 72]}
+            tickFormatter={(h: number) => (h === 0 ? 'now' : h < 0 ? `${-h}h` : `+${h}h`)}
+            stroke={CHART.axis}
+            fontSize={11}
+          />
+          <YAxis stroke={CHART.axis} fontSize={11} />
+          <Tooltip
+            {...tooltip}
+            labelFormatter={(h: number) => (h === 0 ? 'now' : h < 0 ? `${-h}h ago` : `+${h}h ahead`)}
+          />
+          <ReferenceLine y={60} stroke={CHART.naaqsPm25} strokeDasharray="4 4" label={{ value: 'NAAQS 60', position: 'insideTopRight', fill: CHART.naaqsPm25, fontSize: 10 }} />
+          <ReferenceLine x={0} stroke={CHART.axis} strokeDasharray="3 3" label={{ value: 'now', position: 'insideTopLeft', fill: CHART.axis, fontSize: 10 }} />
+          {hasBand && (
+            <>
+              <Area type="monotone" dataKey="hi" stroke="none" fill="url(#vfyBand)" name="Upper bound" />
+              <Area type="monotone" dataKey="lo" stroke="none" fill="transparent" name="Lower bound" />
+            </>
+          )}
+          <Area type="monotone" dataKey="obs" stroke={CHART.naaqsPm25} strokeWidth={2} fill="url(#obsFill)" name="Observed PM2.5 (μg/m³)" />
+          <Line type="monotone" dataKey="fct" stroke={CHART.brand} strokeWidth={2} dot={false} name="Forecast PM2.5 (μg/m³)" />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <p className="mt-1 text-[11px] leading-snug text-slate-500">
+        Observed from the persisted CPCB-format archive for the selected station (hourly), forecast = ML prediction
+        {pm25 ? ` (${pm25.model} · ${pm25.uncertainty_method})` : ''} against the forecast timestamp at “now”.
+      </p>
+    </section>
   )
 }

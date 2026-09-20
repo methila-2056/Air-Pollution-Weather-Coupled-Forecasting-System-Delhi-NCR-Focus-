@@ -404,6 +404,8 @@ export interface SummaryResponse {
     stations_with_forecast: number
     latest_forecast_at: string | null
   }
+  data_mode?: string
+  data_mode_note?: string
 }
 
 export interface ModelPerformanceSplitRange {

@@ -7,6 +7,9 @@ from ..database import get_db
 from ..models.db_models import Alert, FireReading, Forecast, ModelMetrics, PollutionReading, Station
 from ..schemas.schemas import StationAQISummary, SummaryResponse
 from ..services.aqi_calculator import get_aqi_category, get_dominant_pollutant
+from ..config import get_settings
+
+settings = get_settings()
 
 router = APIRouter()
 
@@ -67,6 +70,23 @@ def get_summary(db: Session = Depends(get_db)):
     )
     latest_forecast = db.query(Forecast).order_by(Forecast.forecast_timestamp.desc()).first()
 
+    if getattr(settings, "live_refresh_enabled", False):
+        data_mode = "live"
+        data_mode_note = (
+            "Live-refresh scheduler is enabled; observations are re-pulled from "
+            "the upstream feed on a schedule."
+        )
+    elif getattr(settings, "demo_hydrate_empty_db", False):
+        data_mode = "demo_seeded"
+        data_mode_note = (
+            "Demo-seeded mode (DEMO_HYDRATE_EMPTY_DB=true): stored historical "
+            "CPCB/fire/weather records are re-stamped into the recent window so "
+            "a fresh database renders a live-looking demo. Not real-time data."
+        )
+    else:
+        data_mode = "static_archive"
+        data_mode_note = "Historical archive only; no live refresh or demo re-stamping."
+
     return SummaryResponse(
         generated_at=datetime.now(UTC).replace(tzinfo=None),
         stations=len(stations),
@@ -81,4 +101,6 @@ def get_summary(db: Session = Depends(get_db)):
             "stations_with_forecast": stations_with_forecast,
             "latest_forecast_at": latest_forecast.forecast_timestamp if latest_forecast else None,
         },
+        data_mode=data_mode,
+        data_mode_note=data_mode_note,
     )
