@@ -1,0 +1,20 @@
+name: keepalive
+
+# Render free-tier instances scale to zero after ~15 min idle and can take
+# 45-90 s to wake, which looks like a broken demo. This scheduled workflow
+# pings the Render health endpoint every 5 min so the instance stays warm
+# whenever the repo is on GitHub. Run manually with workflow_dispatch too.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping-render:
+    name: Wake Render free-tier backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          curl -sS -o /dev/null -w "health=%{http_code}\n" \
+            https://air-pollution-weather-coupled.onrender.com/health || true

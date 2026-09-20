@@ -3,6 +3,18 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.4] - 2026-09
+
+### Fixed (cold-start resilience for live demo)
+- **Every panel now self-heals through a Render cold start.** The axios client
+  retries idempotent `GET`s up to 4 times (8 s apart) on transient gateway
+  502/503/504 or network-timeout failures, so the first page loaded right after
+  the free-tier backend wakes no longer strands panels on "API offline",
+  "Loading…", "No forecast stored" or "No active hotspots".
+- **Keepalive workflow** (`.github/workflows/keepalive.yml`) pings the Render
+  `/health` endpoint every 5 min (and on demand via `workflow_dispatch`), so
+  the backend never idles to sleep mid-demo.
+
 ## [1.8.3] - 2026-09
 
 ### Fixed (cold-start session + deploy wiring)

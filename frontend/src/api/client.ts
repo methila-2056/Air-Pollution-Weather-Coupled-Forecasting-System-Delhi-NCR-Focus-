@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { latestForecastRun } from '../lib/forecast'
 import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials } from '../types'
 
@@ -42,6 +42,31 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Render free-tier instances scale to zero after ~15 min idle; the first
+// requests after a cold start are answered with gateway 502/503/504 or a
+// network timeout while the container boots (often 45-90 s). Panels fire a
+// single GET on mount, so without retrying every page would surface an
+// error/spinner whenever a demo restarts. Idempotent GETs are retried a few
+// times on those transient failures until the backend is awake.
+const MAX_TRANSIENT_RETRIES = 4
+const TRANSIENT_RETRY_DELAY_MS = 8000
+
+api.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    const config = error?.config as (InternalAxiosRequestConfig & { retryCount?: number }) | undefined
+    if (!config || config.method !== 'get') return Promise.reject(error)
+    const status = error?.response?.status
+    const transient = !error.response || status === 0 || status === 502 || status === 503 || status === 504
+    if (!transient) return Promise.reject(error)
+    const retryCount = config.retryCount ?? 0
+    if (retryCount >= MAX_TRANSIENT_RETRIES) return Promise.reject(error)
+    config.retryCount = retryCount + 1
+    await new Promise((r) => setTimeout(r, TRANSIENT_RETRY_DELAY_MS))
+    return api.request(config)
+  },
+)
 
 export const login = (email: string, password: string) =>
   api.post<LoginResponse>('/auth/login', { email, password })
