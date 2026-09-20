@@ -3,6 +3,20 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.3] - 2026-09
+
+### Fixed (cold-start session + deploy wiring)
+- **Boot-time `getMe()` no longer logs the analyst out while the Render
+  free-tier backend is still waking up from idle.** A transient 502/503/504 or
+  network timeout now keeps the stored session (user + token) so panels can
+  retry instead of kicking the analyst back to sign-in mid-demo — matching the
+  login page's existing cold-start retry from 1.8.1.
+- **`render.yaml` `FRONTEND_URL` corrected** to the live Vercel deployment
+  (`air-pollution-weather-coupled-forecasting-system-methila.vercel.app`) so
+  `GET /` on the Render backend 307-redirects to the real frontend.
+- **`frontend/.gitignore` added** so Vercel build artifacts (`.vercel`,
+  `.env*`) are never committed.
+
 ## [1.8.2] - 2026-09
 
 ### Fixed (deployed frontend UX)

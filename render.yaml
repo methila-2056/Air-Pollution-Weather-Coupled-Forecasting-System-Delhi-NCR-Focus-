@@ -36,7 +36,7 @@ services:
       - key: CORS_ORIGINS
         sync: false
       - key: FRONTEND_URL
-        value: https://aerocast-ncr.vercel.app
+        value: https://air-pollution-weather-coupled-forecasting-system-methila.vercel.app
       - key: ENVIRONMENT
         value: production
       - key: LOG_LEVEL

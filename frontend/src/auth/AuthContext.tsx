@@ -39,8 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(token)
         sessionStorage.setItem('aerocast_user', JSON.stringify(res.data))
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return
+        // Render free-tier back-ends sleep after idle; a gateway 502/503 while
+        // waking means the token is still valid — keep the stored session so
+        // panels can retry instead of logging the analyst out mid-demo.
+        const status = err?.response?.status
+        const transient = !status || status === 0 || status === 502 || status === 503 || status === 504
+        if (transient) return
         clearSession()
         setUser(null)
         setToken(null)
