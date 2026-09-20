@@ -10,20 +10,25 @@ interface Props {
 
 export default function SystemStatus({ className = '' }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
-  const [offline, setOffline] = useState(false)
+  // Render free-tier instances take 45-90 s to wake; the client already retries
+  // transient 5xx internally for ~40 s per load. Declaring the API offline on a
+  // single failed load would flash a false red badge right after a cold start,
+  // so we only flip to "API offline" after >=2 back-to-back exhausted loads.
+  const [consecutiveFails, setConsecutiveFails] = useState(0)
 
   const load = () => {
     getSummary()
       .then((r) => {
         setSummary(r.data)
-        setOffline(false)
+        setConsecutiveFails(0)
       })
-      .catch(() => setOffline(true))
+      .catch(() => setConsecutiveFails((n) => n + 1))
   }
 
   useEffect(() => { load() }, [])
   useIntervalRefresh(load, 60_000, true)
 
+  const offline = consecutiveFails >= 2
   let stale = false
   if (!offline && summary?.generated_at) {
     const t = new Date(summary.generated_at).getTime()

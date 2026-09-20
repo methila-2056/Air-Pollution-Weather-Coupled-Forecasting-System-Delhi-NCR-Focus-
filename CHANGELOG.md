@@ -3,6 +3,23 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.5] - 2026-09
+
+### Fixed (demo panels on warm databases + honest status badge)
+- **Demo panels no longer stay empty on a database that already has live
+  observations.** The demo hydration previously skipped *everything* when the
+  last 24 h already contained pollution+weather, so a warm DB never gained the
+  seeded alerts, model metrics, fire archive or persisted forecasts — stations
+  showed "No forecast stored", "Forecast engine not available" and missing
+  metrics. Hydration now runs an idempotent auxiliary pass on **every** boot
+  (`_ensure_auxiliary_demo_data`) that seeds metrics/alerts/24 h fires and
+  persists vanilla 72 h forecast rows for every station missing them.
+- **Status badge stops crying "API offline" through a cold start.** A single
+  failed `GET /summary` (the first request on a waking Render instance) no
+  longer flips the header pill to red; it only reports offline after two
+  consecutive exhausted loads (~>2 min), by which time the instance is truly
+  unresponsive.
+
 ## [1.8.4] - 2026-09
 
 ### Fixed (cold-start resilience for live demo)

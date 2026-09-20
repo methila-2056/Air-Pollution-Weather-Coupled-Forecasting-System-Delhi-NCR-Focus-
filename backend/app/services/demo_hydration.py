@@ -7,6 +7,11 @@ archive + model metrics + seed alerts and re-stamps the newest observations
 into the last 24 hourly slots. This renders the dashboard as a live-looking
 demo on a brand-new database and self-heals stale CPCB feeds.
 
+On every boot (observations fresh or not) it then idempotently ensures the
+demo auxiliary payloads — model metrics, seed alerts, the recent-fire archive
+and persisted per-station 72h forecasts — so a database with live observations
+still renders every demo panel (see :func:`_ensure_auxiliary_demo_data`).
+
 Deliberately opt-in: the live-refresh ingestion path is never touched, and the
 default (flag unset) keeps the app behaviour identical to before.
 """
@@ -49,8 +54,6 @@ def _load_demo_data() -> None:
     from backend.scripts import load_data as demo
 
     csv_path = Path(demo.DEFAULT_CSV)
-    fire_csv = Path(demo.MODELS_DIR).parent / "data" / "fire" / "firms_fires.csv"
-    metrics_path = demo.MODELS_DIR / "metrics.json"
 
     db = SessionLocal()
     try:
@@ -81,30 +84,6 @@ def _load_demo_data() -> None:
         logger.info("demo re-stamp into last 24h: pollution=%d weather=%d", n_poll, n_wx)
         n_pf, n_wf = _fill_missing_stations(db, anchor_minute)
         logger.info("demo neighbor-fill: pollution=%d weather=%d", n_pf, n_wf)
-    finally:
-        db.close()
-
-    # Optional auxiliary payloads; each one is tolerated on failure so a
-    # transient FIRMS/metrics problem can never leave the app without its core
-    # demo picture.
-    db = SessionLocal()
-    try:
-        try:
-            n_fire = demo.load_fire_data(db, fire_csv, chunksize=50_000)
-        except Exception:
-            n_fire = -1
-            logger.exception("demo fire load failed (continuing)")
-        try:
-            n_metrics = demo.load_metrics(db, metrics_path)
-        except Exception:
-            n_metrics = -1
-            logger.exception("demo metrics load failed (continuing)")
-        try:
-            n_alerts = demo.load_alerts_seed(db)
-        except Exception:
-            n_alerts = -1
-            logger.exception("demo alerts load failed (continuing)")
-        logger.info("demo auxiliary payloads complete: fire=%d metrics=%d alerts=%d", n_fire, n_metrics, n_alerts)
     finally:
         db.close()
 
@@ -215,6 +194,68 @@ def _fill_missing_stations(db, anchor_minute: int) -> tuple[int, int]:
     return len(poll_rows), len(wx_rows)
 
 
+def _ensure_auxiliary_demo_data(db) -> dict:
+    """Idempotently ensure metrics, seed alerts, fires and persisted forecasts.
+
+    Runs on *every* boot while ``DEMO_HYDRATE_EMPTY_DB`` is on, independent of
+    how fresh the observations are. A database that hydrated once (or is fed by
+    the live-refresh ingest) has recent readings but none of the demo artifacts,
+    so panels stay on "no metrics / no persisted forecast / seed alerts are
+    missing". Every loader here is idempotent (keyed upserts/skip-if-present),
+    and each one is tolerated on failure so a transient model/file problem can
+    never break the boot.
+    """
+    from backend.app.models.db_models import FireReading, Forecast, Station
+    from backend.app.services.forecast_service import generate_forecast
+    from backend.scripts import load_data as demo
+
+    fire_csv = Path(demo.MODELS_DIR).parent / "data" / "fire" / "firms_fires.csv"
+    metrics_path = demo.MODELS_DIR / "metrics.json"
+
+    result = {}
+
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=RECENCY_WINDOW_HOURS)
+    recent_fire = (
+        db.query(FireReading.id)
+        .filter(FireReading.acq_date >= cutoff)
+        .first()
+        is not None
+    )
+    if recent_fire:
+        result["fire"] = 0
+    else:
+        try:
+            result["fire"] = demo.load_fire_data(db, fire_csv, chunksize=50_000)
+        except Exception:
+            result["fire"] = -1
+            logger.exception("demo fire load failed (continuing)")
+
+    try:
+        result["metrics"] = demo.load_metrics(db, metrics_path)
+    except Exception:
+        result["metrics"] = -1
+        logger.exception("demo metrics load failed (continuing)")
+    try:
+        result["alerts"] = demo.load_alerts_seed(db)
+    except Exception:
+        result["alerts"] = -1
+        logger.exception("demo alerts seed failed (continuing)")
+
+    stations = db.query(Station).order_by(Station.id).all()
+    have = {r[0] for r in db.query(Forecast.station_id).distinct().all()}
+    result["forecasts"] = 0
+    for s in stations:
+        if s.id in have:
+            continue
+        try:
+            generate_forecast(db, s.id)
+            have.add(s.id)
+            result["forecasts"] += 1
+        except Exception:
+            logger.exception("demo forecast generation failed for station %s (continuing)", s.name)
+    return result
+
+
 async def hydrate_demo_if_empty(stop: asyncio.Event) -> None:
     """Load demo data once when observations are missing or stale (background).
 
@@ -235,12 +276,22 @@ async def hydrate_demo_if_empty(stop: asyncio.Event) -> None:
         finally:
             db.close()
 
-        if not stale:
-            logger.info("demo hydration skipped: recent pollution+weather already present")
-            return
+        if stale:
+            logger.info("demo hydration: recent observations absent, loading bundled dataset ...")
+            await asyncio.to_thread(_load_demo_data)
+            logger.info("demo hydration: observations loaded")
 
-        logger.info("demo hydration: recent observations absent, loading bundled dataset ...")
-        await asyncio.to_thread(_load_demo_data)
+        # Always (re-)ensure the auxiliary demo payloads and persisted
+        # per-station 72h forecasts — idempotent, so a database with live
+        # observations still gains the metrics/alerts/fire archive/forecasts
+        # that the demo panels render.
+        db = SessionLocal()
+        try:
+            n = await asyncio.to_thread(_ensure_auxiliary_demo_data, db)
+            logger.info("demo aux ensure complete: %s", n)
+        finally:
+            db.close()
+
         logger.info("demo hydration complete")
     except asyncio.CancelledError:
         raise
