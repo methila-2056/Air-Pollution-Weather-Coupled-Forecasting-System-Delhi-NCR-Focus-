@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # makes a brand-new or stale database render a live-looking demo with no
     # manual steps (see backend/app/services/demo_hydration.py).
     demo_hydrate_empty_db: bool = False
+    # Public URL of the deployed frontend (Vercel). When set, `GET /` on the
+    # API redirects the browser there instead of answering a bare 404.
+    frontend_url: str = ""
     # data.gov.in / CPCB "Real time Air Quality Index from various locations"
     data_gov_api_key: str = ""
     data_gov_api_url: str = "https://api.data.gov.in"

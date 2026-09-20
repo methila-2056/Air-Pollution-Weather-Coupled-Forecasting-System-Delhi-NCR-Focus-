@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, text
 
 from .api import (
@@ -188,6 +189,26 @@ app.include_router(events.router, prefix="/api", tags=["Pollution Events"])
 app.include_router(scenario.router, prefix="/api", tags=["Scenario Analysis"])
 app.include_router(grap.router, prefix="/api", tags=["Graded Response Action Plan"])
 app.include_router(imd.router, prefix="/api", tags=["IMD Weather"])
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Browser landing for the backend URL.
+
+    In production the public entry point is the Vercel frontend; a bare visit to
+    the Render backend root used to answer ``{"detail": "Not Found"}``. When
+    ``FRONTEND_URL`` is set we redirect there instead, otherwise (local dev) we
+    point at the API docs.
+    """
+    target = settings.frontend_url.strip().rstrip("/")
+    if target:
+        return RedirectResponse(url=f"{target}/", status_code=307)
+    return {
+        "service": "AeroCast-NCR API",
+        "message": "The web dashboard is served by the frontend app.",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
 
 @app.get("/api/health")
 def health():

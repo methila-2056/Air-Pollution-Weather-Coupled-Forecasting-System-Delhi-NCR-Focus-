@@ -3,6 +3,16 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.2] - 2026-09
+
+### Fixed (deployed frontend UX)
+- **`GET /` on the deployed backend no longer answers `{"detail": "Not Found"}`**
+  �?" a browser hit on `https://air-pollution-weather-coupled.onrender.com` now
+  307-redirects to the Vercel frontend (`FRONTEND_URL`, already set in
+  `render.yaml` and `.env`). Local dev with no `FRONTEND_URL` gets a small
+  landing JSON pointing at `/docs` and `/health` instead of a bare 404.
+- New `backend/tests/unit/test_root.py` (2 tests) locking both behaviours.
+
 ## [1.8.1] - 2026-09
 
 ### Fixed (deployed demo stability)
