@@ -5,6 +5,13 @@ import { useAuth } from '../auth/AuthContext'
 import { getDemoCredentials } from '../api/client'
 import type { DemoCredentials } from '../types'
 
+const STATIC_DEMO: DemoCredentials = {
+  email: 'analyst@aerocast.in',
+  password: 'AeroCast@2026',
+  name: 'Demo Analyst',
+  role: 'Analyst',
+}
+
 export default function LoginPage() {
   const { user, token, login } = useAuth()
   const navigate = useNavigate()
@@ -17,27 +24,16 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [demo, setDemo] = useState<DemoCredentials | null>(null)
+  const [demo, setDemo] = useState<DemoCredentials>(STATIC_DEMO)
 
   useEffect(() => {
-    // Retry the demo-credentials fetch once after a pause: the Render free
-    // backend often answers the very first request after a cold start with a
-    // gateway 502, which would otherwise hide the "Continue with Demo Account"
-    // button until a manual refresh.
-    const load = (attempt: number) => {
-      getDemoCredentials()
-        .then((res) => {
-          setDemo(res.data)
-        })
-        .catch(() => {
-          if (attempt < 2) {
-            setTimeout(() => load(attempt + 1), 8000)
-          } else {
-            setDemo(null)
-          }
-        })
-    }
-    load(1)
+    // Render free back-ends sleep after idle; when the demo-credentials
+    // endpoint answers with a gateway 502 the button must still be usable,
+    // so the page renders immediately with STATIC_DEMO and simply refreshes
+    // the details here when the server is reachable.
+    getDemoCredentials()
+      .then((res) => setDemo(res.data))
+      .catch(() => {})
   }, [])
 
   if (user && token) {
@@ -92,9 +88,6 @@ export default function LoginPage() {
   }
 
   async function demoSignIn() {
-    if (!demo) return
-    setEmail(demo.email)
-    setPassword(demo.password)
     setError(null)
     setSubmitting(true)
     try {
@@ -190,25 +183,21 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {demo && (
-                <button
-                  type="button"
-                  onClick={demoSignIn}
-                  disabled={submitting}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-inst-300 bg-inst-50 px-4 py-2.5 text-sm font-semibold text-inst-800 transition-colors hover:bg-inst-100 focus:outline-none focus:ring-2 focus:ring-inst-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Activity className="h-4 w-4" aria-hidden="true" />
-                  Continue with Demo Account
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={demoSignIn}
+                disabled={submitting}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-inst-300 bg-inst-50 px-4 py-2.5 text-sm font-semibold text-inst-800 transition-colors hover:bg-inst-100 focus:outline-none focus:ring-2 focus:ring-inst-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Activity className="h-4 w-4" aria-hidden="true" />
+                Continue with Demo Account
+              </button>
 
-              {demo && (
-                <div className="flex items-center gap-3 text-xs text-slate-400">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  OR
-                  <span className="h-px flex-1 bg-slate-200" />
-                </div>
-              )}
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span className="h-px flex-1 bg-slate-200" />
+                OR
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
 
               <button
                 type="submit"
@@ -220,8 +209,7 @@ export default function LoginPage() {
             </form>
           </div>
 
-          {demo && (
-            <div className="mt-4 rounded-xl border border-inst-100 bg-inst-50 px-6 py-4">
+          <div className="mt-4 rounded-xl border border-inst-100 bg-inst-50 px-6 py-4">
               <p className="text-sm font-semibold text-inst-900">Hackathon demo access</p>
               <p className="mt-1 break-all text-xs leading-relaxed text-inst-800">
                 Email: <span className="font-mono">{demo.email}</span>&nbsp;· Password:{' '}
@@ -232,7 +220,6 @@ export default function LoginPage() {
                 &quot;Continue with Demo Account&quot; to sign in instantly.
               </p>
             </div>
-          )}
 
           <p className="mt-6 text-center text-xs leading-relaxed text-slate-500">
             Prototype developed for Smart India Hackathon 2026 — SIH26082.
