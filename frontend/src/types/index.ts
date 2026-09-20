@@ -244,6 +244,75 @@ export interface PlumeRisk {
   transport_risk?: number | null
   transport_risk_level?: string | null
   stubble_impact_score?: number | null
+  estimated_pm25_contribution_ugm3?: number | null
+}
+
+export interface PollutionEventFactor {
+  factor: string
+  status: string
+  value: number | null
+  evidence: string | null
+  description: string | null
+}
+
+export interface PollutionEventConfidence {
+  label: string
+  basis: string
+  margin_ugm3: number | null
+  conformal_half_width_ugm3: number | null
+  lower_bound_ugm3: number | null
+  upper_bound_ugm3: number | null
+  test_r2: number | null
+  coverage_target: number | null
+  uncertainty_method: string | null
+}
+
+export interface PollutionEvent {
+  event_type: string
+  station: string | null
+  status: string
+  start_time: string
+  end_time: string | null
+  expected_peak: number | null
+  expected_peak_time: string | null
+  expected_trough: number | null
+  expected_trough_time: string | null
+  severity: string
+  severity_label: string
+  confidence: PollutionEventConfidence
+  contributing_factors: PollutionEventFactor[]
+}
+
+export interface PollutionEventsCurrent {
+  station: string
+  station_id: number
+  generated_at: string
+  release_time: string
+  data_as_of: string | null
+  model: string
+  forecast_strategy: string | null
+  uncertainty_method: string | null
+  coverage_target: number | null
+  horizon_hours: number
+  baseline_pm25_ugm3: number | null
+  forecast_peak_pm25_ugm3: number | null
+  events: PollutionEvent[]
+  atmosphere: Record<string, any> | null
+  methodology: Record<string, any>
+  notes: string[] | null
+}
+
+export interface DataQualityResponse {
+  status: string
+  generated_at: string
+  station_count: number
+  stations_with_forecasts: number
+  forecast_coverage: Record<string, number>
+  latest_pollution_reading: string | null
+  latest_weather_reading: string | null
+  latest_fire_reading: string | null
+  tables: Record<string, { total: number; missing_values: Record<string, number> }>
+  recommendations: string[]
 }
 
 export interface Explanation {

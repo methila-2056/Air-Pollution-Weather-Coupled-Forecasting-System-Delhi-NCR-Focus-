@@ -52,6 +52,13 @@ export default function StubblePlume({ data }: { data: PlumeRisk | null }) {
               <p className="text-lg font-bold text-slate-900">{data.stubble_impact_score.toFixed(2)}</p>
             </div>
           )}
+          {data.estimated_pm25_contribution_ugm3 != null && (
+            <div className="col-span-2">
+              <p className="text-slate-500">Estimated smoke-attributed PM2.5 contribution</p>
+              <p className="text-lg font-bold text-slate-900">+{data.estimated_pm25_contribution_ugm3.toFixed(1)} μg/m³</p>
+              <p className="text-xs text-slate-500">Proxy estimate from FIRMS intensity · wind alignment · proximity — not a measured quantity</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

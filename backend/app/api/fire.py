@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.db_models import FireReading, Station, WeatherReading
+from ..models.db_models import FireReading, PollutionReading, Station, WeatherReading
 from ..schemas.schemas import (
     FireActivityResponse,
     FireEvent,
@@ -52,6 +52,18 @@ def _latest_wind(db: Session, station_name: str = None):
     if not reading:
         return None, None, None
     return reading, reading.wind_speed, reading.wind_direction
+
+def _latest_network_pm25(db: Session) -> float | None:
+    """Latest PM2.5 per station averaged across the network (µg/m³)."""
+    rows = db.query(PollutionReading.station_id, PollutionReading.timestamp, PollutionReading.pm25).all()
+    last_by_station: dict[int, float] = {}
+    for station_id, _ts, pm25 in rows:
+        if pm25 is None:
+            continue
+        last_by_station[station_id] = pm25
+    if not last_by_station:
+        return None
+    return sum(last_by_station.values()) / len(last_by_station)
 
 @router.get("/fire-activity", response_model=FireActivityResponse)
 def get_fire_activity(db: Session = Depends(get_db)):
@@ -156,6 +168,15 @@ def get_plume_risk(db: Session = Depends(get_db)):
     if impact["stubble_impact_score"]:
         factors.append(f"Stubble-smoke PM impact proxy: {impact['stubble_impact_score']:.2f}")
 
+    # Estimated smoke-attributed contribution to today's PM2.5 load.
+    # Transparent proxy: stubble_impact_score (0-1, FRP + wind-alignment
+    # weighted) applied to the current network-mean PM2.5. NOT measured.
+    network_pm25 = _latest_network_pm25(db)
+    est_contribution = None
+    if network_pm25 and impact["stubble_impact_score"]:
+        est_contribution = round(impact["stubble_impact_score"] * network_pm25, 1)
+        factors.append(f"Estimated smoke-attributed PM2.5 contribution (proxy): +{est_contribution:.1f} \u00b5g/m\u00b3 of current {network_pm25:.0f} \u00b5g/m\u00b3 network mean")
+
     return PlumeRiskResponse(
         risk_level=risk_level,
         risk_score=round(risk_score, 3),
@@ -170,6 +191,7 @@ def get_plume_risk(db: Session = Depends(get_db)):
         transport_risk=transport_risk,
         transport_risk_level=impact["transport_risk_level"],
         stubble_impact_score=round(impact["stubble_impact_score"], 3),
+        estimated_pm25_contribution_ugm3=est_contribution,
     )
 
 

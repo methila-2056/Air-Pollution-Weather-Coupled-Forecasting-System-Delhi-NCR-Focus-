@@ -510,6 +510,7 @@ class PlumeRiskResponse(BaseModel):
     transport_risk: float | None = None
     transport_risk_level: str | None = None
     stubble_impact_score: float | None = None
+    estimated_pm25_contribution_ugm3: float | None = None
 
 class TransportDirectionResponse(BaseModel):
     station: str

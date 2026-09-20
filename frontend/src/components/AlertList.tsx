@@ -28,6 +28,7 @@ export default function AlertList({ alerts }: { alerts: Alert[] }) {
                   {a.forecast_horizon_hours != null && <span>· Horizon: +{a.forecast_horizon_hours}h</span>}
                   {a.created_at && <span>· {a.created_at.replace('T', ' ').slice(0, 16)}</span>}
                 </div>
+                {a.factors && <p className="text-sm text-slate-700 mt-2">Drivers: {a.factors}</p>}
                 {a.recommendation && <p className="text-sm text-slate-700 mt-2">Recommendation: {a.recommendation}</p>}
               </div>
             </div>

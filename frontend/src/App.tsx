@@ -13,6 +13,7 @@ import Alerts from './pages/Alerts'
 import ModelPerformancePage from './pages/ModelPerformancePage'
 import SpatialForecastPage from './pages/SpatialForecastPage'
 import DataTools from './pages/DataTools'
+import PollutionEvents from './pages/PollutionEvents'
 import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/fire-plume" element={<StubblePlumePage />} />
         <Route path="/explanation" element={<AIExplanation />} />
         <Route path="/alerts" element={<Alerts />} />
+        <Route path="/events" element={<PollutionEvents />} />
         <Route path="/performance" element={<ModelPerformancePage />} />
         <Route path="/model-performance" element={<ModelPerformancePage />} />
         <Route path="/spatial" element={<SpatialForecastPage />} />

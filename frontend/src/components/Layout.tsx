@@ -30,6 +30,7 @@ const primaryNav = [
 
 const tools = [
   { to: '/overview', label: 'Operational Overview' },
+  { to: '/events', label: 'Pollution Events' },
   { to: '/explanation', label: 'Forecast Explainability' },
   { to: '/model-performance', label: 'Model Performance' },
   { to: '/spatial', label: 'Spatial AQ Outlook' },

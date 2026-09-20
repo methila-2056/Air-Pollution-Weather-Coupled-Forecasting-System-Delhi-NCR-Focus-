@@ -21,6 +21,7 @@ import {
   getGrapCurrent,
   getSummary,
   getAlerts,
+  getDataQuality,
 } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import AQIBadge from '../components/AQIBadge'
@@ -39,12 +40,12 @@ import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import { aqiStyle, fmt, readableOnHex, tsFmt } from '../lib/aqi'
 import { CHART } from '../lib/theme'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, Legend,
 } from 'recharts'
 import type {
   Station, CurrentAQI, ForecastPoint, Pm25ForecastResponse, Pm25ForecastPoint,
   AtmosphereCurrentResponse, FireActivity, FireHotspot, TransportRiskResponse,
-  ModelPerformanceResponse, PollutionReading, Alert, SummaryResponse, GrapAssessment,
+  ModelPerformanceResponse, PollutionReading, Alert, SummaryResponse, GrapAssessment, DataQualityResponse,
 } from '../types'
 
 interface WindVectorInput {
@@ -93,6 +94,7 @@ export default function Dashboard() {
   const [modelPerf, setModelPerf] = useState<ModelPerformanceResponse | null>(null)
   const [pollution, setPollution] = useState<PollutionReading[]>([])
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
+  const [dataQuality, setDataQuality] = useState<DataQualityResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -122,6 +124,7 @@ export default function Dashboard() {
       getPollutionLatest().then((r) => setPollution(r.data)).catch(() => setPollution([])),
       getGrapCurrent().then((r) => setGrap(r.data)).catch(() => setGrap(null)),
       getAlerts().then((r) => setAlerts(r.data)).catch(() => setAlerts([])),
+      getDataQuality().then((r) => setDataQuality(r.data)).catch(() => setDataQuality(null)),
     ]).then()
   }, [selected])
 
@@ -222,6 +225,45 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ---------- Data sources & freshness ---------- */}
+          {(dataQuality || summary) && (
+            <section className="card">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-slate-900">Data sources & freshness</h2>
+                <Link to="/data" className="text-xs font-semibold text-inst-700 hover:underline">
+                  Data & system sources →
+                </Link>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Stations</p>
+                  <p className="text-base font-bold tabular-nums text-slate-900">{dataQuality?.station_count ?? summary?.stations}</p>
+                  <p className="text-xs text-slate-500">CPCB live network</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Pollution observations</p>
+                  <p className="text-base font-bold tabular-nums text-slate-900">{dataQuality?.tables?.pollution_observations?.total?.toLocaleString() ?? '—'}</p>
+                  <p className="truncate text-xs text-slate-500">{dataQuality?.latest_pollution_reading ? tsFmt(dataQuality.latest_pollution_reading) : 'CPCB'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Weather observations</p>
+                  <p className="text-base font-bold tabular-nums text-slate-900">{dataQuality?.tables?.weather_observations?.total?.toLocaleString() ?? '—'}</p>
+                  <p className="truncate text-xs text-slate-500">{dataQuality?.latest_weather_reading ? tsFmt(dataQuality.latest_weather_reading) : 'Open-Meteo'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Stored fires</p>
+                  <p className="text-base font-bold tabular-nums text-slate-900">{dataQuality?.tables?.fire_readings?.total?.toLocaleString() ?? summary?.active_fires_24h}</p>
+                  <p className="truncate text-xs text-slate-500">{dataQuality?.latest_fire_reading ? tsFmt(dataQuality.latest_fire_reading) : 'NASA FIRMS'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Forecast rows</p>
+                  <p className="text-base font-bold tabular-nums text-slate-900">{dataQuality?.tables?.forecasts?.total?.toLocaleString() ?? '—'}</p>
+                  <p className="truncate text-xs text-slate-500">{dataQuality?.stations_with_forecasts != null ? `${dataQuality.stations_with_forecasts} stations covered` : 'ML engine'}</p>
+                </div>
+              </div>
+            </section>
           )}
 
           {/* ---------- Station grid ---------- */}
@@ -335,7 +377,7 @@ export default function Dashboard() {
                   Open full forecast →
                 </Link>
               </div>
-              <ForecastPreview point={pm25?.forecasts?.slice(0, 24) ?? forecast.slice(0, 24)} observed={current?.pm25 ?? null} />
+              <ForecastPreview point={pm25?.forecasts?.slice(0, 24) ?? forecast.slice(0, 24)} observed={current?.pm25 ?? null} uncertaintyMethod={pm25?.uncertainty_method} />
             </section>
           </div>
 
@@ -438,7 +480,7 @@ function StationRank({ summary, best = false }: { summary: SummaryResponse; best
   )
 }
 
-function ForecastPreview({ point, observed }: { point: Pm25ForecastPoint[] | ForecastPoint[]; observed: number | null }) {
+function ForecastPreview({ point, observed, uncertaintyMethod }: { point: Pm25ForecastPoint[] | ForecastPoint[]; observed: number | null; uncertaintyMethod?: string | null }) {
   if (!point.length) {
     return (
       <EmptyState
@@ -447,35 +489,60 @@ function ForecastPreview({ point, observed }: { point: Pm25ForecastPoint[] | For
       />
     )
   }
+  const first = point[0] as Partial<Pm25ForecastPoint>
+  const isPm25 = typeof first.predicted_pm25 === 'number'
   const rows = point.map((p) => {
     const pm = p as Partial<Pm25ForecastPoint>
     const fc = p as Partial<ForecastPoint>
-    const isPm25 = typeof pm.predicted_pm25 === 'number'
     return {
       time: `+${pm.forecast_horizon ?? fc.horizon_hours ?? 0}h`,
       pred: isPm25 ? (pm.predicted_pm25 ?? 0) : (fc.pm25_pred ?? fc.aqi_pred ?? 0),
+      lower: isPm25 ? (pm.pm25_lower_bound ?? null) : null,
+      upper: isPm25 ? (pm.pm25_upper_bound ?? null) : null,
     }
   })
+  const hasBounds = isPm25 && rows.some((r) => r.lower != null && r.upper != null && r.upper > r.lower)
   if (observed !== null && observed !== undefined) {
-    rows.unshift({ time: 'now', pred: observed })
+    rows.unshift({ time: 'now', pred: observed, lower: observed, upper: observed })
   }
   const tooltip = ChartTooltip()
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={rows} margin={{ left: -20, right: 8 }}>
-        <defs>
-          <linearGradient id="fcastFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={CHART.brand} stopOpacity={0.28} />
-            <stop offset="95%" stopColor={CHART.brand} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
-        <XAxis dataKey="time" stroke={CHART.axis} fontSize={11} />
-        <YAxis stroke={CHART.axis} fontSize={11} />
-        <Tooltip {...tooltip} />
-        <ReferenceLine y={60} stroke={CHART.naaqsPm25} strokeDasharray="4 4" label={{ value: 'NAAQS 60', position: 'insideTopRight', fill: CHART.naaqsPm25, fontSize: 10 }} />
-        <Area type="monotone" dataKey="pred" stroke={CHART.brand} strokeWidth={2} fill="url(#fcastFill)" name="PM2.5 (μg/m³)" />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div>
+      <ResponsiveContainer width="100%" height={240}>
+        <AreaChart data={rows} margin={{ left: -20, right: 8 }}>
+          <defs>
+            <linearGradient id="fcastFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={CHART.brand} stopOpacity={0.28} />
+              <stop offset="95%" stopColor={CHART.brand} stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={CHART.brand} stopOpacity={0.18} />
+              <stop offset="95%" stopColor={CHART.brand} stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+          <XAxis dataKey="time" stroke={CHART.axis} fontSize={11} />
+          <YAxis stroke={CHART.axis} fontSize={11} />
+          <Tooltip {...tooltip} />
+          <ReferenceLine y={60} stroke={CHART.naaqsPm25} strokeDasharray="4 4" label={{ value: 'NAAQS 60', position: 'insideTopRight', fill: CHART.naaqsPm25, fontSize: 10 }} />
+          {observed !== null && observed !== undefined && (
+            <ReferenceDot x="now" y={observed} r={4} fill={CHART.naaqsPm25} stroke="#fff" strokeWidth={1.5} />
+          )}
+          {hasBounds && (
+            <>
+              <Area type="monotone" dataKey="upper" stroke="none" fill="url(#bandFill)" name="Upper bound" />
+              <Area type="monotone" dataKey="lower" stroke="none" fill="transparent" name="Lower bound" />
+            </>
+          )}
+          <Area type="monotone" dataKey="pred" stroke={CHART.brand} strokeWidth={2} fill={hasBounds ? 'transparent' : 'url(#fcastFill)'} name="PM2.5 (μg/m³)" />
+          {hasBounds && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        </AreaChart>
+      </ResponsiveContainer>
+      {hasBounds && uncertaintyMethod && (
+        <p className="mt-1 text-[11px] leading-snug text-slate-500">
+          Shaded band = {uncertaintyMethod} prediction interval (observed dot at “now”).
+        </p>
+      )}
+    </div>
   )
 }
