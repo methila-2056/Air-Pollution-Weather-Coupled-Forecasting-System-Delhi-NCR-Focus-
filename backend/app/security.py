@@ -79,8 +79,21 @@ def _b64url_decode(token: str) -> bytes:
     return base64.urlsafe_b64decode(token + padding)
 
 
-def create_access_token(user_id: int, email: str, secret: str, expires_minutes: int | None = None) -> str:
-    """Create an HS256-signed JWT carrying the user identity."""
+def create_access_token(
+    user_id: int,
+    email: str,
+    secret: str,
+    expires_minutes: int | None = None,
+    name: str | None = None,
+    role: str | None = None,
+) -> str:
+    """Create an HS256-signed JWT carrying the user identity.
+
+    ``name``/``role`` are embedded so ``GET /api/auth/me`` can resolve the
+    profile from the signed token alone, without a database round-trip (the
+    hosted Postgres can take seconds to resume, which otherwise stalls every
+    page behind the session check).
+    """
     from .config import get_settings
 
     settings = get_settings()
@@ -93,6 +106,10 @@ def create_access_token(user_id: int, email: str, secret: str, expires_minutes: 
         "exp": now + max(1, int(minutes) * 60),
         "iss": "aerocast-ncr",
     }
+    if name is not None:
+        payload["name"] = name
+    if role is not None:
+        payload["role"] = role
     header = {"alg": _JWT_ALG, "typ": "JWT"}
     seg = _b64url(json.dumps(header, separators=(",", ":")).encode()) + "." + _b64url(
         json.dumps(payload, separators=(",", ":")).encode()

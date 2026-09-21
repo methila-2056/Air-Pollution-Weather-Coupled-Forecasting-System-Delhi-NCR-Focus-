@@ -80,18 +80,32 @@ def _to_user_response(u: User) -> UserResponse:
 def get_current_user(
     authorization: str | None = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),
-) -> User:
-    """FastAPI dependency: resolve and validate the bearer token's user."""
+) -> UserResponse:
+    """FastAPI dependency: resolve and validate the bearer token's user.
+
+    The profile is taken from the signed token claims (name/role/email) so no
+    database round-trip is needed — the hosted Postgres can take seconds to
+    resume, and this dependency gates every protected page. Tokens issued
+    before the claims were embedded fall back to a database lookup.
+    """
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.split(" ", 1)[1].strip()
     payload = decode_access_token(token, get_settings().secret_key)
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    name = payload.get("name")
+    role = payload.get("role")
+    email = payload.get("email")
+    if name and role and email:
+        return UserResponse(id=int(payload["sub"]), email=email, name=name, role=role)
+
+    # Backward compatibility for tokens minted before claims were embedded.
     user = db.query(User).filter(User.id == int(payload["sub"])).first()
     if user is None:
         raise HTTPException(status_code=401, detail="User no longer exists")
-    return user
+    return _to_user_response(user)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +120,9 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     ):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     settings = get_settings()
-    token = create_access_token(user.id, user.email, settings.secret_key)
+    token = create_access_token(
+        user.id, user.email, settings.secret_key, name=user.name, role=user.role
+    )
     return LoginResponse(
         access_token=token,
         user=_to_user_response(user),
@@ -115,19 +131,19 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/auth/me", response_model=UserResponse)
-def me(user: User = Depends(get_current_user)):
+def me(user: UserResponse = Depends(get_current_user)):
     """Return the profile of the currently authenticated user."""
-    return _to_user_response(user)
+    return user
 
 
 @router.post("/auth/logout", response_model=UserResponse)
-def logout(user: User = Depends(get_current_user)):
+def logout(user: UserResponse = Depends(get_current_user)):
     """Idempotent logout — tokens are stateless, so this is a client action.
 
     The endpoint exists so the portal can call it for future server-side
     token-blacklisting without changing the client contract.
     """
-    return _to_user_response(user)
+    return user
 
 
 @router.get("/auth/demo", response_model=DemoCredentials)

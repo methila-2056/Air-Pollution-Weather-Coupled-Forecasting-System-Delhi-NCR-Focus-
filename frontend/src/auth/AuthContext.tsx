@@ -23,7 +23,12 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
   const [token, setToken] = useState<string | null>(() => getStoredToken())
-  const [loading, setLoading] = useState<boolean>(() => Boolean(getStoredToken()))
+  // Render from the stored session immediately instead of blocking every
+  // protected page on GET /api/auth/me. The hosted Postgres can take seconds
+  // to resume, and gating the whole UI on that round-trip left the Tools pages
+  // stuck on "Verifying session…". The token is still revalidated in the
+  // background (below) and the session is cleared if it is rejected.
+  const [loading, setLoading] = useState<boolean>(false)
 
   useEffect(() => {
     let cancelled = false
