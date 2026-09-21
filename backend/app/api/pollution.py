@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,15 @@ from ..services import cpcb_service
 from ..services.cpcb_service import CpcbError
 
 router = APIRouter()
+
+
+def _utc_naive(dt: datetime | None) -> datetime | None:
+    """Normalize DB timestamps (aware on Postgres, naive on SQLite) to naive UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt
 
 
 @router.get("/pollution/latest", response_model=list[PollutionReadingResponse])
@@ -115,8 +126,6 @@ def pollution_coverage(db: Session = Depends(get_db)):
     sufficiency, so incomplete coverage is visible and actionable instead of
     silently producing placeholder forecasts.
     """
-    from datetime import UTC, datetime, timedelta
-
     now = datetime.now(UTC).replace(tzinfo=None)
     cutoff = now - timedelta(hours=48)
     stations = db.query(Station).order_by(Station.city, Station.name).all()
@@ -137,10 +146,15 @@ def pollution_coverage(db: Session = Depends(get_db)):
                 "recent": 0,
             }
             continue
-        last = readings[0].timestamp
-        recent = sum(1 for r in readings if r.timestamp is not None and r.timestamp >= cutoff)
+        last = _utc_naive(readings[0].timestamp)
+        oldest = _utc_naive(readings[-1].timestamp)
+        recent = sum(
+            1
+            for r in readings
+            if _utc_naive(r.timestamp) is not None and _utc_naive(r.timestamp) >= cutoff
+        )
         sources = {r.data_source or "legacy" for r in readings if r.data_source or True}
-        span = (last - readings[-1].timestamp).total_seconds() / 86400.0
+        span = (last - oldest).total_seconds() / 86400.0 if last and oldest else 0.0
         rows[station.id] = {
             "last": last,
             "count": len(readings),

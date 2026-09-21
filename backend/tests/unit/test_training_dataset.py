@@ -6,6 +6,7 @@ import pytest
 
 from ml.preprocessing.training_dataset import (
     ROLLING_WINDOWS,
+    add_fire_features,
     align_observations,
     build_summary,
     build_training_dataset_from_dataframes,
@@ -202,3 +203,41 @@ class TestDatabaseIntegration:
         db_session.commit()
         df, summary = build_training_dataset_from_db(db_session)
         assert len(df) == 0
+
+
+class TestAddFireFeaturesAlignment:
+    """Regression: fires outside the radius must not misalign the sort order.
+
+    The vectorised ``add_fire_features`` sorts the kept fires by acquisition
+    time. When some stored fires fall outside ``max_distance_km`` the timestamp
+    order must be computed over the *kept* subset, otherwise the distance /
+    bearing / FRP arrays (length = kept fires) are indexed with positions from
+    the full archive, raising ``IndexError: index N is out of bounds``.
+    """
+
+    def _frame(self, n_hours=78):
+        return pd.DataFrame({
+            "station": "Anand Vihar",
+            "hour": pd.date_range("2026-09-19 00:00:00", periods=n_hours, freq="h"),
+            "latitude": 28.6492,
+            "longitude": 77.2918,
+            "wind_direction": 300.0,
+            "wind_speed": 2.0,
+        })
+
+    def _fires(self):
+        last = pd.Timestamp("2026-09-22 05:00:00")
+        return pd.DataFrame({
+            "lat": [30.5, 29.0, 15.0, 22.0, 10.0],
+            "lon": [76.1, 77.0, 75.0, 88.0, 80.0],
+            "frp": [120.0, 60.0, 200.0, 150.0, 90.0],
+            "acq_date": [last] * 5,
+        })
+
+    def test_mixed_inside_outside_radius_does_not_raise(self):
+        out = add_fire_features(self._frame(), self._fires())
+        last = out.iloc[-1]
+        # Only the two fires within 500 km of Anand Vihar are counted.
+        assert last["fire_count"] == 2
+        assert last["fire_impact_score"] > 0.0
+        assert last["nearest_fire_distance"] <= 500.0

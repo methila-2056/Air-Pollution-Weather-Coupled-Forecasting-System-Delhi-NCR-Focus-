@@ -361,15 +361,12 @@ def add_fire_features(
             continue
 
         f_ts = fires["acq_timestamp"].to_numpy(dtype="datetime64[ns]").astype(np.int64)
-        f_d = dist[keep]
-        f_b = bearing[keep]
-        f_f = f_frp[keep]
-
-        order = np.argsort(f_ts, kind="stable")
+        keep_idx = np.flatnonzero(keep)
+        order = keep_idx[np.argsort(f_ts[keep_idx], kind="stable")]
         f_ts_s = f_ts[order]
-        f_d_s = f_d[order]
-        f_b_s = f_b[order]
-        f_f_s = f_f[order]
+        f_d_s = dist[order]
+        f_b_s = bearing[order]
+        f_f_s = f_frp[order]
 
         rts = row_ns[pos]
         lo = np.searchsorted(f_ts_s, rts - win_ns, side="left")
