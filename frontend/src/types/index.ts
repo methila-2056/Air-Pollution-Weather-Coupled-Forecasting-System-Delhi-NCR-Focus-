@@ -446,6 +446,14 @@ export interface ModelPerformanceMetrics {
   n: number
 }
 
+export interface ModelCoverageInfo {
+  coverage_target: number | null
+  quantile: number | null
+  n_cal: number | null
+  test_coverage: number | null
+  n_test: number | null
+}
+
 export interface ModelHorizonPerformance {
   horizon_hours: number
   n_train: number
@@ -454,6 +462,10 @@ export interface ModelHorizonPerformance {
   test_period_start: string | null
   test_period_end: string | null
   metrics: Record<string, ModelPerformanceMetrics>
+  coverage?: {
+    target: number | null
+    models: Record<string, ModelCoverageInfo>
+  } | null
 }
 
 export interface ModelPerformanceResponse {

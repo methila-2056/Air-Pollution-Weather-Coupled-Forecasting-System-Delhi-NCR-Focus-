@@ -1,0 +1,7 @@
+{
+  "quantile": 108.0425,
+  "coverage_target": 0.85,
+  "empirical_coverage": 0.8501,
+  "n_calibration": 16932,
+  "method": "split-conformal"
+}

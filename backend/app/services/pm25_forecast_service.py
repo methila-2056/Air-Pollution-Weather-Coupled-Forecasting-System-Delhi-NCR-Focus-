@@ -118,7 +118,7 @@ def build_feature_row(
     from ml.preprocessing.training_dataset import (
         add_atmosphere_and_temporal_features,
         add_fire_features,
-        add_pm25_lags_and_rolling,
+        add_target_lags_and_rolling,
         align_observations,
     )
 
@@ -176,7 +176,7 @@ def build_feature_row(
     df, _ = align_observations(poll, wx, stations_df, drop_target_null=False)
     df = add_atmosphere_and_temporal_features(df)
     df = add_fire_features(df, fires)
-    df = add_pm25_lags_and_rolling(df)
+    df = add_target_lags_and_rolling(df)
 
     if df.empty:
         raise ValueError(f"No aligned observations for '{station.name}'")

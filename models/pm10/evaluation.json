@@ -1,0 +1,453 @@
+{
+  "schema_version": 1,
+  "target": "pm10",
+  "model_dir": "models\\pm10",
+  "data_source": "data\\ml\\training_dataset_pm10.csv",
+  "generated_at": "2026-09-20T20:15:25.526818+00:00",
+  "feature_count": 45,
+  "features": [
+    "temperature",
+    "humidity",
+    "pressure_msl",
+    "surface_pressure",
+    "wind_speed",
+    "wind_direction",
+    "wind_dir_sin",
+    "wind_dir_cos",
+    "pbl_height",
+    "ventilation_coefficient",
+    "inversion_detected",
+    "inversion_strength",
+    "strongest_layer_gradient",
+    "fire_count",
+    "fire_impact_score",
+    "nearest_fire_distance",
+    "wind_aligned_fire_count",
+    "wind_alignment_pct",
+    "transport_time_hours",
+    "transport_risk",
+    "stubble_impact_score",
+    "hour_of_day",
+    "day_of_week",
+    "month",
+    "day_of_year",
+    "is_weekend",
+    "hour_sin",
+    "hour_cos",
+    "dayofweek_sin",
+    "dayofweek_cos",
+    "month_sin",
+    "month_cos",
+    "pm10_lag1",
+    "pm10_lag3",
+    "pm10_lag6",
+    "pm10_lag12",
+    "pm10_lag24",
+    "pm10_roll_mean_3h",
+    "pm10_roll_mean_6h",
+    "pm10_roll_mean_12h",
+    "pm10_roll_mean_24h",
+    "pm10_roll_std_3h",
+    "pm10_roll_std_6h",
+    "pm10_roll_std_12h",
+    "pm10_roll_std_24h"
+  ],
+  "horizons": [
+    1,
+    6,
+    12,
+    24,
+    48,
+    72
+  ],
+  "evaluated_models": [
+    "persistence",
+    "random_forest",
+    "xgboost"
+  ],
+  "split_type": "chronological",
+  "split_ratios": [
+    0.6,
+    0.2,
+    0.2
+  ],
+  "split_ranges": {
+    "train": {
+      "start": "2024-01-01 00:00:00",
+      "end": "2025-03-16 02:00:00",
+      "n_rows": 50798
+    },
+    "validation": {
+      "start": "2025-03-16 02:00:00",
+      "end": "2025-08-08 21:00:00",
+      "n_rows": 16932
+    },
+    "test": {
+      "start": "2025-08-08 21:00:00",
+      "end": "2026-09-17 12:00:00",
+      "n_rows": 16933
+    }
+  },
+  "results": [
+    {
+      "horizon_hours": 1,
+      "n_train": 50793,
+      "n_val": 16932,
+      "n_test": 16921,
+      "test_period_start": "2025-08-08 21:00:00",
+      "test_period_end": "2025-12-31 23:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 56.1364,
+          "rmse": 88.0921,
+          "r2": 0.7539,
+          "mape": 29.8903,
+          "nmae": 0.2238,
+          "n": 16921
+        },
+        "random_forest": {
+          "mae": 46.0809,
+          "rmse": 70.1383,
+          "r2": 0.844,
+          "mape": 29.7053,
+          "nmae": 0.1837,
+          "n": 16921
+        },
+        "xgboost": {
+          "mae": 45.9599,
+          "rmse": 69.4911,
+          "r2": 0.8469,
+          "mape": 29.7163,
+          "nmae": 0.1832,
+          "n": 16921
+        }
+      },
+      "coverage": {
+        "target": 0.85,
+        "models": {
+          "persistence": {
+            "coverage_target": 0.85,
+            "quantile": 73.0,
+            "n_cal": 16932,
+            "test_coverage": 0.7523,
+            "n_test": 16921
+          },
+          "random_forest": {
+            "coverage_target": 0.85,
+            "quantile": 65.718,
+            "n_cal": 16932,
+            "test_coverage": 0.7757,
+            "n_test": 16921
+          },
+          "xgboost": {
+            "coverage_target": 0.85,
+            "quantile": 63.282,
+            "n_cal": 16932,
+            "test_coverage": 0.7638,
+            "n_test": 16921
+          }
+        }
+      }
+    },
+    {
+      "horizon_hours": 6,
+      "n_train": 50793,
+      "n_val": 16932,
+      "n_test": 16896,
+      "test_period_start": "2025-08-08 21:00:00",
+      "test_period_end": "2025-12-31 18:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 99.633,
+          "rmse": 147.5553,
+          "r2": 0.3096,
+          "mape": 53.4923,
+          "nmae": 0.3968,
+          "n": 16896
+        },
+        "random_forest": {
+          "mae": 66.6956,
+          "rmse": 95.9541,
+          "r2": 0.7081,
+          "mape": 46.4105,
+          "nmae": 0.2656,
+          "n": 16896
+        },
+        "xgboost": {
+          "mae": 64.0728,
+          "rmse": 93.173,
+          "r2": 0.7247,
+          "mape": 44.1689,
+          "nmae": 0.2552,
+          "n": 16896
+        }
+      },
+      "coverage": {
+        "target": 0.85,
+        "models": {
+          "persistence": {
+            "coverage_target": 0.85,
+            "quantile": 124.0,
+            "n_cal": 16932,
+            "test_coverage": 0.7221,
+            "n_test": 16896
+          },
+          "random_forest": {
+            "coverage_target": 0.85,
+            "quantile": 84.858,
+            "n_cal": 16932,
+            "test_coverage": 0.725,
+            "n_test": 16896
+          },
+          "xgboost": {
+            "coverage_target": 0.85,
+            "quantile": 83.02,
+            "n_cal": 16932,
+            "test_coverage": 0.7366,
+            "n_test": 16896
+          }
+        }
+      }
+    },
+    {
+      "horizon_hours": 12,
+      "n_train": 50793,
+      "n_val": 16932,
+      "n_test": 16866,
+      "test_period_start": "2025-08-08 21:00:00",
+      "test_period_end": "2025-12-31 12:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 101.7178,
+          "rmse": 150.3181,
+          "r2": 0.2833,
+          "mape": 58.1192,
+          "nmae": 0.4046,
+          "n": 16866
+        },
+        "random_forest": {
+          "mae": 73.0341,
+          "rmse": 106.1046,
+          "r2": 0.6429,
+          "mape": 50.2424,
+          "nmae": 0.2905,
+          "n": 16866
+        },
+        "xgboost": {
+          "mae": 72.1526,
+          "rmse": 103.6527,
+          "r2": 0.6592,
+          "mape": 50.4825,
+          "nmae": 0.287,
+          "n": 16866
+        }
+      },
+      "coverage": {
+        "target": 0.85,
+        "models": {
+          "persistence": {
+            "coverage_target": 0.85,
+            "quantile": 126.75,
+            "n_cal": 16932,
+            "test_coverage": 0.7207,
+            "n_test": 16866
+          },
+          "random_forest": {
+            "coverage_target": 0.85,
+            "quantile": 90.886,
+            "n_cal": 16932,
+            "test_coverage": 0.7216,
+            "n_test": 16866
+          },
+          "xgboost": {
+            "coverage_target": 0.85,
+            "quantile": 87.121,
+            "n_cal": 16932,
+            "test_coverage": 0.7053,
+            "n_test": 16866
+          }
+        }
+      }
+    },
+    {
+      "horizon_hours": 24,
+      "n_train": 50793,
+      "n_val": 16932,
+      "n_test": 16806,
+      "test_period_start": "2025-08-08 21:00:00",
+      "test_period_end": "2025-12-31 00:30:00",
+      "metrics": {
+        "persistence": {
+          "mae": 84.3984,
+          "rmse": 124.3742,
+          "r2": 0.5087,
+          "mape": 54.0028,
+          "nmae": 0.3347,
+          "n": 16806
+        },
+        "random_forest": {
+          "mae": 75.9642,
+          "rmse": 108.2192,
+          "r2": 0.6281,
+          "mape": 52.8585,
+          "nmae": 0.3013,
+          "n": 16806
+        },
+        "xgboost": {
+          "mae": 77.4118,
+          "rmse": 110.7099,
+          "r2": 0.6107,
+          "mape": 52.2503,
+          "nmae": 0.307,
+          "n": 16806
+        }
+      },
+      "coverage": {
+        "target": 0.85,
+        "models": {
+          "persistence": {
+            "coverage_target": 0.85,
+            "quantile": 110.0,
+            "n_cal": 16932,
+            "test_coverage": 0.7365,
+            "n_test": 16806
+          },
+          "random_forest": {
+            "coverage_target": 0.85,
+            "quantile": 96.194,
+            "n_cal": 16932,
+            "test_coverage": 0.7236,
+            "n_test": 16806
+          },
+          "xgboost": {
+            "coverage_target": 0.85,
+            "quantile": 95.366,
+            "n_cal": 16932,
+            "test_coverage": 0.7171,
+            "n_test": 16806
+          }
+        }
+      }
+    },
+    {
+      "horizon_hours": 48,
+      "n_train": 50793,
+      "n_val": 16932,
+      "n_test": 16686,
+      "test_period_start": "2025-08-08 21:00:00",
+      "test_period_end": "2025-12-30 00:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 94.4367,
+          "rmse": 137.4531,
+          "r2": 0.4003,
+          "mape": 57.0227,
+          "nmae": 0.3728,
+          "n": 16686
+        },
+        "random_forest": {
+          "mae": 87.8502,
+          "rmse": 121.8149,
+          "r2": 0.529,
+          "mape": 62.451,
+          "nmae": 0.3468,
+          "n": 16686
+        },
+        "xgboost": {
+          "mae": 89.8181,
+          "rmse": 124.6156,
+          "r2": 0.5071,
+          "mape": 61.5596,
+          "nmae": 0.3545,
+          "n": 16686
+        }
+      },
+      "coverage": {
+        "target": 0.85,
+        "models": {
+          "persistence": {
+            "coverage_target": 0.85,
+            "quantile": 126.0,
+            "n_cal": 16932,
+            "test_coverage": 0.7448,
+            "n_test": 16686
+          },
+          "random_forest": {
+            "coverage_target": 0.85,
+            "quantile": 105.468,
+            "n_cal": 16932,
+            "test_coverage": 0.695,
+            "n_test": 16686
+          },
+          "xgboost": {
+            "coverage_target": 0.85,
+            "quantile": 104.922,
+            "n_cal": 16932,
+            "test_coverage": 0.682,
+            "n_test": 16686
+          }
+        }
+      }
+    },
+    {
+      "horizon_hours": 72,
+      "n_train": 50793,
+      "n_val": 16932,
+      "n_test": 16566,
+      "test_period_start": "2025-08-08 21:00:00",
+      "test_period_end": "2025-12-29 00:45:00",
+      "metrics": {
+        "persistence": {
+          "mae": 99.9641,
+          "rmse": 143.3926,
+          "r2": 0.349,
+          "mape": 63.7741,
+          "nmae": 0.3931,
+          "n": 16566
+        },
+        "random_forest": {
+          "mae": 93.6913,
+          "rmse": 130.2705,
+          "r2": 0.4627,
+          "mape": 66.0501,
+          "nmae": 0.3684,
+          "n": 16566
+        },
+        "xgboost": {
+          "mae": 93.5698,
+          "rmse": 129.3941,
+          "r2": 0.4699,
+          "mape": 65.8738,
+          "nmae": 0.368,
+          "n": 16566
+        }
+      },
+      "coverage": {
+        "target": 0.85,
+        "models": {
+          "persistence": {
+            "coverage_target": 0.85,
+            "quantile": 137.0,
+            "n_cal": 16932,
+            "test_coverage": 0.7471,
+            "n_test": 16566
+          },
+          "random_forest": {
+            "coverage_target": 0.85,
+            "quantile": 104.698,
+            "n_cal": 16932,
+            "test_coverage": 0.6695,
+            "n_test": 16566
+          },
+          "xgboost": {
+            "coverage_target": 0.85,
+            "quantile": 108.009,
+            "n_cal": 16932,
+            "test_coverage": 0.6786,
+            "n_test": 16566
+          }
+        }
+      }
+    }
+  ]
+}

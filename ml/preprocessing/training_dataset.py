@@ -48,6 +48,20 @@ PM25_PLAUSIBLE = (0.0, 1000.0)
 SPLIT_RATIOS = (0.60, 0.20, 0.20)
 SPLIT_NAMES = ("train", "validation", "test")
 
+# All pollutants the pipeline can supervise on (the DB stores all six; only the
+# configured target anchors the panel and receives lag/rolling history).
+ALL_POLLUTANTS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
+
+# Plausible target ranges per pollutant, used to reject implausible readings.
+PLAUSIBLE_RANGES = {
+    "pm25": (0.0, 1000.0),
+    "pm10": (0.0, 1000.0),
+    "o3": (0.0, 500.0),
+    "no2": (0.0, 500.0),
+    "so2": (0.0, 500.0),
+    "co": (0.0, 20.0),
+}
+
 # Numeric columns considered for IQR-outlier flagging (extended beyond the
 # explicitly required feature set to cover every engineered feature).
 IQR_FLAG_COLS = [
@@ -56,7 +70,8 @@ IQR_FLAG_COLS = [
     "inversion_strength", "strongest_layer_gradient",
     "fire_count", "fire_impact_score", "nearest_fire_distance",
     "wind_aligned_fire_count", "wind_alignment_pct", "transport_time_hours",
-    "transport_risk", "stubble_impact_score", TARGET,
+    "transport_risk", "stubble_impact_score",
+    *ALL_POLLUTANTS,
 ]
 
 # Documented exogenous features (not part of the target history).
@@ -105,12 +120,20 @@ def align_observations(
     stations_df: pd.DataFrame,
     max_ffill_hours: int = MAX_FFILL_HOURS,
     drop_target_null: bool = True,
+    target: str = TARGET,
+    plausible: tuple[float, float] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Hour-align pollution (target anchor) with weather (exogenous).
 
     Returns the aligned panel and a diagnostics dict with all handling counts.
     """
     report: dict[str, Any] = {}
+
+    if target not in poll_df.columns:
+        raise ValueError(
+            f"Target {target!r} not present in pollution frame (columns: {list(poll_df.columns)})"
+        )
+    plausible = plausible or PM25_PLAUSIBLE
 
     poll = poll_df.copy()
     wx = wx_df.copy()
@@ -154,14 +177,14 @@ def align_observations(
     report["ffill_limit_hours"] = max_ffill_hours
 
     # Target plausibility / outliers
-    before_plaus = int(df[TARGET].notna().sum())
-    df.loc[(df[TARGET] <= PM25_PLAUSIBLE[0]) | (df[TARGET] > PM25_PLAUSIBLE[1]), TARGET] = np.nan
-    report["target_implausible_removed"] = before_plaus - int(df[TARGET].notna().sum())
-    report["target_plausible_range"] = list(PM25_PLAUSIBLE)
+    before_plaus = int(df[target].notna().sum())
+    df.loc[(df[target] <= plausible[0]) | (df[target] > plausible[1]), target] = np.nan
+    report["target_implausible_removed"] = before_plaus - int(df[target].notna().sum())
+    report["target_plausible_range"] = list(plausible)
 
     if drop_target_null:
-        n_null = int(df[TARGET].isna().sum())
-        df = df[df[TARGET].notna()].reset_index(drop=True)
+        n_null = int(df[target].isna().sum())
+        df = df[df[target].notna()].reset_index(drop=True)
         report["rows_dropped_no_target"] = n_null
 
     df = df.sort_values(["station", "hour"]).reset_index(drop=True)
@@ -415,31 +438,30 @@ def add_fire_features(
     return out
 
 
-def add_pm25_lags_and_rolling(df: pd.DataFrame) -> pd.DataFrame:
+def add_target_lags_and_rolling(
+    df: pd.DataFrame,
+    target: str = TARGET,
+    lags: list[int] = LAG_HOURS,
+    rolling_windows: list[int] = ROLLING_WINDOWS,
+) -> pd.DataFrame:
     """Causal lag + rolling features per station. Never uses the current target.
 
-    - ``pm25_lag{h}``        = pm25 shifted h hours.
-    - ``pm25_roll_mean_{w}h`` = mean of pm25 over the *preceding* w hours
-                               (shift(1) then rolling).
-    - ``pm25_roll_std_{w}h``  = same but standard deviation.
+    - ``{target}_lag{h}``        = target shifted h hours.
+    - ``{target}_roll_mean_{w}h`` = mean of target over the *preceding* w hours
+                                    (shift(1) then rolling).
+    - ``{target}_roll_std_{w}h``  = same but standard deviation.
     """
     out = df.copy().sort_values(["station", "hour"]).reset_index(drop=True)
-    feat_cols = []
-    for _station, group in out.groupby("station", sort=False):
-        idx = group.index
-        pm = group[TARGET]
-        for lag in LAG_HOURS:
-            col = f"{TARGET}_lag{lag}"
-            out.loc[idx, col] = pm.shift(lag).values
-            feat_cols.append(col)
-        for w in ROLLING_WINDOWS:
-            for kind in ("mean", "std"):
-                col = f"{TARGET}_roll_{kind}_{w}h"
-                if kind == "mean":
-                    out.loc[idx, col] = pm.shift(1).rolling(w, min_periods=1).mean().values
-                else:
-                    out.loc[idx, col] = pm.shift(1).rolling(w, min_periods=2).std().values
-                feat_cols.append(col)
+    for lag in lags:
+        out[f"{target}_lag{lag}"] = out.groupby("station")[target].shift(lag)
+    shifted1 = out.groupby("station")[target].shift(1)
+    for w in rolling_windows:
+        out[f"{target}_roll_mean_{w}h"] = shifted1.groupby(out["station"]).transform(
+            lambda s: s.rolling(w, min_periods=1).mean()
+        )
+        out[f"{target}_roll_std_{w}h"] = shifted1.groupby(out["station"]).transform(
+            lambda s: s.rolling(w, min_periods=2).std()
+        )
     return out
 
 
@@ -501,10 +523,11 @@ def build_summary(
     df: pd.DataFrame,
     alignment_report: dict[str, Any] | None = None,
     outlier_counts: dict[str, int] | None = None,
+    target: str = TARGET,
 ) -> dict[str, Any]:
     """Generate the dataset summary report (rows/ranges/missing/target/splits)."""
     summary: dict[str, Any] = {
-        "target": TARGET,
+        "target": target,
         "rows": len(df),
         "time_range": {
             "min": str(df["timestamp"].min()) if len(df) else None,
@@ -517,8 +540,8 @@ def build_summary(
         "handling": alignment_report or {},
         "features": {
             "exogenous": EXOGENOUS_FEATURES,
-            "target_history": [f"{TARGET}_lag{h}" for h in LAG_HOURS]
-                              + [f"{TARGET}_roll_{kind}_{w}h" for kind in ("mean", "std") for w in ROLLING_WINDOWS],
+            "target_history": [f"{target}_lag{h}" for h in LAG_HOURS]
+                              + [f"{target}_roll_{kind}_{w}h" for kind in ("mean", "std") for w in ROLLING_WINDOWS],
             "temporal": ["hour_of_day", "day_of_week", "month", "day_of_year", "is_weekend",
                          "hour_sin", "hour_cos", "dayofweek_sin", "dayofweek_cos",
                          "month_sin", "month_cos", "ventilation_norm", "inversion_profile_available"],
@@ -533,7 +556,7 @@ def build_summary(
                 missing[col] = {"count": n, "pct": round(100.0 * n / len(df), 2)}
         summary["missing_values"] = missing
 
-        t = df[TARGET].dropna()
+        t = df[target].dropna()
         summary["target_statistics"] = {
             "count": int(t.count()),
             "mean": round(float(t.mean()), 2),
@@ -566,15 +589,17 @@ def build_training_dataset_from_dataframes(
     wx_df: pd.DataFrame,
     stations_df: pd.DataFrame,
     fires_df: pd.DataFrame,
+    target: str = TARGET,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """End-to-end pure pipeline from DataFrames (deterministic, DB-agnostic)."""
-    df, alignment = align_observations(poll_df, wx_df, stations_df)
+    plausible = PLAUSIBLE_RANGES.get(target, PM25_PLAUSIBLE)
+    df, alignment = align_observations(poll_df, wx_df, stations_df, target=target, plausible=plausible)
     df = add_atmosphere_and_temporal_features(df)
     df = add_fire_features(df, fires_df)
-    df = add_pm25_lags_and_rolling(df)
+    df = add_target_lags_and_rolling(df, target=target)
     df, outlier_counts = flag_outliers(df)
     df = chronological_split(df)
-    summary = build_summary(df, alignment_report=alignment, outlier_counts=outlier_counts)
+    summary = build_summary(df, alignment_report=alignment, outlier_counts=outlier_counts, target=target)
     return df, summary
 
 
@@ -589,12 +614,19 @@ def build_training_dataset_from_db(
     *,
     station_names: list[str] | None = None,
     fire_window_hours: int = FIRE_WINDOW_HOURS,
+    target: str = TARGET,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Load the configured backend database and build the training dataset.
 
     ``db`` may be injected (tests) or None to use the app SessionLocal.
+    ``target`` selects the pollution column to anchor the panel on.
     """
     from backend.app.models.db_models import FireReading, PollutionReading, Station, WeatherReading
+
+    if target not in ALL_POLLUTANTS:
+        raise ValueError(
+            f"target must be one of {ALL_POLLUTANTS}; got {target!r}"
+        )
 
     if db is None:
         from backend.app.database import SessionLocal
@@ -608,7 +640,7 @@ def build_training_dataset_from_db(
             stations = stations[stations["station"].isin(station_names)]
 
         poll = _df_from_model(session, PollutionReading,
-                              ["station_id", "timestamp", "pm25"])
+                              ["station_id", "timestamp", *ALL_POLLUTANTS])
         wx = _df_from_model(session, WeatherReading,
                             ["station_id", "timestamp", "temperature", "humidity",
                              "pressure", "pressure_msl", "surface_pressure",
@@ -628,7 +660,7 @@ def build_training_dataset_from_db(
         wx = wx.dropna(subset=["station"])
 
         return build_training_dataset_from_dataframes(
-            poll, wx, stations[["station", "latitude", "longitude"]], fires
+            poll, wx, stations[["station", "latitude", "longitude"]], fires, target=target
         )
     finally:
         if db is None:

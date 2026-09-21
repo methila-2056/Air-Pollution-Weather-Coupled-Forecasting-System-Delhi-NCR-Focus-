@@ -35,12 +35,18 @@ function dateFmt(s: string | null | undefined) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+function pct(v: number | null | undefined) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '--'
+  return `${(v * 100).toFixed(1)}%`
+}
+
 export default function ModelPerformance({ data }: { data: ModelPerformanceResponse }) {
   if (!data.results?.length) {
     return <div className="card"><p className="text-slate-500">No measured metrics available yet.</p></div>
   }
 
   const models = data.evaluated_models ?? Object.keys(data.results[0].metrics)
+  const target = data.target ?? 'pm25'
 
   // MAE grouped by horizon (xgb + rf + persistence)
   const chartData = data.results.map(r => {
@@ -168,10 +174,62 @@ export default function ModelPerformance({ data }: { data: ModelPerformanceRespo
           </table>
         </div>
         <p className="text-xs text-slate-500 mt-3">
-          Persistence = last observed PM2.5 (pm25_lag1). Test period shown per horizon;
-          all three models are scored on the exact same rows.
+          Persistence = last observed {target.toUpperCase()} ({target}_lag1). Test period shown
+          per horizon; all models are scored on the exact same rows.
         </p>
       </div>
+
+      {/* Conformal interval coverage (honest held-out verification) */}
+      {data.results.some(r => r.coverage?.models) && (
+        <div className="card">
+          <h3 className="card-header">Conformal Interval Coverage (held-out test)</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Split-conformal half-widths are calibrated on the validation (calibration) set only
+            (target {pct(data.results[0]?.coverage?.target ?? 0.85)}); the table reports the measured
+            fraction of held-out test rows inside each interval. Coverage below the target is
+            reported as-is — no claim beyond the measured value.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-200">
+                  <th className="text-left py-2">Horizon</th>
+                  {models.map(m => (
+                    <th key={m} className="text-left py-2 px-2">{MODEL_LABELS[m] ?? m}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.results.map(r => (
+                  <tr key={r.horizon_hours} className="border-b border-slate-100">
+                    <td className="py-2 font-medium text-slate-900">+{r.horizon_hours}h</td>
+                    {models.map(m => {
+                      const c = r.coverage?.models?.[m]
+                      if (!c) return <td key={m} className="py-2 px-2 text-xs text-slate-400">--</td>
+                      const measured = c.test_coverage ?? null
+                      const targetCov = r.coverage?.target ?? c.coverage_target ?? 0.85
+                      const ok = measured !== null && measured >= targetCov - 0.005
+                      return (
+                        <td key={m} className="py-2 px-2 text-xs">
+                          width {fmt(c.quantile)} · measured{' '}
+                          <span className={ok ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
+                            {pct(measured)}
+                          </span>
+                          <span className="text-slate-400"> / {pct(targetCov)}</span>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            Width = calibrated half-interval (±) in {target.toUpperCase()} units. N(cal) per
+            horizon equals the validation split size shown above.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

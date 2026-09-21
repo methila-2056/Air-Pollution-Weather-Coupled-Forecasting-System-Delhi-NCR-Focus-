@@ -1,4 +1,7 @@
-"""Train PM2.5 forecasting models: persistence baseline + direct multi-horizon XGBoost.
+"""Train air-pollution forecasting models: persistence baseline + direct multi-horizon XGBoost.
+
+Default target is PM2.5; ``--target`` switches to another pollutant (pm10, o3,
+no2, so2, co). The pipeline is identical for every target:
 
 Conventions:
     - Strategy: *direct per-horizon* — one independent XGBoost model per forecast
@@ -8,7 +11,7 @@ Conventions:
       production timestamp, never shuffled. The `split` column in the dataset
       identifies the split; validation is used for early stopping and conformal
       calibration.
-    - Targets: pm25[t+h] where h is the horizon; samples where the target falls
+    - Targets: {target}[t+h] where h is the horizon; samples where the target falls
       outside the available rows are dropped (NaN target). Label overlap between
       train/validation at period boundaries is acceptable since it does NOT
       introduce information leakage (input features are the same regardless of
@@ -16,7 +19,7 @@ Conventions:
     - Features: *no random permutation*; all NaN/constant columns across the
       training frame are dropped and recorded in config. Feature ordering is
       stored in the saved config so inference reproduces the same column order.
-    - Baseline: Persistence — pm25_lag1 (last observed value at t-1). Compared
+    - Baseline: Persistence — {target}_lag1 (last observed value at t-1). Compared
       against every horizon to establish the naive reference.
     - Uncertainty: Split-conformal prediction intervals on validation residuals.
       Coverage target configurable (default 85%). The quantile of |y - yhat|
@@ -25,7 +28,7 @@ Conventions:
       guaranteed on the validation set; we make NO claim about online coverage.
     - All metrics reported here are *test-set* metrics (the held-out period).
       Training/validation metrics are never printed as results.
-    - `models/pm25/` directory layout per horizon:
+    - `models/{target}/` directory layout per horizon:
         h-{h}/model.joblib       — fitted XGBoost model
         h-{h}/metrics.json       — MAE, RMSE, R², MAPE, nMAE, persistence metrics
         h-{h}/conformal.json     — calibration quantile, coverage target, n_cal
@@ -85,19 +88,26 @@ TEMPORAL_FEATURES: list[str] = [
     "month_sin", "month_cos",
 ]
 
-PM25_HISTORY_FEATURES: list[str] = [
-    "pm25_lag1", "pm25_lag3", "pm25_lag6", "pm25_lag12", "pm25_lag24",
-    "pm25_roll_mean_3h", "pm25_roll_std_3h",
-    "pm25_roll_mean_6h", "pm25_roll_std_6h",
-    "pm25_roll_mean_12h", "pm25_roll_std_12h",
-    "pm25_roll_mean_24h", "pm25_roll_std_24h",
-]
+HISTORY_LAGS = [1, 3, 6, 12, 24]
+HISTORY_ROLLING = [3, 6, 12, 24]
 
-CANDIDATE_FEATURES = EXOGENOUS_FEATURES + TEMPORAL_FEATURES + PM25_HISTORY_FEATURES
+
+def target_history_features(target: str) -> list[str]:
+    """Per-target causal history feature names (lags + rolling mean/std)."""
+    return (
+        [f"{target}_lag{h}" for h in HISTORY_LAGS]
+        + [f"{target}_roll_mean_{w}h" for w in HISTORY_ROLLING]
+        + [f"{target}_roll_std_{w}h" for w in HISTORY_ROLLING]
+    )
+
+
+def candidate_features_for(target: str) -> list[str]:
+    return EXOGENOUS_FEATURES + TEMPORAL_FEATURES + target_history_features(target)
+
 
 # Strings / metadata — never fed to the model
-_DROP_COLUMNS: set[str] = {
-    "station_id", "timestamp", "pm25", "station", "hour",
+_BASE_DROP_COLUMNS: set[str] = {
+    "station_id", "timestamp", "station", "hour",
     "latitude", "longitude", "split",
     "inversion_category", "inversion_source",
     "temperature_1000hPa", "temperature_925hPa",
@@ -113,8 +123,20 @@ _DROP_COLUMNS: set[str] = {
     "outlier_fire_impact_score", "outlier_nearest_fire_distance",
     "outlier_wind_aligned_fire_count", "outlier_wind_alignment_pct",
     "outlier_transport_time_hours", "outlier_transport_risk",
-    "outlier_stubble_impact_score", "outlier_pm25",
+    "outlier_stubble_impact_score",
 }
+
+
+def drop_columns_for(target: str) -> set[str]:
+    """Drop set for a given target: base metadata + every pollutant raw column
+    (the targets themselves) + their outlier flags."""
+    drop = set(_BASE_DROP_COLUMNS)
+    for pol in ALL_TARGETS:
+        if pol in ("pm25", "pm10", "o3", "no2", "so2", "co"):
+            drop.add(pol)
+            drop.add(f"outlier_{pol}")
+            drop.add("aqi")
+    return drop
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Defaults
@@ -125,6 +147,8 @@ FULL_HORIZONS: list[int] = list(range(1, 73))  # 1..72 for task-2
 DEFAULT_COVERAGE: float = 0.85
 
 TARGET = "pm25"
+
+ALL_TARGETS = ["pm25", "pm10", "o3", "no2", "so2", "co"]
 
 DEFAULT_XGB_PARAMS: dict[str, Any] = {
     "n_estimators": 300,
@@ -152,9 +176,9 @@ def _resolve_outlier_cols(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c.startswith("outlier_")]
 
 
-def _resolve_candidate_features(df: pd.DataFrame) -> list[str]:
+def _resolve_candidate_features(df: pd.DataFrame, target: str = TARGET) -> list[str]:
     """Return the intersection of candidate features present in df."""
-    return [f for f in CANDIDATE_FEATURES if f in df.columns]
+    return [f for f in candidate_features_for(target) if f in df.columns]
 
 
 def _select_features(
@@ -170,7 +194,7 @@ def _select_features(
     if candidates is None:
         candidates = _resolve_candidate_features(df)
     if drop is None:
-        drop = _DROP_COLUMNS
+        drop = drop_columns_for(TARGET)
 
     features: list[str] = []
     reasons: dict[str, str] = {}
@@ -269,6 +293,7 @@ def train_horizon(
     xgb_params: dict[str, Any],
     early_stopping_rounds: int = 25,
     conformal_coverage: float = DEFAULT_COVERAGE,
+    target: str = TARGET,
 ) -> dict[str, Any]:
     """Train one XGBoost model for a single horizon; return model + metrics dict.
 
@@ -286,12 +311,13 @@ def train_horizon(
     if target_col not in df.columns:
         raise ValueError(f"Target column {target_col} not found in dataset")
 
-    # Rows where the target AND the last-known observation (pm25_lag1, used for
-    # the persistence baseline) are available. Feature columns may contain NaN
-    # (e.g. PBL height was missing historically); XGBoost learns NaN-aware
+    # Rows where the target AND the last-known observation ({target}_lag1, used
+    # for the persistence baseline) are available. Feature columns may contain
+    # NaN (e.g. PBL height was missing historically); XGBoost learns NaN-aware
     # splits natively, so we do NOT drop rows for missing features. This keeps
     # the XGBoost and persistence baselines on the exact same test rows.
-    valid_mask = df[target_col].notna() & df["pm25_lag1"].notna()
+    lag1_col = f"{target}_lag1"
+    valid_mask = df[target_col].notna() & df[lag1_col].notna()
     df_valid = df.loc[valid_mask].copy()
 
     train = df_valid[df_valid["split"] == "train"]
@@ -305,9 +331,9 @@ def train_horizon(
     X_test  = test[features].values
     y_test  = test[target_col].values
 
-    # Persistence baseline: predict pm25_lag1 for every sample
-    persist_test = test["pm25_lag1"].values
-    persist_val  = val["pm25_lag1"].values
+    # Persistence baseline: predict {target}_lag1 for every sample
+    persist_test = test[lag1_col].values
+    persist_val  = val[lag1_col].values
 
     persistence_test_metrics = _compute_metrics(y_test, persist_test)
     persistence_val_metrics  = _compute_metrics(y_val, persist_val)
@@ -373,6 +399,7 @@ def run_training(
     coverage: float = DEFAULT_COVERAGE,
     max_test_rows: int | None = DEFAULT_TEST_MAX_ROWS,
     xgb_params: dict[str, Any] | None = None,
+    target: str = TARGET,
 ) -> dict[str, Any]:
     """End-to-end training pipeline.
 
@@ -391,6 +418,7 @@ def run_training(
     logger.info("Loading dataset: %s", csv_path)
     df = pd.read_csv(csv_path, parse_dates=["timestamp", "hour"])
     logger.info("Loaded %d rows, %d columns", len(df), len(df.columns))
+    logger.info("Target pollutant: %s", target)
 
     if max_test_rows is not None and max_test_rows < len(df):
         # Quick diagnostic mode: keep a strided sample across the FULL timeline
@@ -402,7 +430,8 @@ def run_training(
         logger.info("Diagnostic mode: kept every %d-th row (%d rows)", stride, len(df))
 
     # Feature selection
-    features, dropped = _select_features(df)
+    candidates = _resolve_candidate_features(df, target)
+    features, dropped = _select_features(df, candidates=candidates, drop=drop_columns_for(target))
     logger.info("Usable features: %d | Dropped: %d", len(features), len(dropped))
     for col, reason in dropped.items():
         logger.info("  DROP %s -> %s", col, reason)
@@ -428,7 +457,7 @@ def run_training(
     for h in horizons:
         target_col = f"target_h{h}"
         if target_col not in df.columns:
-            df[target_col] = df.groupby("station")[TARGET].shift(-h)
+            df[target_col] = df.groupby("station")[target].shift(-h)
     logger.info("Target columns created for horizons: %s", horizons)
 
     # ── Train per horizon ────────────────────────────────────────────────────
@@ -444,7 +473,7 @@ def run_training(
 
         logger.info("--- Training horizon %dh ---", h)
         t_h0 = time.time()
-        res = train_horizon(df, features, h, xgb_params, conformal_coverage=coverage)
+        res = train_horizon(df, features, h, xgb_params, conformal_coverage=coverage, target=target)
 
         # Save model
         h_dir = model_dir / f"h-{h}"
@@ -454,6 +483,7 @@ def run_training(
         # Save metrics
         metrics_payload = {
             "horizon_hours": h,
+            "target": target,
             "features": features,
             "n_features": len(features),
             "n_train": res["n_train"],
@@ -499,16 +529,16 @@ def run_training(
             "station": df.loc[test_idx, "station"].values,
             "timestamp": df.loc[test_idx, "timestamp"].values,
             "horizon_hours": h,
-            "actual_pm25": df.loc[test_idx, target_col].values,
-            "predicted_pm25_xgb": res["test_pred"],
-            "predicted_pm25_persist": df.loc[test_idx, "pm25_lag1"].values,
+            f"actual_{target}": df.loc[test_idx, target_col].values,
+            f"predicted_{target}_xgb": res["test_pred"],
+            f"predicted_{target}_persist": df.loc[test_idx, f"{target}_lag1"].values,
         })
         all_test_preds.append(preds_df)
 
     # ── Save config ──────────────────────────────────────────────────────────
 
     config = {
-        "target": "pm25",
+        "target": target,
         "horizons": horizons,
         "features": features,
         "n_features": len(features),
@@ -519,8 +549,8 @@ def run_training(
         "chronological_split": True,
         "shuffle": False,
         "sample_convention": (
-            "Row at time t contains features (exogenous + pm25 history lags/rolling) "
-            "available at t; target = pm25[t+h]. No pm25[t] used as a feature."
+            f"Row at time t contains features (exogenous + {target} history lags/rolling) "
+            f"available at t; target = {target}[t+h]. No {target}[t] used as a feature."
         ),
         "strategy": "direct per-horizon — one independent XGB model per horizon, no recursive chaining",
         "uncertainty_method": (
@@ -534,8 +564,8 @@ def run_training(
         "stations": list(station_counts.keys()),
         "split_counts": split_counts,
         "persistence_baseline": (
-            "pm25_lag1: last observed PM2.5 at t-1, constant across all horizons. "
-            "Used as the naive reference for every forecast horizon."
+            f"{target}_lag1: last observed {target.upper()} at t-1, constant across all "
+            "horizons. Used as the naive reference for every forecast horizon."
         ),
         "model_dir": str(model_dir),
         "trained_at": pd.Timestamp.now("UTC").isoformat(),
@@ -584,7 +614,7 @@ def run_training(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train PM2.5 forecasting models (persistence + XGBoost).",
+        description="Train pollution forecasting models (persistence + XGBoost).",
     )
     parser.add_argument(
         "--data",
@@ -593,8 +623,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--model-dir",
-        default=os.path.join("models", "pm25"),
-        help="Directory to save trained models (default: models/pm25)",
+        default=None,
+        help="Directory to save trained models (default: models/{target})",
     )
     parser.add_argument(
         "--horizons",
@@ -613,16 +643,24 @@ def main() -> None:
         default=DEFAULT_COVERAGE,
         help=f"Conformal coverage target (default: {DEFAULT_COVERAGE})",
     )
+    parser.add_argument(
+        "--target",
+        default=TARGET,
+        choices=ALL_TARGETS,
+        help=f"Pollutant target to train (default: {TARGET})",
+    )
     args = parser.parse_args()
     horizons = _parse_horizon_arg(args.horizons)
-    logger.info("Horizons: %s (%d models)", horizons, len(horizons))
+    model_dir = args.model_dir or os.path.join("models", args.target)
+    logger.info("Target: %s | Horizons: %s (%d models)", args.target, horizons, len(horizons))
 
     run_training(
         csv_path=args.data,
         horizons=horizons,
-        model_dir=args.model_dir,
+        model_dir=model_dir,
         coverage=args.coverage,
         max_test_rows=args.max_test_rows,
+        target=args.target,
     )
 
 

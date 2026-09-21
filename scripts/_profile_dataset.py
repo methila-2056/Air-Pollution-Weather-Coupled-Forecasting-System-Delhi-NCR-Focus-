@@ -11,7 +11,7 @@ from backend.app.models.db_models import FireReading, PollutionReading, Station,
 from ml.preprocessing.training_dataset import (
     add_atmosphere_and_temporal_features,
     add_fire_features,
-    add_pm25_lags_and_rolling,
+    add_target_lags_and_rolling,
     align_observations,
     chronological_split,
     flag_outliers,
@@ -69,7 +69,7 @@ def main() -> None:
     log(f"fire: {time.time()-t0:.1f}s")
 
     t0 = time.time()
-    df = add_pm25_lags_and_rolling(df)
+    df = add_target_lags_and_rolling(df)
     log(f"lags: {time.time()-t0:.1f}s")
 
     t0 = time.time()
