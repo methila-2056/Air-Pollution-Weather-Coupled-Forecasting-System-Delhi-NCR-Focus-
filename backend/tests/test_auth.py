@@ -52,6 +52,19 @@ def test_access_token_roundtrip():
     assert payload["sub"] == "7"
     assert payload["email"] == "u@test.in"
     assert payload["iss"] == "aerocast-ncr"
+    assert "name" not in payload
+    assert "role" not in payload
+
+
+def test_access_token_embeds_profile_claims_only_when_given():
+    secret = "test-secret"
+    token = create_access_token(
+        7, "u@test.in", secret, expires_minutes=60, name="Test User", role="admin"
+    )
+    payload = decode_access_token(token, secret)
+    assert payload is not None
+    assert payload["name"] == "Test User"
+    assert payload["role"] == "admin"
 
 
 def test_access_token_wrong_secret():
@@ -124,6 +137,35 @@ def test_me_with_valid_token(client, db_session):
 
 def test_me_without_token(client):
     response = client.get("/api/auth/me")
+    assert response.status_code == 401
+
+
+def test_me_resolves_profile_from_token_claims_without_db_roundtrip(client, db_session):
+    """The sign-in fix: /auth/me must answer from the signed JWT claims alone.
+
+    A valid token carrying name/role/email must return the profile even when the
+    user row no longer exists — proving no database lookup blocks the session
+    check (the hosted Postgres can take 16-30s to resume).
+    """
+    secret = get_settings().secret_key
+    token = create_access_token(999999, "ghost@test.in", secret, expires_minutes=60, name="Ghost User", role="viewer")
+    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "ghost@test.in"
+    assert body["name"] == "Ghost User"
+    assert body["role"] == "viewer"
+    assert body["id"] == 999999
+
+
+def test_me_falls_back_to_db_for_legacy_token_without_claims(client, db_session):
+    """Pre-fix tokens lack the profile claims and must still resolve via the DB.
+
+    For an unknown user id the DB fallback must 401 (and must not silently mint
+    a profile out of thin air).
+    """
+    token = create_access_token(999999, "ghost@test.in", get_settings().secret_key, expires_minutes=60)
+    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
