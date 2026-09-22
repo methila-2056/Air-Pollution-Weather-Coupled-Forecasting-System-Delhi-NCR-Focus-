@@ -1,6 +1,6 @@
 """Unit tests for the atmospheric-condition analysis layer."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from app.models.db_models import Station, WeatherReading
@@ -60,7 +60,10 @@ class TestVentilation:
 
 
 def _add_latest_weather(db_session, station, **kwargs):
-    base = datetime.now(UTC).replace(tzinfo=None).replace(minute=0, second=0, microsecond=0) + timedelta(minutes=1)
+    # Timestamp "now" (not +1 min): analyze_station treats rows ahead of now
+    # as un-applicable forecast hours, which made this helper race the minute
+    # boundary instead of deterministically being the latest stored row.
+    base = datetime.now(UTC).replace(tzinfo=None)
     row = WeatherReading(
         station_id=station.id,
         timestamp=base,

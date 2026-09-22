@@ -243,6 +243,19 @@ def health_probe():
 
 @app.get("/api/data-quality")
 def data_quality():
+    """Row counts + missing-value audit; cached, see ``ttl_cache``.
+
+    This endpoint runs a per-column NULL audit over every observation table
+    (roughly 235k rows) — several seconds on the pooled Neon Postgres. The
+    result only changes with a live refresh / demo re-seed, so it is served
+    from a short TTL cache after the first computation.
+    """
+    from .services.ttl_cache import cached
+
+    return cached("data-quality", 300, _data_quality_report)
+
+
+def _data_quality_report():
     from .models.db_models import (
         Alert,
         FireReading,

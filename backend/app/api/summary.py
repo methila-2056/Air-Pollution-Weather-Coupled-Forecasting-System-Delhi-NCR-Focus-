@@ -3,11 +3,11 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..database import get_db
 from ..models.db_models import Alert, FireReading, Forecast, ModelMetrics, PollutionReading, Station
 from ..schemas.schemas import StationAQISummary, SummaryResponse
 from ..services.aqi_calculator import get_aqi_category, get_dominant_pollutant
-from ..config import get_settings
 
 settings = get_settings()
 
@@ -22,7 +22,16 @@ def get_summary(db: Session = Depends(get_db)):
     stations are reporting, the current network-average AQI, the worst and
     best station, live fire forcing, open alerts, and forecast/model
     coverage. Backed entirely by persisted service-state tables.
+
+    Cached for 60 s — the per-station latest-reading scans are a few seconds
+    on the pooled Neon Postgres.
     """
+    from ..services.ttl_cache import cached
+
+    return cached("summary", 60, lambda: _build_summary(db))
+
+
+def _build_summary(db: Session) -> object:
     stations = db.query(Station).order_by(Station.name).all()
 
     since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)

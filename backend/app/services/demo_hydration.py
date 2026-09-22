@@ -292,6 +292,9 @@ async def hydrate_demo_if_empty(stop: asyncio.Event) -> None:
         finally:
             db.close()
 
+        from .ttl_cache import invalidate_all
+
+        invalidate_all()
         logger.info("demo hydration complete")
     except asyncio.CancelledError:
         raise

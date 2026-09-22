@@ -25,8 +25,24 @@ def get_atmosphere_current(
     OBSERVED / DERIVED / ESTIMATED. See ``methodology`` for the exact
     formulas and limitations.
     """
-    result = get_current_atmosphere(db)
+    result = _current_atmosphere_cached(db)
     if station_name:
-        result["stations"] = [s for s in result["stations"] if s["station"] == station_name]
-        result["summary"]["stations_analyzed"] = len(result["stations"])
+        stations = [s for s in result["stations"] if s["station"] == station_name]
+        out = dict(result)
+        out["stations"] = stations
+        out["summary"] = dict(result["summary"])
+        out["summary"]["stations_analyzed"] = len(stations)
+        return out
     return result
+
+
+def _current_atmosphere_cached(db):
+    """Compute once per TTL window — see ``services.ttl_cache``.
+
+    Building the profile for all 17 stations means ~50 sequential queries to
+    the pooled Neon Postgres (~11 s); the underlying observations only change
+    on the 3-hour refresh cadence, so cache the serialisable result.
+    """
+    from ..services.ttl_cache import cached
+
+    return cached("atmosphere:current", 300, lambda: get_current_atmosphere(db))

@@ -402,6 +402,10 @@ def run_refresh_once(db=None, dry_run: bool = False) -> dict:
         summary["weather"] = refresh_weather(session, dry_run=dry_run)
         summary["fire"] = refresh_fire(session, dry_run=dry_run)
         summary["pollution"] = refresh_pollution(session, dry_run=dry_run)
+        if not dry_run:
+            from .ttl_cache import invalidate_all
+
+            invalidate_all()
         if dry_run:
             session.rollback()
     except Exception as exc:

@@ -405,12 +405,6 @@ def analyze_station(db, station, now: datetime | None = None) -> dict[str, Any]:
         .order_by(PollutionReading.timestamp.desc())
         .first()
     )
-    pollution = (
-        db.query(PollutionReading)
-        .filter(PollutionReading.station_id == station.id)
-        .order_by(PollutionReading.timestamp.desc())
-        .first()
-    )
 
     wind_raw = _float(getattr(weather, "wind_speed", None))
     direction = _float(getattr(weather, "wind_direction", None))
