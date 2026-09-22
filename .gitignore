@@ -5,6 +5,8 @@ node_modules/
 .vite/
 .pytest_cache/
 .ml-cache/
+.coverage
+.coverage.*
 *.egg-info/
 .DS_Store
 

@@ -33,6 +33,7 @@ environment. **Every script is run from the repository root** so `ml/`,
 | `backfill_pollution.py` | Backfill historical CPCB pollution for the 17 NCR stations |
 | `refresh_once.py` | Run a one-shot live data refresh (weather / fire / pollution) against the configured DB |
 | `run_dev.py` | Launch the local stack in one command: seed DB → backend → (optional) frontend |
+| `clean_generated.py` | Remove regenerable build/data artifacts (caches, logs, local DBs, `frontend/dist`, engineered datasets); backs the `make clean-data` target. Dry-run by default, `--exec` to apply |
 | `environment_check.py` | Sanity-check dependencies, model artifacts and DB connectivity before running anything |
 
 ## Wrappers
@@ -61,4 +62,7 @@ python -m scripts.download_hysplit_gdas --start 2025-10-01 --days 7 --out-dir da
 
 # Boot the full local stack (DB seed + API + optional frontend)
 python -m scripts.run_dev --port 8000 --frontend
+
+# Preview what `make clean-data` would remove (add --exec to apply)
+python -m scripts.clean_generated
 ```
