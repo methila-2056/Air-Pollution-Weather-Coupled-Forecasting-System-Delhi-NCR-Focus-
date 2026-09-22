@@ -3,6 +3,18 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.6] - 2026-09
+
+### Fixed (developer tooling)
+- **`make clean-data` no longer fails.** The target referenced a missing
+  `scripts/clean_generated.py`; the script now exists and is documented in
+  `scripts/README.md`. It removes only regenerable artifacts (Python/tooling
+  caches, runtime logs, local `*.db`, `frontend/dist`, engineered datasets and
+  ML byproducts), never source CSVs or committed model weights. Dry-run is the
+  default; pass `--exec` to apply. Virtualenv-internal caches are excluded.
+- **Pytest coverage artifacts are now gitignored** (`.coverage`, `.coverage.*`),
+  keeping `git status` clean after `pytest --cov` runs.
+
 ## [1.8.5] - 2026-09
 
 ### Fixed (demo panels on warm databases + honest status badge)
