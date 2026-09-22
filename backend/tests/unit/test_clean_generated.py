@@ -47,3 +47,13 @@ def test_exec_does_not_delete_source(monkeypatch, tmp_path):
     _run(monkeypatch, tmp_path, ["--exec"])
 
     assert keep.exists()
+
+
+def test_exec_never_touches_virtualenv(monkeypatch, tmp_path):
+    venv_pyc = tmp_path / ".venv" / "Lib" / "site-packages" / "pkg.pyc"
+    venv_pyc.parent.mkdir(parents=True)
+    venv_pyc.write_bytes(b"\x00")
+
+    _run(monkeypatch, tmp_path, ["--exec"])
+
+    assert venv_pyc.exists()

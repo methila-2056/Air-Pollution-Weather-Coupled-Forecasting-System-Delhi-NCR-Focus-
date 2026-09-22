@@ -47,8 +47,8 @@ def main() -> None:
     removed: list[Path] = []
     for pattern in REGENERABLE:
         for match in PROJECT_ROOT.glob(pattern):
-            if not match.is_absolute():
-                pass
+            if ".venv" in match.parts:
+                continue
             removed.append(match)
 
     removed = sorted(set(removed))
