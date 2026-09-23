@@ -7,9 +7,33 @@ from ml.features.coupling import coupling_feedback_score
 
 from ..database import get_db
 from ..models.db_models import PollutionReading, Station, WeatherReading
-from ..schemas.schemas import CouplingDiagnostics, CouplingResponse
+from ..schemas.schemas import (
+    CouplingDiagnostics,
+    CouplingFeaturesResponse,
+    CouplingResponse,
+)
 
 router = APIRouter()
+
+
+@router.get("/coupling/features/{station_name}", response_model=CouplingFeaturesResponse)
+def get_coupling_features(station_name: str, db: Session = Depends(get_db)):
+    """Nine SIH26082 meteorology-pollution-fire coupling features (real data).
+
+    Computes dispersion/accumulation/inversion-trapping/stagnation/aerosol/
+    fire-transport/regional-transport/ozone-photochemical/feedback-surrogate
+    features from the latest STORED observations (CPCB pollution, Open-Meteo
+    weather incl. vertical pressure-level temperatures, NASA FIRMS fires).
+    Missing inputs yield ``value: null`` + ``available: false`` — never an
+    invented number.
+    """
+    station = db.query(Station).filter(Station.name == station_name).first()
+    if not station:
+        raise HTTPException(status_code=404, detail=f"Station '{station_name}' not found")
+
+    from ..services.coupling_service import get_coupling_features as _features
+
+    return _features(db, station)
 
 
 @router.get("/coupling/{station_name}", response_model=CouplingResponse)

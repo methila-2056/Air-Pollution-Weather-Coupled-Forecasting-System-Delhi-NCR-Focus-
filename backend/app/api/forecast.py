@@ -9,6 +9,7 @@ from ..models.db_models import Alert, Forecast, PollutionReading, Station
 from ..schemas.schemas import (
     ForecastComparisonPoint,
     ForecastComparisonResponse,
+    ForecastContextResponse,
     ForecastGenerateRequest,
     ForecastGenerateResponse,
     ForecastPoint,
@@ -243,6 +244,21 @@ def get_ncr_forecast(hours: int = Query(default=72, ge=1, le=72), db: Session = 
         )
         result[station.name] = [_to_forecast_point(f) for f in forecasts]
     return result
+
+@router.get("/forecast/{station_name}/context", response_model=ForecastContextResponse)
+def get_forecast_context(station_name: str, db: Session = Depends(get_db)):
+    """Per-horizon atmospheric + coupling context for the 72h forecast window.
+
+    For each horizon (1..72h) returns the nearest stored weather observation's
+    atmosphere (temperature, humidity, pressure, wind, PBL, lapse-rate
+    inversion status) plus the coupling-engine features derived from it.
+    Missing rows are reported as nulls (UI renders "Data unavailable") and are
+    never filled with synthetic values.
+    """
+    station = _station_or_404(db, station_name)
+    from ..services.coupling_service import get_forecast_context as _context
+
+    return _context(db, station)
 
 @router.get("/forecast/{station_name}", response_model=list[ForecastPoint])
 def get_forecast(station_name: str, hours: int = Query(default=72, ge=1, le=72), db: Session = Depends(get_db)):

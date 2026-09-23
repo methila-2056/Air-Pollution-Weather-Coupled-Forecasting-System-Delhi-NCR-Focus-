@@ -1,6 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { latestForecastRun } from '../lib/forecast'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials, PollutionEventsCurrent, DataQualityResponse, SystemResponse } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CouplingFeaturesResponse, ForecastContextResponse, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials, PollutionEventsCurrent, DataQualityResponse, SystemResponse } from '../types'
 
 const TOKEN_KEY = 'aerocast_token'
 const USER_KEY = 'aerocast_user'
@@ -97,6 +97,8 @@ export const getForecastExplanation = (forecastId: number) =>
 export const getPm25ForecastExplanation = (station: string, horizon = 24) =>
   api.get<ForecastExplanation>('/forecast/pm25/explanation', { params: { station_name: station, horizon } })
 export const getCoupling = (station: string) => api.get<CouplingData>(`/coupling/${station}`)
+export const getCouplingFeatures = (station: string) => api.get<CouplingFeaturesResponse>(`/coupling/features/${station}`)
+export const getForecastContext = (station: string) => api.get<ForecastContextResponse>(`/forecast/${station}/context`)
 export const generateCoupledForecast = (station: string, horizons?: number[]) =>
   api.post<CoupledForecastResult>('/forecast/coupled', { station_name: station, horizons: horizons ?? [1, 6, 12, 24, 48, 72] }, { timeout: 120000 })
 export const getGridForecast = (horizon = 24) => api.get<GridForecast>('/grid/forecast', { params: { horizon_hours: horizon } })

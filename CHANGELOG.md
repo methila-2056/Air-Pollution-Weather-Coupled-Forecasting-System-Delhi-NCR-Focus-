@@ -3,6 +3,44 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.9.0] - 2026-09
+
+### Added (backend)
+- **Coupling engine — nine named meteorology–pollution–fire features.** New pure module
+  `ml/features/coupling_engine.py` computes dispersion/accumulation potential,
+  inversion trapping, pollution stagnation, aerosol accumulation, fire-transport influence,
+  regional transport, ozone-photochemical potential and a meteorology–pollution interaction
+  surrogate (all 0..1 with an explicit `basis` string). Missing inputs → `None`
+  ("Data unavailable"), never invented.
+- **Endpoints** `GET /api/coupling/features/{station}` and
+  `GET /api/forecast/{station}/context` (72 horizons, each with the nearest stored weather
+  row ±2 h up to ±6 h, lapse-rate inversion state and coupling features). New schemas:
+  `CouplingFeaturesResponse`, `ForecastHorizonContext`, `ForecastContextResponse`.
+- **WRF-Chem spec interface.** `WRFChemAdapter.validate_configuration()`,
+  `run_forecast()` and `get_output()` now exist and surface exact configuration failures —
+  still honest: no genuine `wrfout_d01_*.nc` output → `CtmUnavailable`.
+
+### Added (frontend)
+- **Atmospheric-context table** on the 72h Forecast page (per-horizon temp, wind, PBL,
+  inversion category/source, dispersion, accumulation, stagnation, fire/regional transport,
+  O3 potential) with Low/Moderate/High bands.
+- **Dispersion/accumulation + regional-influence panels** on the Atmosphere page
+  (feature bars + per-feature basis, provenance for fire data).
+- **Plume-transport pathway overlay**: upwind (≤500 km, wind-FROM within ±90°) FIRMS fires
+  ranked by FRP render as dashed amber corridors to the Delhi NCR centroid (top 6), with a
+  wind vector, "regional mean wind FROM <compass>" and an explanatory centroid popup.
+
+### Changed (frontend)
+- **About modal** now shows a data-source table + a six-item scientific limitations list
+  (honest WRF-Chem adapter, PBL/inversion proxies, coupling potentials).
+- **Architecture page** loads live `/api/model/performance` XGBoost metrics instead of
+  hardcoded accuracy claims; Overview page deduplicated its AQI categories onto `lib/aqi`.
+
+### Tests
+- `backend/tests/unit/test_coupling_engine.py` (15) and `backend/tests/test_coupling_features_api.py`
+  (8) added; CTM engine suite extended with the WRF-Chem spec-interface contract. Frontend
+  `tsc --noEmit` + `vite build` verified.
+
 ## [1.8.8] - 2026-09
 
 ### Added (frontend)

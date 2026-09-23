@@ -12,17 +12,8 @@ import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import { CHART } from '../lib/theme'
+import { aqiCategory } from '../lib/aqi'
 import type { Station, PollutionReading, ForecastPoint, WeatherData, InversionData, FireActivity, PlumeRisk, Explanation, CouplingData, SummaryResponse } from '../types'
-
-function aqiCategory(aqi?: number | null): string {
-  if (aqi == null) return '--'
-  if (aqi <= 50) return 'Good'
-  if (aqi <= 100) return 'Satisfactory'
-  if (aqi <= 200) return 'Moderate'
-  if (aqi <= 300) return 'Poor'
-  if (aqi <= 400) return 'Very Poor'
-  return 'Severe'
-}
 
 export default function Overview() {
   const [stations, setStations] = useState<Station[]>([])
@@ -175,7 +166,7 @@ export default function Overview() {
         <AQICard label="NO₂" value={selectedReading?.no2} unit="μg/m³" />
         <AQICard label="SO₂" value={selectedReading?.so2} unit="μg/m³" />
         <AQICard label="CO" value={selectedReading?.co} unit="mg/m³" />
-        <AQICard label="Category" value={selectedReading ? aqiCategory(selectedReading.aqi) : '--'} />
+        <AQICard label="Category" value={selectedReading ? aqiCategory(selectedReading.aqi, '--') : '--'} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">

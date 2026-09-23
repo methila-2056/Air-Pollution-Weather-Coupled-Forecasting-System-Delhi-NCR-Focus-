@@ -14,6 +14,12 @@ The adapter is *honest by construction*:
   exact missing ingredient.
 - Units are taken verbatim from the file where present (default ``ug/m3``),
   no artificial normalization is performed.
+
+SIH26082-facing interface (mirrors the spec's controller calls)::
+
+    adapter.validate_configuration()  # -> list[str] failure reasons (empty = valid)
+    adapter.run_forecast(...)         # -> CtmResult (alias of run, raises when not ready)
+    adapter.get_output()              # -> dict describing the real surface, or raises
 """
 
 from __future__ import annotations
@@ -75,6 +81,48 @@ class WRFChemAdapter:
         if self._first_pm25_var() is None:
             reasons.append("WRF-Chem: no PM2.5 field found in the wrfout files")
         return reasons
+
+    # -- SIH26082 controller interface ------------------------------------
+    def validate_configuration(self) -> list[str]:
+        """Return the list of configuration/feasibility failures (empty = ready).
+
+        Mirrors the spec's ``validate_configuration()`` required for the WRF-Chem
+        interface: every string states exactly which ingredient is missing, so
+        callers always know why the CTM surface is unavailable.
+        """
+        if self.is_available():
+            return []
+        return self.unavailable_reasons()
+
+    def run_forecast(
+        self,
+        start_utc: _dt.datetime,
+        hours: int,
+        domain: dict[str, float],
+        grid_step: float,
+        sources: list[dict[str, float]] | None = None,
+    ) -> CtmResult:
+        """Spec-named alias of :meth:`run` (raises ``CtmUnavailable`` when not ready)."""
+        return self.run(start_utc, hours, domain, grid_step, sources=sources)
+
+    def get_output(self) -> dict[str, object]:
+        """Describe the real WRF-Chem surface available to the grid, or raise.
+
+        Returns a lightweight description (file list + detected PM2.5 variable)
+        without loading the arrays. Raising ``CtmUnavailable`` keeps the honest
+        contract: absence of genuine ``wrfout_d01_*.nc`` output is never hidden.
+        """
+        if not self.is_available():
+            raise CtmUnavailable("\n  - ".join(self.unavailable_reasons()))
+        var = self._first_pm25_var()
+        return {
+            "engine": self.name,
+            "available": True,
+            "files": sorted(str(p.name) for p in self._output_files()),
+            "pm25_variable": var,
+            "field": "ground-level PM2.5 (lowest model level / 2m)",
+            "note": "real WRF-Chem wrfout NetCDF output consumed verbatim; no synthetic fields",
+        }
 
     def _output_files(self) -> list[pathlib.Path]:
         if not self.output_dir or not self.output_dir.is_dir():

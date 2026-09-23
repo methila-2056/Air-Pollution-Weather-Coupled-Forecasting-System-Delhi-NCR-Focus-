@@ -2,6 +2,7 @@ import { MapContainer, TileLayer, Popup, CircleMarker, Polyline } from 'react-le
 import 'leaflet/dist/leaflet.css'
 import type { Station, FireHotspot, PollutionReading } from '../types'
 import { aqiStyle } from '../lib/aqi'
+import type { TransportPathway } from '../lib/geo'
 
 const DELHI_CENTER: [number, number] = [28.6139, 77.209]
 
@@ -18,6 +19,7 @@ interface Props {
   fires?: FireHotspot[]
   pollution?: PollutionReading[]
   wind?: WindVector[]
+  pathways?: TransportPathway[]
 }
 
 function frpColor(frp?: number | null): string {
@@ -61,11 +63,17 @@ function windArrowPoints(w: WindVector): [number, number][] {
   return [back, tip, left, tip, right]
 }
 
-export default function StationMap({ stations, onSelectStation, fires = [], pollution = [], wind = [] }: Props) {
+function keyOf(lat: number, lon: number): string {
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`
+}
+
+export default function StationMap({ stations, onSelectStation, fires = [], pollution = [], wind = [], pathways = [] }: Props) {
   const latest = new Map<number, PollutionReading>()
   pollution.forEach(p => {
     if (!latest.has(p.station_id)) latest.set(p.station_id, p)
   })
+
+  const pathwayOrigins = new Set(pathways.map((p) => keyOf(p.from.lat, p.from.lon)))
 
   return (
     <MapContainer
@@ -86,6 +94,27 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
         attribution='&copy; OpenStreetMap contributors &copy; CARTO'
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
+      {pathways.length > 0 && (
+        <CircleMarker
+          center={DELHI_CENTER}
+          pathOptions={{ color: '#b45309', weight: 2, fill: false, dashArray: '4 3' }}
+          radius={16}
+        >
+          <Popup>
+            <div className="text-sm">
+              <p className="font-bold text-slate-900">Delhi NCR (centroid)</p>
+              <p className="text-xs text-slate-500">Dashed lines mark the highest-FRP upwind fires whose smoke regional winds would advect toward NCR (advective estimate, not a plume chemistry model).</p>
+            </div>
+          </Popup>
+        </CircleMarker>
+      )}
+      {pathways.map((p, i) => (
+        <Polyline
+          key={`pathway-${i}`}
+          positions={[[p.from.lat, p.from.lon], [p.to.lat, p.to.lon]]}
+          pathOptions={{ color: '#b45309', weight: 1.5, dashArray: '6 6', opacity: 0.7 }}
+        />
+      ))}
       {fires.map((f, i) => (
         <CircleMarker
           key={`${f.lat}-${f.lon}-${i}`}
@@ -98,11 +127,25 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
               <p className="font-bold">FIRMS Hotspot</p>
               <p>FRP: {f.frp?.toFixed(1) ?? '--'} MW</p>
               <p>Confidence: {f.confidence ?? '--'}</p>
+              {pathwayOrigins.has(keyOf(f.lat, f.lon)) && (
+                <p className="text-amber-700">Winds would advect this smoke toward Delhi NCR (estimate)</p>
+              )}
               {f.acq_date && <p>{String(f.acq_date).slice(0, 16)}</p>}
             </div>
           </Popup>
         </CircleMarker>
       ))}
+      {fires.map((f, i) => {
+        if (!pathwayOrigins.has(keyOf(f.lat, f.lon))) return null
+        return (
+          <CircleMarker
+            key={`ring-${i}`}
+            center={[f.lat, f.lon]}
+            pathOptions={{ color: '#b45309', weight: 1.5, fill: false, dashArray: '4 3' }}
+            radius={frpRadius(f.frp) + 4}
+          />
+        )
+      })}
       {wind.map((w, i) => (
         <Polyline
           key={`wind-${i}`}

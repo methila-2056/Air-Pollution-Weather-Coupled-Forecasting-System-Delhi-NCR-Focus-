@@ -209,6 +209,53 @@ export interface CouplingData {
   narrative: string[]
 }
 
+export interface CouplingFeature {
+  value: number | null
+  available: boolean
+  basis: string
+}
+
+export interface CouplingFeaturesResponse {
+  station: string
+  timestamp: string
+  features: Record<string, CouplingFeature>
+  inputs: Record<string, number | string | boolean | null>
+  methodology: { note: string; constants: Record<string, number> }
+  provenance: Record<string, string | number | boolean | null>
+}
+
+export interface ForecastHorizonContext {
+  horizon_hours: number
+  target_timestamp: string | null
+  weather_match_timestamp: string | null
+  temperature_c: number | null
+  humidity_pct: number | null
+  pressure_hpa: number | null
+  wind_speed_mps: number | null
+  wind_direction_deg: number | null
+  pbl_height_m: number | null
+  inversion_detected: boolean | null
+  inversion_strength: number | null
+  inversion_category: string | null
+  inversion_source: string | null
+  dispersion_potential: number | null
+  accumulation_potential: number | null
+  inversion_trapping_potential: number | null
+  pollution_stagnation_index: number | null
+  fire_transport_influence: number | null
+  regional_transport_potential: number | null
+  ozone_photochemical_potential: number | null
+  meteorology_pollution_interaction: number | null
+}
+
+export interface ForecastContextResponse {
+  station: string
+  generated_at: string
+  units: Record<string, string>
+  regional_note: string
+  horizons: ForecastHorizonContext[]
+}
+
 export interface FireActivity {
   total_fires: number
   high_confidence_fires: number

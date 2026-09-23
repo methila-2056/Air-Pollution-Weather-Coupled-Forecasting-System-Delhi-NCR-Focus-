@@ -191,6 +191,37 @@ class TestHysplitAdapterGating:
         assert any("met" in r.lower() for r in adapter.unavailable_reasons())
 
 
+class TestWrfchemSpecInterface:
+    """SIH26082 method names (validate_configuration / run_forecast / get_output)
+    must exist and honour the honest contract: no wrfout output -> no fake run."""
+
+    def test_methods_exist_and_validate_reports_missing(self):
+        from ml.ctm.wrfchem_adapter import WRFChemAdapter
+
+        adapter = WRFChemAdapter(output_dir="")
+        assert callable(adapter.validate_configuration)
+        assert callable(adapter.run_forecast)
+        assert callable(adapter.get_output)
+        reasons = adapter.validate_configuration()
+        assert isinstance(reasons, list)
+        assert any("WRF_OUTPUT_DIR" in r for r in reasons)
+
+    def test_run_forecast_never_invents_fields(self):
+        from ml.ctm.wrfchem_adapter import WRFChemAdapter
+
+        adapter = WRFChemAdapter(output_dir="")
+        with pytest.raises(CtmUnavailable):
+            adapter.run_forecast(dt.datetime(2026, 1, 1, 0), 72, DOMAIN, 0.02)
+
+    def test_get_output_raises_when_no_genuine_output(self):
+        from ml.ctm.wrfchem_adapter import WRFChemAdapter
+
+        adapter = WRFChemAdapter(output_dir="")
+        with pytest.raises(CtmUnavailable):
+            adapter.get_output()
+        assert not adapter.is_available()
+
+
 class TestEngineRegistry:
     def test_no_genuine_engine_raises_aggregated(self):
         assert available_engines(DOMAIN, 0.02) == []

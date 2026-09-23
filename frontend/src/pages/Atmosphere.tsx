@@ -10,8 +10,25 @@ import DispersionMeter from '../components/DispersionMeter'
 import KpiCard from '../components/KpiCard'
 import { fmt } from '../lib/aqi'
 import { STATUS } from '../lib/theme'
-import { getStations, getWeather, getInversion, getCoupling, getAtmosphereCurrent } from '../api/client'
-import type { Station, WeatherData, InversionData, CouplingData, AtmosphereCurrentResponse } from '../types'
+import { getStations, getWeather, getInversion, getCoupling, getCouplingFeatures, getAtmosphereCurrent } from '../api/client'
+import type { Station, WeatherData, InversionData, CouplingData, CouplingFeaturesResponse, AtmosphereCurrentResponse } from '../types'
+
+function FeatureBar({ label, feature }: { label: string; feature: { value: number | null; available: boolean; basis?: string } | undefined }) {
+  const value = feature?.value ?? null
+  const width = value == null ? 0 : Math.max(4, Math.min(100, value * 100))
+  const color = value == null ? STATUS.muted : value < 0.33 ? STATUS.good : value < 0.66 ? STATUS.warn : STATUS.bad
+  return (
+    <div className="py-1">
+      <div className="mb-0.5 flex items-center justify-between text-xs">
+        <span className="font-medium text-slate-600">{label}</span>
+        <span className="font-semibold tabular-nums text-slate-900">{value == null ? '--' : value.toFixed(2)}</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-slate-200">
+        <div className="h-2 rounded-full transition-all" style={{ width: `${width}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  )
+}
 
 export default function Atmosphere() {
   const [stations, setStations] = useState<Station[]>([])
@@ -19,6 +36,7 @@ export default function Atmosphere() {
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [inversion, setInversion] = useState<InversionData | null>(null)
   const [coupling, setCoupling] = useState<CouplingData | null>(null)
+  const [features, setFeatures] = useState<CouplingFeaturesResponse | null>(null)
   const [atmosphere, setAtmosphere] = useState<AtmosphereCurrentResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -30,6 +48,7 @@ export default function Atmosphere() {
       getWeather(selected).then((r) => setWeather(r.data)).catch(() => setWeather(null)),
       getInversion(selected).then((r) => setInversion(r.data)).catch(() => setInversion(null)),
       getCoupling(selected).then((r) => setCoupling(r.data)).catch(() => setCoupling(null)),
+      getCouplingFeatures(selected).then((r) => setFeatures(r.data)).catch(() => setFeatures(null)),
       getAtmosphereCurrent(selected).then((r) => setAtmosphere(r.data)).catch(() => setAtmosphere(null)),
     ]).then((results) => {
       if (results.every((r) => r.status === 'rejected')) setError('Failed to load atmospheric data')
@@ -131,6 +150,59 @@ export default function Atmosphere() {
           </div>
 
           <DispersionMeter atmosphere={atmosphere?.stations.find((s) => s.station === selected) ?? null} />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="card">
+              <h3 className="card-header">Dispersion / accumulation state</h3>
+              <p className="mb-2 text-xs text-slate-500">
+                Coupling-engine tendencies from the latest stored weather + pollution
+                (0–1 scale). A lower dispersion value with higher accumulation /
+                stagnation means the current atmosphere retains pollutants.
+              </p>
+              {features ? (
+                <>
+                  <FeatureBar label="Dispersion potential" feature={features.features.dispersion_potential} />
+                  <FeatureBar label="Accumulation potential" feature={features.features.accumulation_potential} />
+                  <FeatureBar label="Inversion trapping potential" feature={features.features.inversion_trapping_potential} />
+                  <FeatureBar label="Pollution stagnation index" feature={features.features.pollution_stagnation_index} />
+                  <FeatureBar label="Aerosol accumulation potential" feature={features.features.aerosol_accumulation_potential} />
+                  <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
+                    {features.methodology?.note ?? 'Features from stored observations.'}
+                  </p>
+                </>
+              ) : (
+                <EmptyState title="Coupling features unavailable" hint="No stored weather or pollution data for this station yet." />
+              )}
+            </div>
+
+            <div className="card">
+              <h3 className="card-header">Regional influence</h3>
+              <p className="mb-2 text-xs text-slate-500">
+                Estimated influence of regional stubble fires and the synoptic wind on
+                NCR pollution — a transparent heuristic, not a chemical plume model.
+              </p>
+              {features ? (
+                <>
+                  <FeatureBar label="Fire transport influence" feature={features.features.fire_transport_influence} />
+                  <FeatureBar label="Regional transport potential" feature={features.features.regional_transport_potential} />
+                  <FeatureBar label="Ozone photochemical potential" feature={features.features.ozone_photochemical_potential} />
+                  <FeatureBar label="Meteorology–pollution interaction" feature={features.features.meteorology_pollution_interaction} />
+
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
+                    <p className="font-semibold text-slate-700">Input provenance</p>
+                    <dl className="mt-1 space-y-0.5">
+                      <div className="flex justify-between gap-2"><dt className="text-slate-500">Weather observed</dt><dd className="tabular-nums">{features.provenance?.weather_reading_timestamp ? new Date(String(features.provenance.weather_reading_timestamp)).toLocaleString() : '--'}</dd></div>
+                      <div className="flex justify-between gap-2"><dt className="text-slate-500">Inversion source</dt><dd className="tabular-nums">{String(features.provenance?.inversion_source ?? '--')}</dd></div>
+                      <div className="flex justify-between gap-2"><dt className="text-slate-500">Fires (≤500 km)</dt><dd className="tabular-nums">{features.inputs?.fire_count ?? '--'}</dd></div>
+                      <div className="flex justify-between gap-2"><dt className="text-slate-500">Upwind fires</dt><dd className="tabular-nums">{features.inputs?.upwind_fire_count ?? '--'}</dd></div>
+                    </dl>
+                  </div>
+                </>
+              ) : (
+                <EmptyState title="Regional influence unavailable" hint="Fire or weather observations are not stored for this station yet." />
+              )}
+            </div>
+          </div>
 
           {!weather && !inversion && !coupling && (
             <EmptyState title="No atmospheric data" hint="This station has no weather or vertical-profile observations stored yet." />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Cloud,
   Database,
@@ -9,13 +10,13 @@ import {
   ShieldCheck,
   Zap,
 } from 'lucide-react'
-import { getSystemStatus } from '../api/client'
+import { getSystemStatus, getModelPerformance } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import { useIntervalRefresh } from '../hooks/useIntervalRefresh'
 import { tsFmt } from '../lib/aqi'
-import type { SystemResponse } from '../types'
+import type { SystemResponse, ModelPerformanceResponse } from '../types'
 
 const statusStyle: Record<string, string> = {
   active: 'border-emerald-300 bg-emerald-50 text-emerald-700',
@@ -62,7 +63,7 @@ const pipeline = [
   },
   {
     stage: 'Prediction engine',
-    items: ['XGBoost · Random Forest · GRU', '4 pollutants × 6 horizons (1–72h)', 'Split-conformal intervals', 'SHAP explainability', 'Beats persistence at every horizon'],
+    items: ['XGBoost · Random Forest · GRU', '4 pollutants × 6 horizons (1–72h)', 'Split-conformal intervals', 'SHAP explainability', 'Verified skill shown on the Model Performance page (chronological split)'],
   },
   {
     stage: 'Forecast services',
@@ -76,6 +77,7 @@ const pipeline = [
 
 export default function ArchitecturePage() {
   const [sys, setSys] = useState<SystemResponse | null>(null)
+  const [modelPerf, setModelPerf] = useState<ModelPerformanceResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = () => {
@@ -85,6 +87,9 @@ export default function ArchitecturePage() {
         setError(null)
       })
       .catch((e) => setError(e?.message ?? 'Failed to load system status'))
+    getModelPerformance('pm25')
+      .then((r) => setModelPerf(r.data))
+      .catch(() => setModelPerf(null))
   }
 
   useEffect(() => { load() }, [])
@@ -202,8 +207,22 @@ export default function ArchitecturePage() {
             and IMD returns 401 without its registration key. Impossible-to-claim accuracy is never claimed.
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            Verified model skill — PM2.5 XGBoost: +1h R² 0.88 (MAE 26.7), +24h R² 0.62 (MAE 49.8), +72h R² 0.42 (MAE 62.3),
-            beating persistence at every horizon. Last checked {tsFmt(sys.generated_at)}.
+            Verified model skill is always read from the persisted chronological train/test split — never synthetic.
+            {(() => {
+              const pick = (h: number) => modelPerf?.results.find((r) => r.horizon_hours === h)?.metrics?.xgboost
+              const h1 = pick(1)
+              const h24 = pick(24)
+              const h72 = pick(72)
+              if (h1 && h24 && h72) {
+                return (
+                  <>
+                    {' '}PM2.5 XGBoost on split {String(modelPerf?.split_type ?? '')}: +1h R² {h1.r2?.toFixed(2) ?? '--'} (MAE {h1.mae?.toFixed(1) ?? '--'}), +24h R² {h24.r2?.toFixed(2) ?? '--'} (MAE {h24.mae?.toFixed(1) ?? '--'}), +72h R² {h72.r2?.toFixed(2) ?? '--'} (MAE {h72.mae?.toFixed(1) ?? '--'}).
+                  </>
+                )
+              }
+              return <> Full metrics (per model, pollutant and horizon) are shown on the <Link to="/model-performance" className="font-semibold text-inst-700 hover:underline">Model Performance</Link> page.</>
+            })()}{' '}
+            Last checked {tsFmt(sys.generated_at)}.
           </p>
         </section>
       </div>

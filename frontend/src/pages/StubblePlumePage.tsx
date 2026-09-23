@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Flame, Info } from 'lucide-react'
-import { getPlumeRisk, getFireActivity, getFireHotspots } from '../api/client'
+import { getPlumeRisk, getFireActivity, getFireHotspots, getTransportRisk } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import ErrorState from '../components/ErrorState'
 import LoadingState from '../components/LoadingState'
@@ -9,7 +9,10 @@ import StubblePlume from '../components/StubblePlume'
 import StationMap from '../components/StationMap'
 import KpiCard from '../components/KpiCard'
 import { fmt } from '../lib/aqi'
-import type { PlumeRisk, FireActivity, FireHotspot } from '../types'
+import { buildTransportPathways } from '../lib/geo'
+import type { PlumeRisk, FireActivity, FireHotspot, TransportRiskResponse } from '../types'
+
+const DELHI: { lat: number; lon: number } = { lat: 28.6139, lon: 77.209 }
 
 function fetchAll() {
   return Promise.allSettled([
@@ -18,6 +21,7 @@ function fetchAll() {
     getFireHotspots()
       .then((r) => r.data.hotspots)
       .catch(() => [] as FireHotspot[]),
+    getTransportRisk().then((r) => r.data).catch(() => null as TransportRiskResponse | null),
   ])
 }
 
@@ -25,6 +29,7 @@ export default function StubblePlumePage() {
   const [risk, setRisk] = useState<PlumeRisk | null>(null)
   const [fire, setFire] = useState<FireActivity | null>(null)
   const [hotspots, setHotspots] = useState<FireHotspot[]>([])
+  const [transport, setTransport] = useState<TransportRiskResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,6 +43,7 @@ export default function StubblePlumePage() {
       setRisk((results[0] as any)?.value ?? null)
       setFire((results[1] as any)?.value ?? null)
       setHotspots((results[2] as any)?.value ?? [])
+      setTransport((results[3] as any)?.value ?? null)
 
       // A waking Render free backend answers the first burst of requests with
       // gateway errors; retry once after a pause so the page never stays on a
@@ -53,11 +59,24 @@ export default function StubblePlumePage() {
 
   useEffect(() => { load() }, [load])
 
+  const windFromDeg = typeof transport?.dominant_wind_direction?.from_degrees === 'number'
+    ? (transport.dominant_wind_direction.from_degrees as number)
+    : null
+  const windSpeed = typeof transport?.dominant_wind_direction?.wind_speed_mps === 'number'
+    ? (transport.dominant_wind_direction.wind_speed_mps as number)
+    : null
+  const compassFrom = typeof transport?.dominant_wind_direction?.compass_from === 'string'
+    ? (transport.dominant_wind_direction.compass_from as string)
+    : null
+
+  const pathways = buildTransportPathways(hotspots, DELHI, windFromDeg, windSpeed)
+  const windVector = windFromDeg != null ? [{ lat: DELHI.lat, lon: DELHI.lon, direction_deg: windFromDeg, speed: windSpeed }] : []
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Fire & Plume Intelligence"
-        subtitle="Crop-residue burning hotspots, fire radiative power and transport risk toward Delhi NCR"
+        subtitle="Crop-residue burning hotspots, fire radiative power and estimated transport toward Delhi NCR"
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Fire & Plume' }]}
         lastUpdated={fire?.date ?? undefined}
       />
@@ -95,6 +114,11 @@ export default function StubblePlumePage() {
                   Note: this is an estimated transport-risk indicator derived from satellite
                   hotspots + NWP winds — not a full regional chemical-transport simulation.
                 </p>
+                {compassFrom && windSpeed != null && (
+                  <p className="text-xs text-slate-500">
+                    Regional mean wind currently FROM {compassFrom} ({windSpeed.toFixed(1)} m/s).
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -103,11 +127,13 @@ export default function StubblePlumePage() {
             <div className="flex items-center gap-2 px-6 pt-5">
               <Flame className="h-4 w-4 text-orange-600" aria-hidden="true" />
               <h2 className="text-base font-bold text-slate-900">Active hotspot map</h2>
-              <span className="ml-auto text-xs text-slate-500">circle colour/size scale with FRP intensity</span>
+              <span className="ml-auto text-xs text-slate-500">
+                circle size/colour = FRP · dashed line = estimated advective pathway to Delhi
+              </span>
             </div>
             <div className="p-3">
               {hotspots.length ? (
-                <StationMap stations={[]} fires={hotspots} />
+                <StationMap stations={[]} fires={hotspots} wind={windVector} pathways={pathways} />
               ) : (
                 <EmptyState title="No active hotspots" hint="No FIRMS detections in the recent window." />
               )}

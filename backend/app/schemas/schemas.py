@@ -444,6 +444,54 @@ class CouplingResponse(BaseModel):
     diag: CouplingDiagnostics
     narrative: list[str]
 
+
+# SIH26082: deterministic, real-data coupling-feature packet.
+class CouplingFeature(BaseModel):
+    value: float | None
+    available: bool
+    basis: str
+
+
+class CouplingFeaturesResponse(BaseModel):
+    station: str
+    timestamp: datetime
+    features: dict[str, CouplingFeature]
+    inputs: dict
+    methodology: dict
+    provenance: dict
+
+
+class ForecastHorizonContext(BaseModel):
+    horizon_hours: int
+    target_timestamp: datetime | None
+    weather_match_timestamp: datetime | None
+    temperature_c: float | None
+    humidity_pct: float | None
+    pressure_hpa: float | None
+    wind_speed_mps: float | None
+    wind_direction_deg: float | None
+    pbl_height_m: float | None
+    inversion_detected: bool | None
+    inversion_strength: float | None
+    inversion_category: str | None
+    inversion_source: str | None
+    dispersion_potential: float | None
+    accumulation_potential: float | None
+    inversion_trapping_potential: float | None
+    pollution_stagnation_index: float | None
+    fire_transport_influence: float | None
+    regional_transport_potential: float | None
+    ozone_photochemical_potential: float | None
+    meteorology_pollution_interaction: float | None
+
+
+class ForecastContextResponse(BaseModel):
+    station: str
+    generated_at: datetime
+    units: dict
+    regional_note: str
+    horizons: list[ForecastHorizonContext]
+
 class FireActivityResponse(BaseModel):
     total_fires: int
     high_confidence_fires: int

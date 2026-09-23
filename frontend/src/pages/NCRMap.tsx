@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Route, Wind } from 'lucide-react'
-import { getStations, getFireHotspots, getPlumeRisk, getPollutionLatest } from '../api/client'
+import { getStations, getFireHotspots, getPlumeRisk, getPollutionLatest, getTransportRisk } from '../api/client'
 import StationMap from '../components/StationMap'
 import PageHeader from '../components/PageHeader'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
 import { aqiStyle, fmt } from '../lib/aqi'
-import type { Station, FireHotspot, PlumeRisk, PollutionReading } from '../types'
+import { buildTransportPathways } from '../lib/geo'
+import type { Station, FireHotspot, PlumeRisk, PollutionReading, TransportRiskResponse } from '../types'
+
+const DELHI: { lat: number; lon: number } = { lat: 28.6139, lon: 77.209 }
 
 export default function NCRMap() {
   const [stations, setStations] = useState<Station[]>([])
   const [fires, setFires] = useState<FireHotspot[]>([])
   const [plume, setPlume] = useState<PlumeRisk | null>(null)
   const [pollution, setPollution] = useState<PollutionReading[]>([])
+  const [transport, setTransport] = useState<TransportRiskResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,12 +32,28 @@ export default function NCRMap() {
     getPollutionLatest()
       .then((r) => setPollution(r.data))
       .catch(() => {})
+    getTransportRisk()
+      .then((r) => setTransport(r.data))
+      .catch(() => {})
   }, [])
 
   const latestByStation = new Map<number, PollutionReading>()
   pollution.forEach((p) => {
     if (!latestByStation.has(p.station_id)) latestByStation.set(p.station_id, p)
   })
+
+  const windFromDeg = typeof transport?.dominant_wind_direction?.from_degrees === 'number'
+    ? (transport.dominant_wind_direction.from_degrees as number)
+    : null
+  const windSpeed = typeof transport?.dominant_wind_direction?.wind_speed_mps === 'number'
+    ? (transport.dominant_wind_direction.wind_speed_mps as number)
+    : null
+  const compassFrom = typeof transport?.dominant_wind_direction?.compass_from === 'string'
+    ? (transport.dominant_wind_direction.compass_from as string)
+    : null
+
+  const pathways = buildTransportPathways(fires, DELHI, windFromDeg, windSpeed)
+  const windVector = windFromDeg != null ? [{ lat: DELHI.lat, lon: DELHI.lon, direction_deg: windFromDeg, speed: windSpeed }] : []
 
   const riskTone =
     plume?.risk_level === 'HIGH' ? 'bg-red-100 text-red-800' :
@@ -44,15 +64,24 @@ export default function NCRMap() {
     <div className="space-y-6">
       <PageHeader
         title="Delhi NCR Monitoring Map"
-        subtitle="CPCB air-quality stations, NASA FIRMS fire hotspots and plume-transport context"
+        subtitle="CPCB air-quality stations, NASA FIRMS fire hotspots and estimated plume-transport pathways"
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'NCR Map' }]}
-        lastUpdated={undefined}
+        lastUpdated={transport?.generated_at ?? pollution[0]?.timestamp}
       />
 
       {error && <ErrorState message={error} onRetry={() => window.location.reload()} />}
 
       <div className="card overflow-hidden p-0">
-        <StationMap stations={stations} fires={fires} pollution={pollution} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-6 pt-4 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1.5"><span className="h-2 w-4 border-t-2 border-dashed border-amber-700" aria-hidden="true" /> estimated advective transport pathway</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-cyan-600" aria-hidden="true" /> surface wind vector</span>
+          {compassFrom && windSpeed != null && (
+            <span className="ml-auto">regional mean wind FROM {compassFrom} ({windSpeed.toFixed(1)} m/s)</span>
+          )}
+        </div>
+        <div className="p-3">
+          <StationMap stations={stations} fires={fires} pollution={pollution} wind={windVector} pathways={pathways} />
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
