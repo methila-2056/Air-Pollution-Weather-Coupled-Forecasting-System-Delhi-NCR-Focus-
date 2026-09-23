@@ -44,6 +44,21 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def database_reachable() -> bool:
+    """Return whether the configured database engine answers ``SELECT 1``.
+
+    Backs the readiness probe (``/health``) and the engine-status report
+    (``/api/system``) so both surface the same liveness signal and one of them
+    can never drift from the other.
+    """
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
 def verify_postgres_connection() -> None:
     """Validate that PostgreSQL is reachable. Raises ``SystemExit`` on failure."""
     if settings.database_url.startswith("sqlite"):

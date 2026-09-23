@@ -10,7 +10,7 @@ def test_system_status(client):
     assert "imd" in body["engines"]
     assert "cpcb" in body["engines"]
     assert "firms" in body["engines"]
-    for key, engine in body["engines"].items():
+    for _key, engine in body["engines"].items():
         assert {"source", "status", "note"} <= set(engine)
     assert set(body["run_mode"]) >= {
         "environment",
@@ -18,3 +18,10 @@ def test_system_status(client):
         "demo_hydrate_empty_db",
         "explanation",
     }
+
+
+def test_system_status_reports_disconnected_db(client, monkeypatch):
+    monkeypatch.setattr("app.api.system.database_reachable", lambda: False)
+    response = client.get("/api/system")
+    assert response.status_code == 200
+    assert response.json()["database"] == "disconnected"
