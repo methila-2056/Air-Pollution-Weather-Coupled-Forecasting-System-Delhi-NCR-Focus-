@@ -169,11 +169,6 @@ export default function Dashboard() {
               />
               Auto-refresh (1 min)
             </label>
-            <select value={selected} onChange={(e) => setSelected(e.target.value)} className="select" aria-label="Select monitoring station">
-              {stations.map((s) => (
-                <option key={s.id} value={s.name}>{s.name}</option>
-              ))}
-            </select>
           </div>
         }
       />

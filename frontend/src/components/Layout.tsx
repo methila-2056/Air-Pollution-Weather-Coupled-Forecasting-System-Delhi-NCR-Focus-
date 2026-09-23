@@ -8,6 +8,7 @@ import {
   CloudSun,
   Flame,
   Gauge,
+  Info,
   LayoutDashboard,
   LogOut,
   Map as MapIcon,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import SystemStatus from './SystemStatus'
+import AboutModal from './AboutModal'
 
 const primaryNav = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -167,6 +169,7 @@ function ToolsMenu() {
 
 export default function Layout({ children }: { children?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -197,6 +200,15 @@ export default function Layout({ children }: { children?: ReactNode }) {
             SIH 2026 · PS SIH26082
           </span>
           <SystemStatus className="ml-auto lg:ml-0 xl:ml-3" />
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            className="ml-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-inst-100 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="About AeroCast-NCR"
+          >
+            <Info className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">About</span>
+          </button>
           <div className="lg:ml-1">
             <UserMenu />
           </div>
@@ -255,6 +267,16 @@ export default function Layout({ children }: { children?: ReactNode }) {
               >
                 My profile
               </NavLink>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false)
+                  setAboutOpen(true)
+                }}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              >
+                About AeroCast-NCR
+              </button>
             </div>
           </div>
         )}
@@ -274,12 +296,21 @@ export default function Layout({ children }: { children?: ReactNode }) {
             </span>
             <span>Data sources: CPCB · NASA FIRMS · Open-Meteo · IMD</span>
             <span>NavIC-assisted aerosol verification</span>
+            <button
+              type="button"
+              onClick={() => setAboutOpen(true)}
+              className="font-semibold text-inst-700 hover:underline"
+            >
+              About AeroCast-NCR →
+            </button>
           </div>
           <p className="text-xs leading-relaxed text-slate-500">
             Prototype developed for Smart India Hackathon 2026 — SIH26082. Not an official Government of India service.
           </p>
         </div>
       </footer>
+
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   )
 }

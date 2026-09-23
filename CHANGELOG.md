@@ -3,6 +3,22 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.8] - 2026-09
+
+### Added (frontend)
+- **About AeroCast-NCR modal.** An About entry in the top bar, the mobile
+  user menu and the footer opens an accessible modal (Esc / backdrop close)
+  that ties the app back to the SIH 2026 problem statement (SIH26082) and
+  summarizes the platform's features and data sources.
+
+### Changed (frontend)
+- **Removed the unused monitoring-station dropdown** from the Overview page;
+  it duplicated the station pickers on the Map and Forecast pages.
+
+### Tests
+- Frontend production build verified (`tsc && vite build`, 2341 modules
+  transformed, dist generated cleanly).
+
 ## [1.8.7] - 2026-09
 
 ### Fixed (production / CI)
