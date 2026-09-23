@@ -18,6 +18,15 @@ def test_health(client, db_session):
     assert body["database"] == "connected"
 
 
+def test_health_reports_degraded_when_db_down(client, db_session, monkeypatch):
+    monkeypatch.setattr("app.main.database_reachable", lambda: False)
+    response = client.get("/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["database"] == "disconnected"
+
+
 def test_data_quality(client, db_session):
     response = client.get("/api/data-quality")
     assert response.status_code == 200

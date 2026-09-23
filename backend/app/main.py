@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, text
+from sqlalchemy import func
 
 from .api import (
     alerts,
@@ -41,6 +41,7 @@ from .database import (
     Base,
     SessionLocal,
     apply_migrations,
+    database_reachable,
     engine,
     run_migrations,
     seed_data,
@@ -214,7 +215,7 @@ def root():
 
 @app.get("/api/health")
 def health():
-    """Liveness probe â€” returns HTTP 200 with ``{"status": "ok"}``.
+    """Liveness probe returns HTTP 200 with ``{"status": "ok"}``.
 
     The rich variant (with database connectivity) is served at ``/health``
     and is used by Docker/Compose healthchecks.
@@ -224,15 +225,11 @@ def health():
 
 @app.get("/health")
 def health_probe():
-    """Readiness probe â€” also verifies database connectivity so that Docker
+    """Readiness probe also verifies database connectivity so that Docker
     healthchecks catch database outages.
     """
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception:
-        db_status = "disconnected"
+    db_status = "connected" if database_reachable() else "disconnected"
+    if db_status == "disconnected":
         logger.warning("Health check: database unreachable")
     return {
         "status": "ok" if db_status == "connected" else "degraded",

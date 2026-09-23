@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter
 
 from ..config import get_settings
-from ..database import engine
+from ..database import database_reachable
 
 router = APIRouter()
 
@@ -55,12 +55,7 @@ def system_status():
     # NASA FIRMS fire archive.
     firms_configured = bool(settings.nasa_firms_map_key)
 
-    try:
-        with engine.connect() as conn:
-            conn.execute(__import__("sqlalchemy").text("SELECT 1"))
-        db_status = "connected"
-    except Exception:
-        db_status = "disconnected"
+    db_status = "connected" if database_reachable() else "disconnected"
 
     engines = {
         "weather_forecast": {
