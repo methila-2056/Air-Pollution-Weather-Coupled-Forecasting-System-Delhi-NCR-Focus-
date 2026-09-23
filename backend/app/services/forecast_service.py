@@ -250,6 +250,32 @@ def _flush_json_value(v):
     return f if math.isfinite(f) else 0.0
 
 
+def _as_naive_utc(series) -> pd.Series:
+    """Normalise a datetime column to naive UTC (the repo-wide convention).
+
+    SQLite stores naive datetimes while PostgreSQL ``timestamp with time zone``
+    columns come back tz-aware. Merging one of each raises
+    ``ValueError: You are trying to merge on datetime64[us] and
+    datetime64[us, UTC]``, so history frames are normalised before any join.
+    A naive input is interpreted as UTC wall-clock and left unchanged.
+    """
+    return pd.to_datetime(series, utc=True, errors="coerce").dt.tz_localize(None)
+
+
+def _merge_history_frames(poll: pd.DataFrame, wx: pd.DataFrame) -> pd.DataFrame:
+    """Outer-join pollution + weather history on naive-UTC timestamps.
+
+    Both frames may arrive with either naive (SQLite / composite) or tz-aware
+    (PostgreSQL) timestamps; normalising first keeps the merge portable across
+    the two database backends.
+    """
+    poll = poll.copy()
+    wx = wx.copy()
+    poll["timestamp"] = _as_naive_utc(poll["timestamp"])
+    wx["timestamp"] = _as_naive_utc(wx["timestamp"])
+    return poll.merge(wx, on="timestamp", how="outer", suffixes=("", "_wx"))
+
+
 def _pollution_df(db, station_id: int, limit: int = 120) -> pd.DataFrame | None:
     """Return a station's local, chronologically-flat pollution frame."""
     from ..models.db_models import PollutionReading
@@ -431,7 +457,7 @@ def build_features_from_db_with_meta(db: Session, station_id: int) -> tuple[dict
     history_span = station_data_sufficiency(db, station_id)
     combined = poll
     if wx is not None and not wx.empty and poll is not None:
-        combined = poll.merge(wx, on="timestamp", how="outer", suffixes=("", "_wx"))
+        combined = _merge_history_frames(poll, wx)
 
     if combined is None or combined.empty:
         return {name: 0.0 for name in FEATURE_NAMES}, history_span
