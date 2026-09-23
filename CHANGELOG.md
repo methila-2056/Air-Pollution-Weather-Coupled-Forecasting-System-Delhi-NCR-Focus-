@@ -3,6 +3,32 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.8.7] - 2026-09
+
+### Fixed (production / CI)
+- **PostgreSQL 500 on pooled (data-sparse) stations.** The forecast/explanation
+  history build merged a naive-UTC regional composite frame against tz-aware
+  weather columns; PostgreSQL returns `DateTime(timezone=True)` as aware while
+  SQLite returns naive, so the `pd.merge` raised
+  `ValueError: merge on datetime64[us] and datetime64[us, UTC]`. Both frames are
+  now normalised to the repo's naive-UTC convention before the outer join.
+- **CI ruff job is green again.** Files that shipped without a trailing newline
+  (`model_performance.py`, `model_performance_service.py`, `system.py`,
+  `test_system_api.py`) and an unused loop variable were repaired; the
+  front-door `ruff check backend/app backend/tests` step no longer blocks every
+  push with W292/B007.
+
+### Changed (observability)
+- **Single database-liveness helper.** `/health` and `/api/system` now share
+  `database_reachable()` instead of each re-implementing the `SELECT 1` check,
+  so the readiness probe and the architecture-page engine report can never
+  drift apart. Corrupted characters in the probe docstrings were cleaned up.
+
+### Tests
+- Verified full suite: **573 passed** (unit + integration). New coverage pins
+  the mixed-tz merge, the liveness helper's connected/degraded paths for both
+  endpoints, and probe behaviour when the database is unreachable.
+
 ## [1.8.6] - 2026-09
 
 ### Fixed (developer tooling)
