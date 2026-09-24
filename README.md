@@ -2,12 +2,12 @@
 
 ### AI-Powered 72-Hour Air Quality & Pollution-Plume Forecasting System for Delhi NCR
 
-**Problem Statement — [SIH 2024 · #26082](docs/PS_SUBMISSION.md)** · Ministry of Earth Sciences (MoES) · National Centre for Medium Range Weather Forecasting (NCMRWF)
+**Problem Statement — [SIH 2026 · #26082](docs/PS_SUBMISSION.md)** · Ministry of Earth Sciences (MoES) · National Centre for Medium Range Weather Forecasting (NCMRWF)
 
 ---
 
 [![CI](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml/badge.svg)](https://github.com/methila-2056/Air-Pollution-Weather-Coupled-Forecasting-System-Delhi-NCR-Focus-/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-573%20passed-green)](backend/tests)
+[![Tests](https://img.shields.io/badge/tests-635%20passed-green)](backend/tests)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-compose%20ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
@@ -105,7 +105,7 @@ operationalises this physics:
 | Capability | How it works | Verify |
 |------------|--------------|--------|
 | **Real-time command dashboard** | One-screen station picker, PM2.5 forecast with conformal bands, atmospheric conditions, fire intelligence, transport risk, model performance, wind-arrow map | `GET /api/forecast/pm25`, `/` page |
-| **Two-way weather–chemistry coupling** | Aerosol AOD → solar attenuation → PBL suppression → stability feedback (`ml/features/coupling.py`, `coupled_loop.py`) | `GET /api/coupling/{station}`, `POST /api/forecast/coupled` |
+| **Two-way weather–chemistry coupling** | Aerosol AOD → solar attenuation → PBL suppression → stability feedback (`ml/features/coupling.py`, `coupled_loop.py`); nine interpretable coupling features are computed from stored observations and the latest state is **persisted per station** (`coupling_states`) with `coupling_state` / `coupling_domains` / `data_quality` labels | `GET /api/coupling/features/{station}`, `GET /api/coupling/state`, `GET /api/coupling/{station}`, `POST /api/forecast/coupled` |
 | **72-hour AQI forecast** | Persistence / Random Forest / XGBoost (GRU trained & evaluated), all **six criteria pollutants** × horizons {1, 6, 12, 24, 48, 72} | `POST /api/forecast/generate`, `GET /api/forecast/{station}` |
 | **Direct PM2.5 forecast engine** | Dedicated per-hour XGBoost with split-conformal prediction intervals | `GET /api/forecast/pm25` + model-card + explanation |
 | **Boundary-layer inversion detection** | Lapse-rate computed from 700/850/925/1000 hPa vertical profiles; strength ≥ 0.6 K/100 hPa flagged | `GET /api/inversion/{station}`, `docs/methodology.md` |
@@ -357,7 +357,7 @@ All endpoints live under `/api` (interactive docs at `/docs`):
 | Forecast | `POST /forecast/generate`, `GET /forecast/{station}`, `GET /forecast/ncr`, `GET /forecast/comparison/{station}`, `POST /forecast/coupled` |
 | PM2.5 forecast engine | `GET /forecast/pm25`, `GET /forecast/pm25/model-card`, `GET /forecast/pm25/explanation` |
 | Weather | `GET /weather/{station}`, `GET /weather/{station}/history` |
-| Atmosphere & coupling | `GET /atmosphere/current`, `GET /coupling/{station}`, `GET /inversion/{station}` |
+| Atmosphere & coupling | `GET /atmosphere/current`, `GET /coupling/features/{station}`, `GET /coupling/state`, `GET /coupling/state/{station}`, `GET /coupling/{station}`, `GET /inversion/{station}` |
 | Fire / transport / plume | `GET /fire-activity`, `GET /fire/transport`, `GET /plume-risk`, `GET /fire/hotspots`, `GET /fires/latest`, `GET /transport-risk/current`, `GET /stubble` |
 | Spatial & dispersion | `GET /grid/forecast`, `GET /grid/overview`, `GET /dispersion/forecast` |
 | Events & scenarios | `GET /events/current`, `POST /scenario/analysis` |
@@ -393,7 +393,7 @@ introspectable at `/docs`.
 ## Testing & Quality Gates
 
 ```bash
-python -m pytest backend/tests -q            # 573 unit + integration tests
+python -m pytest backend/tests -q            # 635 unit + integration tests
 python -m ruff check backend/app backend/tests   # lint (CI-scoped)
 cd frontend && npm run build                 # tsc type-check + production build
 ```
@@ -435,7 +435,7 @@ Mandatory env vars on Render: `DATABASE_URL`, `CORS_ORIGINS`
   first-boot checks).
 - **Production env template** — [`docs/deploy.env.example`](docs/deploy.env.example).
 - **CI** — `.github/workflows/ci.yml`:
-  1. *Backend:* ruff + full pytest suite (`573 passed`).
+  1. *Backend:* ruff + full pytest suite (`635 passed`).
   2. *Migrations:* `alembic upgrade head` against a fresh Postgres 16,
      then integration/API tests against it.
   3. *Frontend:* `tsc` + `vite build`.
@@ -445,6 +445,7 @@ Mandatory env vars on Render: `DATABASE_URL`, `CORS_ORIGINS`
 | Doc | Contents |
 |-----|----------|
 | [`docs/methodology.md`](docs/methodology.md) | AQI, features, models, SHAP, coupling, dispersion (§9 surrogate vs. WRF-Chem) |
+| [`docs/SCIENTIFIC_METHODOLOGY.md`](docs/SCIENTIFIC_METHODOLOGY.md) | Formal formulas, constants, units & assumptions (coupling engine, inversion, fire impact, AQI, alerts, models) |
 | [`docs/architecture.md`](docs/architecture.md) | System layers & component diagram |
 | [`docs/ps_mapping.md`](docs/ps_mapping.md) | Requirement → implementation mapping |
 | [`docs/PS_SUBMISSION.md`](docs/PS_SUBMISSION.md) | Problem-statement submission summary |
@@ -494,6 +495,27 @@ tradeoff table, validation strategy, era5/imd/hysplit adapters, and
 [`docs/SIH_GAP_AUDIT.md`](docs/SIH_GAP_AUDIT.md) for what a literal WRF-Chem
 deployment would require. **Nothing in this repository claims results it
 cannot produce.**
+
+### Scientific limitations (stated honestly)
+
+- **Coupling features are potentials/tendencies**, not measurements; the
+  meteorology–pollution term is an explicit *data-driven surrogate*, not a
+  physics-based chemistry loop. Missing inputs render "Data unavailable".
+- **PBL and pressure-level temperatures are Open-Meteo model fields**, not
+  in-situ instruments; "Strong/Moderate/Weak" inversion grades and PBL bands
+  are heuristic thresholds, never reanalysis climatology.
+- **Inversion uses a documented PBL-height proxy** when fewer than two stored
+  pressure levels exist.
+- **Transport times and pathway corridors are advective estimates** (straight
+  line at the surface wind speed) — not a boundary-layer diffusion result.
+- **R² is goodness-of-fit on a chronological held-out split**, not "accuracy";
+  long-horizon NO₂/SO₂ skill is modest, and forecast uncertainty grows with
+  horizon (conformal intervals are provided for the direct PM2.5 engine).
+- **WRF-Chem / HYSPLIT / ERA5 / IMD are operator-gated**: live runs occur only
+  when the operator provides the external engine output or credentials; the
+  system reports `reason` strings when gated and never fabricates data. Exact
+  formulas, constants and units for every indicator are in
+  [`docs/SCIENTIFIC_METHODOLOGY.md`](docs/SCIENTIFIC_METHODOLOGY.md).
 
 ## Contributing & Security
 

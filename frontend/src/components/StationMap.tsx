@@ -1,8 +1,13 @@
-import { MapContainer, TileLayer, Popup, CircleMarker, Polyline } from 'react-leaflet'
+import { MapContainer, TileLayer, Popup, CircleMarker, Polyline, Circle, Polygon } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Station, FireHotspot, PollutionReading } from '../types'
 import { aqiStyle } from '../lib/aqi'
-import type { TransportPathway } from '../lib/geo'
+import {
+  DELHI_NCR_CENTROID,
+  INFLUENCE_RADIUS_KM,
+  NCR_MODELING_BOUNDARY,
+  type TransportPathway,
+} from '../lib/geo'
 
 const DELHI_CENTER: [number, number] = [28.6139, 77.209]
 
@@ -74,6 +79,7 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
   })
 
   const pathwayOrigins = new Set(pathways.map((p) => keyOf(p.from.lat, p.from.lon)))
+  const ncrBoundary: [number, number][] = NCR_MODELING_BOUNDARY.map((p) => [p.lat, p.lon])
 
   return (
     <MapContainer
@@ -87,13 +93,41 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
       zoomControl={true}
       inertia={true}
       worldCopyJump={true}
-      keyboard={false}
       className="h-96 rounded-xl z-0"
     >
       <TileLayer
         attribution='&copy; OpenStreetMap contributors &copy; CARTO'
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
+      <Polygon
+        positions={ncrBoundary}
+        pathOptions={{ color: '#0f766e', weight: 1.5, dashArray: '5 4', fill: true, fillColor: '#0f766e', fillOpacity: 0.04 }}
+      >
+        <Popup>
+          <div className="text-sm">
+            <p className="font-bold text-slate-900">NCR modelling domain</p>
+            <p className="text-xs text-slate-500">
+              28.2–28.9°N, 76.6–77.5°E — the ~2.2 km numerical grid used by grid_service.py and
+              the dispersion solver (not an administrative boundary).
+            </p>
+          </div>
+        </Popup>
+      </Polygon>
+      <Circle
+        center={[DELHI_NCR_CENTROID.lat, DELHI_NCR_CENTROID.lon]}
+        radius={INFLUENCE_RADIUS_KM * 1000}
+        pathOptions={{ color: '#b45309', weight: 1.5, dashArray: '3 5', fill: false }}
+      >
+        <Popup>
+          <div className="text-sm">
+            <p className="font-bold text-slate-900">500 km influence ring</p>
+            <p className="text-xs text-slate-500">
+              FIRMS fire hotspots within this radius are considered regional and feed the
+              fire-transport / regional-transport coupling features.
+            </p>
+          </div>
+        </Popup>
+      </Circle>
       {pathways.length > 0 && (
         <CircleMarker
           center={DELHI_CENTER}

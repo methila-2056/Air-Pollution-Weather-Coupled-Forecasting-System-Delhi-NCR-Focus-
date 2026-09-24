@@ -454,10 +454,10 @@ def add_target_lags_and_rolling(
     shifted1 = out.groupby("station")[target].shift(1)
     for w in rolling_windows:
         out[f"{target}_roll_mean_{w}h"] = shifted1.groupby(out["station"]).transform(
-            lambda s: s.rolling(w, min_periods=1).mean()
+            lambda s, w=w: s.rolling(w, min_periods=1).mean()
         )
         out[f"{target}_roll_std_{w}h"] = shifted1.groupby(out["station"]).transform(
-            lambda s: s.rolling(w, min_periods=2).std()
+            lambda s, w=w: s.rolling(w, min_periods=2).std()
         )
     return out
 

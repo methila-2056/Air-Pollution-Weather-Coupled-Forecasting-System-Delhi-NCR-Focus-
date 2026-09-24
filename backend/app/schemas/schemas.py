@@ -459,6 +459,50 @@ class CouplingFeaturesResponse(BaseModel):
     inputs: dict
     methodology: dict
     provenance: dict
+    coupling_state: str
+    coupling_domains: str
+    data_quality: str
+
+
+class CouplingStateSnapshot(BaseModel):
+    """One persisted coupling snapshot (SIH26082 Phase 30 persistence)."""
+    station: str
+    station_id: int | None = None
+    computed_at: datetime | None = None
+    wind_speed_mps: float | None = None
+    wind_direction_deg: float | None = None
+    pbl_height_m: float | None = None
+    inversion_detected: bool | None = None
+    inversion_strength: float | None = None
+    inversion_category: str | None = None
+    inversion_source: str | None = None
+    fire_count: int | None = None
+    upwind_fire_count: int | None = None
+    nearest_fire_distance_km: float | None = None
+    fire_impact_score: float | None = None
+    wind_alignment_pct: float | None = None
+    fire_transport_direction: str | None = None
+    fire_transport_time_hours: float | None = None
+    fire_transport_influence: float | None = None
+    dispersion_potential: float | None = None
+    accumulation_potential: float | None = None
+    inversion_trapping_potential: float | None = None
+    pollution_stagnation_index: float | None = None
+    aerosol_accumulation_potential: float | None = None
+    regional_transport_potential: float | None = None
+    ozone_photochemical_potential: float | None = None
+    meteorology_pollution_interaction: float | None = None
+    coupling_state: str
+    coupling_domains: str
+    data_quality: str
+    weather_reading_timestamp: datetime | None = None
+    pollution_reading_timestamp: datetime | None = None
+
+
+class CouplingStateListResponse(BaseModel):
+    generated_at: datetime
+    count: int
+    states: list[CouplingStateSnapshot]
 
 
 class ForecastHorizonContext(BaseModel):

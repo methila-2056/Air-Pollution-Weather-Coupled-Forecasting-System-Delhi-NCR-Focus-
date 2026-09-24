@@ -6,14 +6,94 @@ from sqlalchemy.orm import Session
 from ml.features.coupling import coupling_feedback_score
 
 from ..database import get_db
-from ..models.db_models import PollutionReading, Station, WeatherReading
+from ..models.db_models import CouplingState, PollutionReading, Station, WeatherReading
 from ..schemas.schemas import (
     CouplingDiagnostics,
     CouplingFeaturesResponse,
     CouplingResponse,
+    CouplingStateListResponse,
+    CouplingStateSnapshot,
 )
 
 router = APIRouter()
+
+
+@router.get("/coupling/state", response_model=CouplingStateListResponse)
+def list_coupling_states(db: Session = Depends(get_db)):
+    """List the latest persisted coupling snapshots for every station (Phase 30).
+
+    The snapshots are the write-through outputs of ``/coupling/features``:
+    nine coupling features plus inversion / PBL / fire-transport fields,
+    coupling-state band, contributing domains and data-quality label. Only
+    stations whose features have been computed (persisted) appear here.
+    """
+    rows = (
+        db.query(CouplingState, Station)
+        .join(Station, Station.id == CouplingState.station_id)
+        .order_by(Station.name)
+        .all()
+    )
+    return CouplingStateListResponse(
+        generated_at=datetime.now(UTC),
+        count=len(rows),
+        states=[_snapshot(state, station) for state, station in rows],
+    )
+
+
+@router.get("/coupling/state/{station_name}", response_model=CouplingStateSnapshot)
+def get_coupling_state(station_name: str, db: Session = Depends(get_db)):
+    """Latest persisted coupling snapshot for one station (Phase 30)."""
+    station = db.query(Station).filter(Station.name == station_name).first()
+    if not station:
+        raise HTTPException(status_code=404, detail=f"Station '{station_name}' not found")
+    row = (
+        db.query(CouplingState)
+        .filter(CouplingState.station_id == station.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No coupling-state snapshot persisted yet for '{station_name}' "
+            "(call /api/coupling/features first)",
+        )
+    return _snapshot(row, station)
+
+
+def _snapshot(row: CouplingState, station: Station) -> CouplingStateSnapshot:
+    return CouplingStateSnapshot(
+        station=station.name,
+        station_id=station.id,
+        computed_at=row.computed_at,
+        wind_speed_mps=row.wind_speed_mps,
+        wind_direction_deg=row.wind_direction_deg,
+        pbl_height_m=row.pbl_height_m,
+        inversion_detected=row.inversion_detected,
+        inversion_strength=row.inversion_strength,
+        inversion_category=row.inversion_category,
+        inversion_source=row.inversion_source,
+        fire_count=row.fire_count,
+        upwind_fire_count=row.upwind_fire_count,
+        nearest_fire_distance_km=row.nearest_fire_distance_km,
+        fire_impact_score=row.fire_impact_score,
+        wind_alignment_pct=row.wind_alignment_pct,
+        fire_transport_direction=row.fire_transport_direction,
+        fire_transport_time_hours=row.fire_transport_time_hours,
+        fire_transport_influence=row.fire_transport_influence,
+        dispersion_potential=row.dispersion_potential,
+        accumulation_potential=row.accumulation_potential,
+        inversion_trapping_potential=row.inversion_trapping_potential,
+        pollution_stagnation_index=row.pollution_stagnation_index,
+        aerosol_accumulation_potential=row.aerosol_accumulation_potential,
+        regional_transport_potential=row.regional_transport_potential,
+        ozone_photochemical_potential=row.ozone_photochemical_potential,
+        meteorology_pollution_interaction=row.meteorology_pollution_interaction,
+        coupling_state=row.coupling_state,
+        coupling_domains=row.coupling_domains,
+        data_quality=row.data_quality,
+        weather_reading_timestamp=row.weather_reading_timestamp,
+        pollution_reading_timestamp=row.pollution_reading_timestamp,
+    )
 
 
 @router.get("/coupling/features/{station_name}", response_model=CouplingFeaturesResponse)

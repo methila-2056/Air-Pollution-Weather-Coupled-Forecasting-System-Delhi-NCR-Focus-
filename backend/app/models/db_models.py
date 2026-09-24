@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.sql import func
 
 from ..database import Base
@@ -155,3 +155,63 @@ class ModelMetrics(Base):
     test_period_start = Column(DateTime)
     test_period_end = Column(DateTime)
     trained_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CouplingState(Base):
+    """Latest persisted meteorology-pollution-fire coupling snapshot per station.
+
+    A write-through row produced by the coupling service every time the
+    coupling features are computed (SIH26082 Phase 30 persistence): the nine
+    coupling features, the key atmospheric inputs, the invert fire-transport
+    fields and provenance timestamps. The row is keyed on ``station_id`` —
+    each station keeps its most recent snapshot.
+
+    ``coupling_state`` is the data-driven feedback-surrogate band of the
+    composite ``meteorology_pollution_interaction`` feature (NONE / LOW /
+    MODERATE / HIGH); ``coupling_domains`` lists which feature domains
+    (aerosol, atmospheric, feedback, fire, ozone) were present from stored
+    data; ``data_quality`` reflects how many of the nine features were
+    computable (GOOD / PARTIAL / SPARSE / UNAVAILABLE). These are labels of
+    the coupling *engine*, never of a physics simulation — see
+    ``docs/SCIENTIFIC_METHODOLOGY.md``.
+    """
+    __tablename__ = "coupling_states"
+    id = Column(Integer, primary_key=True, index=True)
+    station_id = Column(Integer, ForeignKey("stations.id"), nullable=False)
+    computed_at = Column(DateTime(timezone=True), nullable=False)
+    # -- atmospheric inputs (latest stored observations) -----------------
+    wind_speed_mps = Column(Float)
+    wind_direction_deg = Column(Float)
+    pbl_height_m = Column(Float)
+    # -- inversion --------------------------------------------------------
+    inversion_detected = Column(Boolean)
+    inversion_strength = Column(Float)
+    inversion_category = Column(String)
+    inversion_source = Column(String)
+    # -- fire transport ----------------------------------------------------
+    fire_count = Column(Integer)
+    upwind_fire_count = Column(Integer)
+    nearest_fire_distance_km = Column(Float)
+    fire_impact_score = Column(Float)
+    wind_alignment_pct = Column(Float)
+    fire_transport_direction = Column(String)   # compass the plume would travel toward
+    fire_transport_time_hours = Column(Float)
+    fire_transport_influence = Column(Float)
+    # -- nine coupling features (0..1, None = data unavailable) -----------
+    dispersion_potential = Column(Float)
+    accumulation_potential = Column(Float)
+    inversion_trapping_potential = Column(Float)
+    pollution_stagnation_index = Column(Float)
+    aerosol_accumulation_potential = Column(Float)
+    regional_transport_potential = Column(Float)
+    ozone_photochemical_potential = Column(Float)
+    meteorology_pollution_interaction = Column(Float)
+    # -- labels + provenance -----------------------------------------------
+    coupling_state = Column(String)
+    coupling_domains = Column(String)
+    data_quality = Column(String)
+    weather_reading_timestamp = Column(DateTime(timezone=True))
+    pollution_reading_timestamp = Column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("station_id", name="uq_coupling_state_station"),
+    )

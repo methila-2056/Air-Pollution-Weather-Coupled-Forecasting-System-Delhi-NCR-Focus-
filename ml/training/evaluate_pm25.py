@@ -202,7 +202,6 @@ def evaluate_horizon_with_gru(
     # Train/validation splits for RF + calibration (same rows as XGBoost)
     valid_mask = df[target_col].notna() & df[lag1_col].notna()
     train = df.loc[valid_mask & (df["split"] == "train")].copy()
-    val = df.loc[valid_mask & (df["split"] == "validation")].copy()
     if len(train) == 0:
         raise ValueError(f"horizon {horizon}: no train rows")
 

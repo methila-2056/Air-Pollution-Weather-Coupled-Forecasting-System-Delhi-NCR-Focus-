@@ -121,7 +121,7 @@ export default function Forecast72h() {
               {tabs.find((t) => t.key === pollutant)?.label} forecast — {selectedStation}
             </h2>
             <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={chartData} margin={{ left: -12, right: 12 }}>
+              <LineChart data={chartData} margin={{ left: -12, right: 12 }} accessibilityLayer role="img" aria-label={`${tabs.find((t) => t.key === pollutant)?.label} forecast for ${selectedStation} across 72 hours`}>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                 <XAxis dataKey="time" stroke={CHART.axis} fontSize={11} />
                 <YAxis stroke={CHART.axis} fontSize={11} />
@@ -133,12 +133,21 @@ export default function Forecast72h() {
                 <Line type="monotone" dataKey="value" stroke={pollutantColor(pollutant)} strokeWidth={2.5} dot={false} name={pollutant.replace('_pred', '').toUpperCase()} />
               </LineChart>
             </ResponsiveContainer>
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+              Point forecast from the persisted 72-hour ML run. Uncertainty grows with horizon —
+              the +72h point is materially less certain than +1h. Distribution-free split-conformal
+              prediction intervals for the direct PM2.5 engine are shown on the Dashboard
+              (&lsquo;/api/forecast/pm25&rsquo;). This horizon-tab view is a point series only.
+            </p>
           </div>
 
           <div className="card">
             <h2 className="card-header">Forecast table</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
+                <caption className="sr-only">
+                  72-hour pollutant and AQI forecast for {selectedStation}.
+                </caption>
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
                     <th className="py-2">Horizon</th>
@@ -184,10 +193,16 @@ export default function Forecast72h() {
             {context && context.horizons.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
+                  <caption className="sr-only">
+                    Per-horizon atmospheric context: temperature, humidity, pressure, wind, PBL,
+                    inversion and coupling tendencies for {selectedStation}.
+                  </caption>
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-slate-500">
                       <th className="py-2">Horizon</th>
                       <th className="py-2 text-right">Temp °C</th>
+                      <th className="py-2 text-right">Hum %</th>
+                      <th className="py-2 text-right">Pressure hPa</th>
                       <th className="py-2 text-right">Wind m/s</th>
                       <th className="py-2 text-right">PBL m</th>
                       <th className="py-2">Inversion</th>
@@ -204,6 +219,8 @@ export default function Forecast72h() {
                       <tr key={h.horizon_hours} className="border-b border-slate-100">
                         <td className="py-1.5 font-medium text-slate-900">+{h.horizon_hours}h</td>
                         <td className="py-1.5 text-right tabular-nums text-slate-700">{ctxNum(h.temperature_c)}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-700">{ctxNum(h.humidity_pct, 0)}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-700">{ctxNum(h.pressure_hpa, 0)}</td>
                         <td className="py-1.5 text-right tabular-nums text-slate-700">{ctxNum(h.wind_speed_mps)}</td>
                         <td className="py-1.5 text-right tabular-nums text-slate-700">{ctxNum(h.pbl_height_m, 0)}</td>
                         <td className="py-1.5 capitalize text-slate-600">

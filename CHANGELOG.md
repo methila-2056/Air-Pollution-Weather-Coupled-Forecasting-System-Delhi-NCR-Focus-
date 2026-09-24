@@ -3,6 +3,46 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.10.0] - 2026-09
+
+### Added (backend)
+- **Coupling-state persistence (Phase 30).** New `coupling_states` table (one latest row per
+  station, Alembic `5c1b7d9a2f6e`) written through on every `get_coupling_features` call,
+  storing the raw inputs (wind, PBL, inversion, fires), the nine coupling features and the
+  labelled `coupling_state` / `coupling_domains` / `data_quality`. New endpoints
+  `GET /api/coupling/state` and `GET /api/coupling/state/{station}` (404-safe), schemas
+  `CouplingStateSnapshot` / `CouplingStateListResponse`.
+- **Label resolution.** `coupling_state` (NONE/LOW/MODERATE/HIGH from the feedback-surrogate
+  band), `coupling_domains` (aerosol/atmospheric/feedback/fire/ozone), `data_quality`
+  (GOOD/PARTIAL/SPARSE/UNAVAILABLE) exposed on the features payload.
+- **Alert-engine unit suite.** `backend/tests/unit/test_alert_service.py` (30 tests) covering
+  every deterministic alert trigger (AQI thresholds 201/301/401, trend, PM2.5 dominance,
+  wind, inversion/PBL, humidity, precipitation washout, regional fires), severity ordering
+  and resilience to missing/empty inputs.
+
+### Added (frontend)
+- **500 km influence ring + NCR modelling-domain boundary** on the Leaflet maps – the ring
+  exactly matches `fire_impact.DEFAULT_MAX_DISTANCE_KM`; the dashed polygon marks the
+  ~2.2 km numerical grid domain (28.2–28.9°N, 76.6–77.5°E), each with an explanatory popup.
+- **Humidity + pressure columns** in the 72h atmospheric-context table.
+- **Alert severity text badges** (and the previously-missing ADVISORY level styling) in the
+  Alert centre.
+- **Uncertainty note + chart/table accessibility** on the 72h Forecast page (point-vs-band
+  disclosure, `aria-label` chart, hidden table captions); map keyboard navigation restored
+  (`keyboard={false}` removed).
+
+### Docs
+- `docs/SCIENTIFIC_METHODOLOGY.md` – formal formulas, constants, units and assumptions for
+  the coupling engine, inversion (lapse-rate + PBL proxy), fire impact, AQI, alerts, models,
+  transport risk and dispersion surrogate.
+- `SIH26082_IMPLEMENTATION_AUDIT.md` rewritten to the Phase-41 24-row status table
+  (`IMPLEMENTED` / `PARTIALLY IMPLEMENTED` / `NOT IMPLEMENTED` / `NOT AVAILABLE` only).
+- README: SIH 2026 correction, new coupling-state API rows, scientific limitations section.
+
+### Quality
+- Full suite green: **635 tests passed**; `ruff check backend/app backend/tests` and
+  `ruff check ml` both clean; frontend `tsc --noEmit` + `vite build` clean.
+
 ## [1.9.0] - 2026-09
 
 ### Added (backend)

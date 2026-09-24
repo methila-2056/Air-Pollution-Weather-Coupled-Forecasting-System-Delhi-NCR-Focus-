@@ -8,6 +8,24 @@ const EARTH_RADIUS_KM = 6371.0
 const MAX_FIRE_DISTANCE_KM = 500.0
 const UPWIND_ANGLE_DEG = 90
 
+export const DELHI_NCR_CENTROID: LatLon = { lat: 28.6139, lon: 77.209 }
+
+// Influence radius (km) within which FIRMS fires are considered regional.
+// Mirrors ml/features/fire_impact.DEFAULT_MAX_DISTANCE_KM and the coupling
+// engine so the map ring exactly matches the backend's consideration set.
+export const INFLUENCE_RADIUS_KM = MAX_FIRE_DISTANCE_KM
+
+// The ~2.2 km numerical-modelling domain over Delhi NCR used by
+// grid_service.py and dispersion_solver.py (28.2–28.9°N, 76.6–77.5°E).
+// Rendered as an honest boundary reference — not a political/admin boundary.
+export const NCR_MODELING_BOUNDARY: LatLon[] = [
+  { lat: 28.2, lon: 76.6 },
+  { lat: 28.2, lon: 77.5 },
+  { lat: 28.9, lon: 77.5 },
+  { lat: 28.9, lon: 76.6 },
+  { lat: 28.2, lon: 76.6 },
+]
+
 export interface LatLon {
   lat: number
   lon: number

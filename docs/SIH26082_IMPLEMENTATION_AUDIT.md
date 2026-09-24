@@ -1,135 +1,103 @@
-# SIH26082 — AeroCast-NCR Implementation Audit
+# SIH26082 — AeroCast-NCR Implementation Audit (Phase 41)
 
 > Problem Statement: **Air Pollution–Weather Coupled Forecasting System (Delhi NCR Focus)** —
-> Ministry of Earth Sciences / NCMRWF.
+> Ministry of Earth Sciences / NCMRWF (SIH 2026).
 >
-> This document audits the Phase-4 implementation that closed the remaining SIH26082 gaps
-> recorded in `docs/SIH_GAP_AUDIT.md` (items B1, B3, B4, D2/D4 and the C-series) and adds new
-> *scientifically interpretable coupling features* to the existing working system. The work is
-> **additive**: no existing endpoint, model, or database schema was broken or rebuilt, and no
-> fabricated value, invented accuracy metric, or synthetic field is ever produced (see §7).
+> Phase-41 section audit of every SIH26082 capability against the codebase. Statuses are
+> limited to **`IMPLEMENTED`** / **`PARTIALLY IMPLEMENTED`** / **`NOT IMPLEMENTED`** /
+> **`NOT AVAILABLE`**. Formal formulas, constants, units and assumptions for every indicator
+> are in [`docs/SCIENTIFIC_METHODOLOGY.md`](SCIENTIFIC_METHODOLOGY.md); requirement-level
+> narrative and evidence are in [`docs/SIH_FINAL_COMPLIANCE.md`](SIH_FINAL_COMPLIANCE.md).
+>
+> **Honesty contract (unchanged):** no value is fabricated — missing inputs ⇒ `None` ⇒
+> "Data unavailable"; no invented accuracy (R² is reported only from chronological held-out
+> splits); proxies/potentials/surrogates are explicitly labelled; real-engine adapters
+> (HYSPLIT / WRF-Chem / ERA5 / IMD) are operator-gated and always report *why* when gated.
 
 ---
 
-## 1. Requirement-by-requirement compliance (Phase-4 scope)
+## 1. Requirement-by-requirement status (24 rows)
 
-| # | Capability | Implementation | Evidence | Status | Remaining limitation |
-|---|------------|----------------|----------|--------|----------------------|
-| R1 | **Coupling engine — nine named meteorology–pollution–fire features** | Pure, deterministic `compute_coupling_features()` returns all nine SIH coupling features (dispersion, accumulation, inversion-trapping, pollution-stagnation, aerosol-accumulation, fire-transport, regional-transport, ozone-photochemical, meteorology-pollution interaction). Each carries `value` (0..1), `available`, and a `basis` string listing exactly which **stored observations** entered the formula; missing inputs produce `None` (UI renders "Data unavailable"). Constants are module-level and documented. | `ml/features/coupling_engine.py`, `backend/app/services/coupling_service.py` (`get_coupling_inputs`), `backend/tests/unit/test_coupling_engine.py` | ✅ | Features are **potentials/tendencies**, not measurements; the meteorology-pollution term is an explicit *data-driven surrogate*, no physics-based chemistry loop is claimed (stated in the methodology payload). |
-| R2 | **Per-horizon forecast context (72 h)** | `GET /api/forecast/{station}/context` returns 72 horizon rows, each carrying the closest **stored** weather snapshot (nearest row within ±2 h, relaxed to ±6 h tolerance), the lapse-rate inversion state (`combine_inversion` from stored 1000/925/850/700 hPa temperatures when ≥2 levels exist), and the coupling features computed from that row. Missing rows are reported honestly (`null`), never fabricated. | `backend/app/services/coupling_service.py` (`get_forecast_context`, `_nearest_weather_row`), `backend/app/api/forecast.py`, `frontend/src/pages/Forecast72h.tsx` | ✅ | When fewer than 12 stored weather rows exist only coarse (e.g. 6-hour) blocks are populated — the "nearest ±2 h up to ±6 h" tolerance is stated in the UI subtitle. |
-| R3 | **Plume-transport pathway layer on the map** | FIRMS hotspots within 500 km that are **upwind** (computed against the regional mean wind FROM bearing) are ranked by FRP; the top six render as dashed amber transport pathways plus a dashed ring on each pathway-origin fire and on the Delhi NCR centroid. Wind vector and "regional mean wind FROM <compass>" are shown. Wording is *estimated pathway / advective estimate* — never a dispersion simulation. | `frontend/src/lib/geo.ts` (`haversineDistance`, `bearing`, `isUpwind`, `buildTransportPathways`), `frontend/src/components/StationMap.tsx` (`pathways`), `frontend/src/pages/NCRMap.tsx`, `frontend/src/pages/StubblePlumePage.tsx` | ✅ | Pathway is straight-line advective bearing (no boundary-layer diffusion); the 2D PDE `dispersion_solver.py` remains the numerical tool. |
-| R4 | **Honest disclosure set (About + pages)** | About modal now renders a data-source table (source → what it is → how it is used → refresh cadence) and a six-item Scientific Limitations list (incl. "lapse-rate PBL Low/Moderate/High wording is a proxy", "coupling features are potentials", "WRF-Chem is integrated as an honest adapter — no synthetic chemistry run"). Architecture page no longer prints hardcoded "R² 0.88 / MAE 26.7" claims; it fetches live `/api/model/performance` XGBoost horizon-1/24/72 metrics, with a link to the Model Performance page. Overview category duplicates were removed in favour of `lib/aqi`. | `frontend/src/components/AboutModal.tsx`, `frontend/src/pages/Architecture.tsx`, `frontend/src/pages/Overview.tsx`, `frontend/src/lib/aqi.ts` | ✅ | Live metrics are masked to the most recent chronological evaluation run (same honest source as the Model Performance page). |
-| R5 | **WRF-Chem interface exact spec methods** | The adapter now implements the spec's controller-facing names: `validate_configuration()` (→ list of failure reasons; empty = ready), `run_forecast(...)` (alias of `run`), `get_output()` (lightweight description of the real `wrfout_d01_*.nc` surface, raises `CtmUnavailable` otherwise). All remain honest: nothing is returned/simulated when no genuine output exists. | `ml/ctm/wrfchem_adapter.py`, `backend/tests/unit/test_ctm_engines.py` (`TestWrfchemSpecInterface`) | ✅ | A live engine run still requires an operator to point `WRF_OUTPUT_DIR` at real WRF-Chem NetCDF output (external HPC by design). |
+| # | Capability | Status | Implementation / evidence | Remaining limitation |
+|---|------------|--------|---------------------------|----------------------|
+| 1 | **Two-way air pollution ↔ weather coupling** (chemistry→meteorology: AOD → radiation transmittance → PBL suppression → stability/coupling index; meteorology→chemistry: features feed forecasters) | IMPLEMENTED | `ml/features/coupling.py`, `ml/features/coupled_loop.py`, `backend/app/api/coupling.py` | Analytic surrogate, not a compiled coupled CTM |
+| 2 | **Nine named coupling features** (dispersion, accumulation, inversion-trapping, stagnation, aerosol-accumulation, fire-transport, regional-transport, ozone-photochemical, meteorology-pollution interaction) | IMPLEMENTED | `ml/features/coupling_engine.py`; computed from stored obs, 0..1 with `basis` string | Features are potentials/tendencies, not measurements |
+| 3 | **Coupling features computed from stored observations only** — never overwriting a measured value, never inventing missing inputs | IMPLEMENTED | `backend/app/services/coupling_service.py` (`get_coupling_inputs` provenance), `backend/tests/unit/test_coupling_engine.py` (15) | `None` reported as "Data unavailable" when inputs missing |
+| 4 | **Meteorology → chemistry forward path** (wind/PBL/inversion/humidity/fire features consumed by the ML forecasters at training + inference) | IMPLEMENTED | `ml/features/feature_engineering.py`, `backend/app/services/forecast_service.py` (`build_features_from_db`) | — |
+| 5 | **Chemistry → meteorology backward path** (aerosol feedback: `aod_est`, `radiation_transmittance`, `pbl_suppression_factor`, `corrected_pbl_height`, `stability_coupling_index`, `feedback_multiplier`) | IMPLEMENTED | `ml/features/coupling.py`, `/api/coupling/{station}` | Physics-informed analytic closure, not a radiative-transfer scheme |
+| 6 | **Online time-stepped coupled 72h loop** with coupled-vs-uncoupled skill comparison and hour-by-hour `feedback_path` | IMPLEMENTED | `ml/features/coupled_loop.py`, `GET /api/forecast/coupled` | Loop inherits per-model forecast skill |
+| 7 | **Coupling-state persistence (Phase 30)** — per-station latest snapshot with `coupling_state` / `coupling_domains` / `data_quality` labels and retrieval endpoints | IMPLEMENTED | `backend/app/models/db_models.py` (`CouplingState`), Alembic `5c1b7d9a2f6e`, `backend/app/services/coupling_service.py`, `GET /api/coupling/state`, `GET /api/coupling/state/{station}`, `backend/tests/test_coupling_state.py` (7) | Snapshot updated on demand (features fetch), not a scheduled cron |
+| 8 | **72-hour multi-pollutant forecasting** for Delhi NCR (PM2.5, PM10, O3, NO2, SO2, CO × horizons {1,6,12,24,48,72}, persistence / RF / XGBoost) | IMPLEMENTED | `ml/training/trainer.py`, `ml/inference/predictor.py`, `GET /api/forecast/{station}?hours=72`, `GET /api/forecast/ncr` | Long-horizon NO₂/SO₂ skill modest (0.21 / 0.15 R² at 72 h) |
+| 9 | **Direct PM2.5 forecast engine** with distribution-free split-conformal prediction intervals + model card + explanation | IMPLEMENTED | `ml/training/train_pm25.py`, `ml/inference/pm25_forecaster.py`, `GET /api/forecast/pm25{,/model-card,/explanation}` | Interval coverage degrades at longer horizons |
+| 10 | **Vertical pressure-level atmospheric data** (1000/925/850/700 hPa temperature + geopotential) per station | IMPLEMENTED | Open-Meteo pressure-level ingestion in `backend/app/services/refresh_service.py`, `WeatherReading` profile columns, `docs/methodology.md` | Very recent archive levels may be NULL → live-forecast supplement; ERA5 (CDS) documented as production upgrade |
+| 11 | **Lapse-rate inversion detection** (`dT/dp × 100` K/100 hPa, `T↑` with height ⇒ inversion; source `lapse_rate \| pbl_proxy`) | IMPLEMENTED | `ml/features/atmospheric_profile.py`, `backend/app/api/inversion.py`, `backend/tests/unit/test_vertical_atmosphere.py` | Grades (1.5/0.6/0.0 K per 100 hPa) are heuristic, stated as such |
+| 12 | **PBL classification / dispersion condition** (`low_pbl_flag`, `pbl_category`, `dispersion_condition`) | IMPLEMENTED | `ml/features/atmospheric_profile.py` (`classify_pbl`, `combine_inversion`) | Thresholds (150/300/500 m) heuristic |
+| 13 | **Fire (stubble) ingestion + full transport feature set** (fire_count, FRP impact, nearest distance, `wind_alignment_pct`, `transport_time_hours`, `transport_risk` + level, `stubble_impact_score`, 500 km radius, ±90° upwind) | IMPLEMENTED | NASA FIRMS ingestion, `ml/features/fire_impact.py`, `backend/app/api/fire.py`, `docs/SCIENTIFIC_METHODOLOGY.md` §4 | Transport time is an advective estimate (no boundary-layer diffusion) |
+| 14 | **Plume-transport pathway layer on the Leaflet map** (upwind ≤500 km fires ranked by FRP, top-6 dashed corridors, wind vector, "FROM <compass>") | IMPLEMENTED | `frontend/src/lib/geo.ts`, `frontend/src/components/StationMap.tsx`, `NCRMap.tsx`, `StubblePlumePage.tsx` | Straight-line advective corridor, not a dispersion result |
+| 15 | **500 km influence ring + NCR modelling-domain boundary on maps** (ring == `fire_impact.DEFAULT_MAX_DISTANCE_KM`; polygon == 28.2–28.9°N / 76.6–77.5°E numerical grid) | IMPLEMENTED | `frontend/src/lib/geo.ts` (`INFLUENCE_RADIUS_KM`, `NCR_MODELING_BOUNDARY`), `StationMap.tsx` (`Circle`, `Polygon`) | Polygon is the modelling domain, not an administrative boundary |
+| 16 | **WRF-Chem / coupled-CTM integration** (HYSPLIT `hycs_std` real binary + genuine CDMP parsing; WRF-Chem `wrfout_d01_*.nc` consumption; spec interface `validate_configuration` / `run_forecast` / `get_output`; `CtmUnavailable` when gated; 50/50 disclosed composite) | PARTIALLY IMPLEMENTED | `ml/ctm/*`, `backend/app/services/dispersion_service.py`, `ml/ctm/wrfchem_adapter.py`, `backend/tests/unit/test_ctm_engines.py`, `docs/hysplit.md`, `wrfchem_adapter.md` | Live engine run needs an operator-provided HYSPLIT build / real WRF-Chem output (external HPC by design); surrogate PDE is the always-available fallback |
+| 17 | **Numerical dispersion surrogate** (vectorised finite-difference advection–diffusion–deposition PDE on the ~2.2 km NCR grid, CFL-safe, non-negativity preserving) | IMPLEMENTED | `ml/features/dispersion_solver.py`, `GET /api/dispersion/forecast`, `backend/tests/unit/test_dispersion_solver.py` | Parametric chemistry, not a gas/aerosol scheme |
+| 18 | **GRU / LSTM deep-learning model** (custom NumPy GRU trained + evaluated across all pollutants/horizons; honest underperformance vs XGBoost documented) | IMPLEMENTED | `ml/training/train_gru.py`, `ml/models/gru_model.py`, `models/pm25/evaluation.json` | GRU is a documented ensemble candidate, not the serving model |
+| 19 | **Data ingestion (CPCB + Open-Meteo + ERA5 + IMD + FIRMS)** pairwise with honesty gates | PARTIALLY IMPLEMENTED | `scripts/download_*.py`, `backend/app/services/refresh_service.py`, `ml/features/era5_surface.py`, `backend/app/services/imd_weather.py`, `backend/tests/unit/test_era5_surface.py`, `test_imd_weather.py` | ERA5 is single-level reanalysis (vertical profiles documented as the production upgrade); ERA5 and IMD are credential-gated (honest `reasons`, never fabricated); IMD raw radar not directly consumed |
+| 20 | **Indian (CPCB breakpoint) AQI** — sub-index, AQI, category, dominant pollutant | IMPLEMENTED | `backend/app/services/aqi_calculator.py`, `backend/tests/test_aqi.py` | — |
+| 21 | **Explainability** — real `shap.TreeExplainer` when a tree model loads + honest fallback | IMPLEMENTED | `backend/app/services/explanation_service.py`, `frontend/src/pages/AIExplanation.tsx` | SHAP on tree models only (not persistence) |
+| 22 | **Alerts** — deterministic rules (copied thresholds: AQI 201/301/401; trend; PM2.5 dominance; wind <2/>15 m/s; PBL <150/<300 m; humidity >80 %; no-rain washout; fires >20 / >50 & <300 km), severity rank, dedicated unit suite | IMPLEMENTED | `backend/app/services/alert_service.py`, `backend/app/api/alerts.py`, `backend/tests/unit/test_alert_service.py` (30) | Thresholds are configurable constants, not regulatory mandates |
+| 23 | **Chronological validation / backtesting** + persisted cross-model metrics + performance dashboard | IMPLEMENTED | `ml/training/evaluator.py`, `backend/app/api/model_performance.py`, `model_metrics` tables, `frontend/src/pages/ModelPerformancePage.tsx` | Metrics are from the most recent chronological evaluation run only |
+| 24 | **Command dashboard & map layers** (FIRMS hotspots, wind vectors, transport pathways, influence ring, atmosphere/inversion panel, GRAP panel, forecast context, alert severity labels, per-horizon humidity/pressure, uncertainty disclosure, keyboard-accessible maps) | IMPLEMENTED | `frontend/src/pages/*`, `frontend/src/components/*` (StationMap, AlertList, InversionPanel, GrapPanel, Forecast72h, AboutModal), `frontend/src/lib/{aqi,geo,theme}.ts` | Live metrics masked to latest chronological evaluation; some grids render only on data availability |
 
----
-
-## 2. Coupling features — exact definition
-
-All features are normalized 0..1 (rounded to 4 dp) where **higher = more of the named tendency**.
-`None` is returned — and reported as "Data unavailable" — whenever a required input is missing.
-
-| Feature | Formula (from stored observations) |
-|---------|------------------------------------|
-| `dispersion_potential` | `0.50·vent_norm + 0.20·pbl_norm + 0.30·(1 − inversion_strength)`, where `vent_norm = (wind_mps × pbl_m)/6000`, `wind_norm = wind/7.0`, `pbl_norm = pbl/1500` |
-| `accumulation_potential` | `1 − dispersion_potential` |
-| `inversion_trapping_potential` | `0.50·inversion_strength + 0.50·(1 − pbl_norm)` |
-| `pollution_stagnation_index` | `0.40·(1 − wind_norm) + 0.40·(1 − pbl_norm) + 0.20·inversion_strength` |
-| `aerosol_accumulation_potential` | `0.50·pm25_norm + 0.50·accumulation_potential`, `pm25_norm = (pm25 − 35)/(300 − 35)` — observed loading is never overwritten |
-| `fire_transport_influence` | `0.50·fire_impact_score + 0.25·proximity + 0.15·upwind_count/50 + 0.10·wind_alignment`, `proximity = 1 − min(1, nearest_fire_km/500)` |
-| `regional_transport_potential` | `0.60·fire_transport_influence + 0.25·(1 − vent_norm) + 0.15·(1 − wind_norm)` |
-| `ozone_photochemical_potential` | `0.50·temp_norm + 0.30·(1 − wind_norm) + 0.20·(no2/120)`, `temp_norm = (t − 25)/(40 − 25)` — a *potential*, not a measured formation rate |
-| `meteorology_pollution_interaction` | mean of the available `accumulation_potential`, `pollution_stagnation_index`, `ozone_photochemical_potential`, `fire_transport_influence` — an explicit data-driven **feedback surrogate** |
-
-`band_label(value)` → **Low** < 0.33, **Moderate** < 0.66, else **High**.
-
-### Inputs feed
-`backend/app/services/coupling_service.get_coupling_inputs(db, station)` reads **stored** rows:
-- WeatherReading (temperature, humidity, pressure, wind, PBL, and pressure-level temperatures 1000/925/850/700 hPa),
-- PollutionReading (PM2.5, PM10, NO2, O3),
-- FIRMS fire rows → `ml/features/fire_impact.compute_fire_impact` for `fire_count / upwind_fire_count / nearest_fire_distance_km / fire_impact_score / wind_alignment_pct / transport_time_hours`,
-- lapse-rate inversion via `ml/features/atmospheric_profile.combine_inversion(pbl, pressure-level temps)`.
-
-Station latitude/longitude is taken from the station row, with the NCR centroid (28.6139, 77.2090)
-as an explicit fallback.
+**Summary:** 23 `IMPLEMENTED`, 1 `PARTIALLY IMPLEMENTED` (row 16 — real-engine CTM run), 0 `NOT
+IMPLEMENTED`, 0 `NOT AVAILABLE`.
 
 ---
 
-## 3. Forecast-context semantics
-
-`GET /api/forecast/{station}/context` returns one row per forecast horizon (1..72):
-
-- **Weather**: the nearest stored weather row within ±2 h (relaxed to ±6 h). Nothing is interpolated or invented.
-- **Inversion**: `inversion_detected`, `inversion_category`, `inversion_strength`, `inversion_source`
-  (`lapse_rate` when ≥2 pressure-level temperatures exist inside the tolerance window,
-  `pbl_proxy` otherwise, `null` when no PBL data either).
-- **Coupling features**: full R1 feature set computed from that row.
-- **`data_unavailable`** flag on any missing component; the UI renders `--` rather than a guess.
-
----
-
-## 4. Plume-transport pathway method (`frontend/src/lib/geo.ts`)
-
-```
-haversineDistance(a, b)      # km on a sphere
-bearing(a, b)                # great-circle bearing b relative to a
-isUpwind(fire, center, windFromDeg)  # fire lies within ±90° of the wind-FROM bearing
-buildTransportPathways(fires, centerLat/Lon, windFromDeg):
-  upwind = fires within 500 km && bearing-to-NCR within ±90° of wind FROM
-  sort by FRP desc, take top 6
-  → { origin: [lat, lon], destination: centroid, distanceKm, frp, bearingDeg }
-```
-Rendering (`StationMap.tsx`): dashed amber `Polyline`, dashed-ring `CircleMarker` per pathway-origin
-fire, dashed-ring marker on the Delhi NCR centroid with a Popup explaining that the corridor is a
-straight-line advective *estimate* derived from the current wind and FIRMS detections.
-
----
-
-## 5. Verification runs performed
+## 2. Verification runs (Phase 41 session)
 
 | Check | Command | Result |
 |-------|---------|--------|
-| Coupling engine unit suite | `python -m pytest backend/tests/unit/test_coupling_engine.py -q` | **15 passed** (all nine features, missing-data honesty, physical behaviour, band labels) |
-| Coupling/context API suite | `python -m pytest backend/tests/test_coupling_features_api.py -q` | **8 passed** (response shape, stored calm-shallow conditions → dispersion<0.5 & accumulation>0.5, 72 horizons, 404s, "never fabricates") |
-| WRF-Chem spec-interface suite | `python -m pytest backend/tests/unit/test_ctm_engines.py -q` | existing engine suite incl. new `TestWrfchemSpecInterface` |
-| Frontend typecheck | `cd frontend && npx tsc --noEmit` | clean (no errors) |
-| Frontend build | `cd frontend && npx vite build` | success (2342 modules transformed) |
-| Full backend lint target | `python -m ruff check backend/app backend/tests` | previously green; re-run as part of the PR pipeline |
+| Full backend suite | `python -m pytest backend/tests -q` | **635 passed** |
+| CI lint scope | `python -m ruff check backend/app backend/tests` | All checks passed |
+| ML module lint (town fix) | `python -m ruff check ml` | All checks passed (pre-existing B023/F841 fixed) |
+| Coupling-state + features API | `python -m pytest backend/tests/test_coupling_state.py backend/tests/test_coupling_features_api.py -q` | 14 passed |
+| Alert-engine suite | `python -m pytest backend/tests/unit/test_alert_service.py -q` | 30 passed |
+| Alembic chain (Postgres dialect) | `python -m alembic upgrade head --sql` | full chain renders `coupling_states` DDL; offline SQL valid |
+| Frontend typecheck | `cd frontend && npx tsc --noEmit` | clean |
+| Frontend build | `cd frontend && npx vite build` | success (chunk-size warning only) |
 
 ---
 
-## 6. Files changed / created (Phase-4)
+## 3. Files changed / created (Phase 30 + Phase 40/41)
 
 **Created**
-- `ml/features/coupling_engine.py` — the nine-feature coupling engine (single source of truth).
-- `backend/app/services/coupling_service.py` — DB→engine assembly + 72-h context builder.
-- `backend/tests/unit/test_coupling_engine.py`, `backend/tests/test_coupling_features_api.py`.
-- `frontend/src/lib/geo.ts` — haversine / bearing / isUpwind / transport-pathway builder.
+- `alembic/versions/5c1b7d9a2f6e_coupling_state.py` — `coupling_states` migration.
+- `backend/tests/test_coupling_state.py` (7), `backend/tests/unit/test_alert_service.py` (30).
+- `docs/SCIENTIFIC_METHODOLOGY.md` — formal formulas/constants/units/assumptions.
 
 **Modified**
-- `backend/app/api/coupling.py` — `GET /api/coupling/features/{station}`.
-- `backend/app/api/forecast.py` — `GET /api/forecast/{station}/context`.
-- `backend/app/schemas/schemas.py` — `CouplingFeature(s)Response`, `ForecastHorizonContext`, `ForecastContextResponse`.
-- `backend/tests/unit/test_ctm_engines.py` — WRF-Chem spec-interface tests.
-- `ml/ctm/wrfchem_adapter.py` — `validate_configuration` / `run_forecast` / `get_output`.
-- `frontend/src/types/index.ts`, `frontend/src/api/client.ts` — types + API calls.
-- `frontend/src/pages/Forecast72h.tsx`, `Atmosphere.tsx`, `NCRMap.tsx`, `StubblePlumePage.tsx`, `Architecture.tsx`, `Overview.tsx` — new panels/metrics/AQI dedup.
-- `frontend/src/components/AboutModal.tsx`, `components/StationMap.tsx` — disclosure table + pathway layer.
+- `backend/app/models/db_models.py` — `CouplingState` model (`uq_coupling_state_station`).
+- `backend/app/services/coupling_service.py` — write-through persistence + state/domain/quality labels + `_parse_dt`.
+- `backend/app/schemas/schemas.py` — `coupling_state` / `coupling_domains` / `data_quality` on `CouplingFeaturesResponse`; added `CouplingStateSnapshot`, `CouplingStateListResponse`.
+- `backend/app/api/coupling.py` — `GET /api/coupling/state[+/{station}]` (registered before the dynamic route).
+- `frontend/src/lib/geo.ts` — `DELHI_NCR_CENTROID`, `INFLUENCE_RADIUS_KM`, `NCR_MODELING_BOUNDARY`.
+- `frontend/src/components/StationMap.tsx` — influence ring + modelling-boundary polygon + map a11y (`keyboard={false}` removed).
+- `frontend/src/pages/Forecast72h.tsx` — humidity/pressure columns, uncertainty disclosure, chart/table a11y.
+- `frontend/src/components/AlertList.tsx` — severity text badges + missing ADVISORY level styling.
+- `README.md` — SIH 2026, coupling-state API rows, scientific limitations, test count 635.
+- `CHANGELOG.md` — 1.10.0 entry. `ml/preprocessing/training_dataset.py`, `ml/training/evaluate_pm25.py` — lint fixes.
+- `docs/SIH26082_IMPLEMENTATION_AUDIT.md` — this file.
 
 **Preserved (not modified unnecessarily)** — `dispersion_solver.py`, `ml/features/coupling.py`,
-`ml/preprocessing/*`, trained `.joblib` models, `aerocast_ncr.db`, existing API endpoints.
+`ml/preprocessing/*`, trained `.joblib` models, `aerocast_ncr.db`, existing endpoints/models.
 
 ---
 
-## 7. Honest-disclosure statements
+## 4. Honest-disclosure statements (unchanged)
 
-1. **No synthetic data.** Every coupling feature is computed from stored CPCB / Open-Meteo /
-   FIRMS / pressure-level observations. Missing input ⇒ `None`, never a random or interpolated number.
-2. **No fabricated WRF-Chem runs.** The adapter consumes genuine `wrfout_d01_*.nc` files and raises
-   `CtmUnavailable` otherwise; this now includes the spec's `validate_configuration / run_forecast /
-   get_output` names, which report exactly which ingredient is missing.
-3. **No invented accuracy.** The Architecture page and About modal surface only live
-   `/api/model/performance` values from the most recent chronological evaluation; the old
-   hardcoded "R² 0.88 / MAE 26.7" and "beats persistence at every horizon" claims were removed.
-4. **Scientific proxies are labeled as such.** PBL Low/Moderate/High classification, inversion
-   grades, transport-time (advective) and coupling potentials all carry explicit "estimate /
-   proxy / potential" wording in code, API payloads, and UI.
+1. **No synthetic data.** Every coupling feature, atmosphere indicator and alert is computed from
+   stored CPCB / Open-Meteo / FIRMS observations; a missing input ⇒ `None` ⇒ "Data unavailable".
+2. **No fabricated WRF-Chem runs.** Adapters consume genuine engine output and raise
+   `CtmUnavailable` with an exact `reason` otherwise.
+3. **No invented accuracy.** R² / MAE are live `/api/model/performance` values from the most
+   recent chronological hold-out; never reinterpreted as "accuracy".
+4. **Proxies labelled.** PBL/inversion grades, advective transport times, coupling potentials and
+   the meteorology–pollution surrogate carry explicit "estimate / proxy / potential" wording in
+   code, payloads and UI (see also `docs/SCIENTIFIC_METHODOLOGY.md` §0).

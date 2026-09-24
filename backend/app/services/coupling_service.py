@@ -171,13 +171,141 @@ def get_coupling_inputs(db, station) -> tuple[CouplingInputs, dict[str, Any]]:
 
 
 def get_coupling_features(db, station) -> dict[str, Any]:
-    """Full coupling-features packet (inputs + features + methodology + provenance)."""
+    """Full coupling-features packet (inputs + features + methodology + provenance).
+
+    Persists the snapshot to the ``coupling_states`` table (write-through,
+    one latest row per station) and labels the state with ``coupling_state``
+    (feedback-surrogate band), ``coupling_domains`` (which feature domains
+    were present) and ``data_quality`` (how many of the nine features were
+    computable).
+    """
     inputs, provenance = get_coupling_inputs(db, station)
     result = compute_coupling_features(inputs)
     result["station"] = station.name
     result["timestamp"] = datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z"
     result["provenance"] = provenance
+    result["coupling_state"] = _coupling_state(result["features"])
+    result["coupling_domains"] = _coupling_domains(result["features"])
+    result["data_quality"] = _data_quality(result["features"])
+    _persist_coupling_state(db, station, result)
     return result
+
+
+_COUPLING_DOMAINS = [
+    ("aerosol_accumulation_potential", "aerosol"),
+    ("dispersion_potential", "atmospheric"),
+    ("accumulation_potential", "atmospheric"),
+    ("inversion_trapping_potential", "atmospheric"),
+    ("pollution_stagnation_index", "atmospheric"),
+    ("meteorology_pollution_interaction", "feedback"),
+    ("fire_transport_influence", "fire"),
+    ("regional_transport_potential", "fire"),
+    ("ozone_photochemical_potential", "ozone"),
+]
+
+
+def _coupling_state(features: dict[str, Any]) -> str:
+    """Band of the composite feedback-surrogate feature (NONE / LOW / MODERATE / HIGH)."""
+    value = features.get("meteorology_pollution_interaction", {}).get("value")
+    if value is None:
+        return "NONE"
+    if value >= 0.66:
+        return "HIGH"
+    if value >= 0.33:
+        return "MODERATE"
+    return "LOW"
+
+
+def _coupling_domains(features: dict[str, Any]) -> str:
+    """Which coupling domains contributed stored data (e.g. 'aerosol+atmospheric+fire')."""
+    present: list[str] = []
+    for feature_name, domain in _COUPLING_DOMAINS:
+        if features.get(feature_name, {}).get("available"):
+            if domain not in present:
+                present.append(domain)
+    return "+".join(present) if present else "none"
+
+
+def _data_quality(features: dict[str, Any]) -> str:
+    """How many of the nine coupling features were computable from stored data."""
+    available = sum(1 for f in features.values() if f.get("available"))
+    if available == len(features):
+        return "GOOD"
+    if available >= 6:
+        return "PARTIAL"
+    if available >= 1:
+        return "SPARSE"
+    return "UNAVAILABLE"
+
+
+def _compass(direction: float | None) -> str | None:
+    if direction is None:
+        return None
+    pts = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    deg = float(direction) % 360.0
+    return pts[int((deg + 11.25) / 22.5) % 16]
+
+
+def _persist_coupling_state(db, station, result: dict[str, Any]) -> None:
+    """Upsert the latest coupling snapshot for a station (Phase 30 persistence)."""
+    from ..models.db_models import CouplingState
+
+    inputs = result["inputs"]
+    feats = result["features"]
+    prov = result.get("provenance", {})
+
+    row = db.query(CouplingState).filter(CouplingState.station_id == station.id).first()
+    if row is None:
+        row = CouplingState(station_id=station.id)
+        db.add(row)
+
+    row.computed_at = datetime.now(UTC).replace(tzinfo=None)
+    row.wind_speed_mps = inputs.get("wind_speed_mps")
+    row.wind_direction_deg = inputs.get("wind_direction_deg")
+    row.pbl_height_m = inputs.get("pbl_height_m")
+    row.inversion_detected = inputs.get("inversion_detected")
+    row.inversion_strength = inputs.get("inversion_strength")
+    row.inversion_category = inputs.get("inversion_category")
+    row.inversion_source = prov.get("inversion_source")
+    row.fire_count = inputs.get("fire_count")
+    row.upwind_fire_count = inputs.get("upwind_fire_count")
+    row.nearest_fire_distance_km = inputs.get("nearest_fire_distance_km")
+    row.fire_impact_score = inputs.get("fire_impact_score")
+    row.wind_alignment_pct = inputs.get("wind_alignment_pct")
+    row.fire_transport_direction = _compass(
+        (inputs.get("wind_direction_deg") or 0.0) + 180.0
+        if inputs.get("wind_direction_deg") is not None
+        else None
+    )
+    row.fire_transport_time_hours = inputs.get("transport_time_hours")
+    row.fire_transport_influence = feats["fire_transport_influence"]["value"]
+    row.dispersion_potential = feats["dispersion_potential"]["value"]
+    row.accumulation_potential = feats["accumulation_potential"]["value"]
+    row.inversion_trapping_potential = feats["inversion_trapping_potential"]["value"]
+    row.pollution_stagnation_index = feats["pollution_stagnation_index"]["value"]
+    row.aerosol_accumulation_potential = feats["aerosol_accumulation_potential"]["value"]
+    row.regional_transport_potential = feats["regional_transport_potential"]["value"]
+    row.ozone_photochemical_potential = feats["ozone_photochemical_potential"]["value"]
+    row.meteorology_pollution_interaction = feats["meteorology_pollution_interaction"]["value"]
+    row.coupling_state = result["coupling_state"]
+    row.coupling_domains = result["coupling_domains"]
+    row.data_quality = result["data_quality"]
+    row.weather_reading_timestamp = _parse_dt(prov.get("weather_reading_timestamp"))
+    row.pollution_reading_timestamp = _parse_dt(prov.get("pollution_reading_timestamp"))
+    db.commit()
+
+
+def _parse_dt(value):
+    """Parse an ISO-8601 string (or pass through a datetime) for DB storage."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    except (TypeError, ValueError):
+        return None
 
 
 _FORECAST_WINDOW_HOURS = 72
