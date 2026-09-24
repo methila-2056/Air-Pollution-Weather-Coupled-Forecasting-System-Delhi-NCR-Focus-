@@ -722,3 +722,99 @@ export interface DemoCredentials {
   name: string
   role: string
 }
+
+export interface ScenarioPerturbationInput {
+  mode: 'absolute' | 'relative'
+  value: number
+}
+
+export interface ScenarioFireInput {
+  mode: 'relative'
+  multiplier: number
+}
+
+export interface ScenarioInversionInput {
+  detected: boolean
+  strength: number | null
+}
+
+export interface ScenarioChangesInput {
+  wind_speed?: ScenarioPerturbationInput
+  wind_direction?: ScenarioPerturbationInput
+  pbl_height?: ScenarioPerturbationInput
+  fire_activity?: ScenarioFireInput
+  inversion?: ScenarioInversionInput
+}
+
+export interface ScenarioAnalysisRequest {
+  station_name: string | null
+  hours: number
+  changes: ScenarioChangesInput
+}
+
+export interface ScenarioForecastPoint {
+  timestamp: string
+  forecast_horizon: number
+  predicted_pm25: number
+  pm25_lower_bound: number | null
+  pm25_upper_bound: number | null
+}
+
+export interface ScenarioForecastSummary {
+  peak_pm25: number | null
+  mean_pm25: number | null
+  forecasts: ScenarioForecastPoint[]
+}
+
+export interface ScenarioDiffPoint {
+  timestamp: string
+  forecast_horizon: number
+  baseline_pm25: number
+  scenario_pm25: number
+  difference_pm25: number
+  baseline_lower_bound: number | null
+  baseline_upper_bound: number | null
+  scenario_lower_bound: number | null
+  scenario_upper_bound: number | null
+}
+
+export interface ScenarioDifference {
+  peak_difference_pm25: number | null
+  mean_difference_pm25: number | null
+  points: ScenarioDiffPoint[]
+}
+
+export interface ScenarioChangeEffect {
+  feature: string
+  unit: string | null
+  baseline_value: number | null
+  scenario_value: number | null
+}
+
+export interface ScenarioAnalysisResponse {
+  label: string
+  disclaimer: string
+  station: string
+  station_id: number
+  release_time: string
+  data_as_of: string | null
+  generated_at: string
+  model: string
+  forecast_strategy: string | null
+  uncertainty_method: string | null
+  coverage_target: number | null
+  horizon_hours: number
+  served_horizons: number[]
+  value_kinds: Record<string, string>
+  observed: {
+    pm25_last_observed_ugm3: number | null
+    pm25_lag1_anchor_ugm3: number | null
+    timestamp: string | null
+  }
+  baseline_forecast: ScenarioForecastSummary
+  scene_forecast: ScenarioForecastSummary
+  difference: ScenarioDifference
+  input_changes: ScenarioChangeEffect[]
+  notes: string[]
+  data_integrity: Record<string, boolean | string>
+}

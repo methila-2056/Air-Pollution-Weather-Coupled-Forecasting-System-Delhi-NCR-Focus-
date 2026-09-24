@@ -34,9 +34,11 @@ const tools = [
   { to: '/overview', label: 'Operational Overview' },
   { to: '/events', label: 'Pollution Events' },
   { to: '/explanation', label: 'Forecast Explainability' },
+  { to: '/scenario', label: 'What-if Scenario' },
   { to: '/model-performance', label: 'Model Performance' },
   { to: '/spatial', label: 'Spatial AQ Outlook' },
   { to: '/architecture', label: 'Architecture & System Status' },
+  { to: '/data-methodology', label: 'Data & Methodology' },
   { to: '/data', label: 'Data & System Sources' },
 ]
 

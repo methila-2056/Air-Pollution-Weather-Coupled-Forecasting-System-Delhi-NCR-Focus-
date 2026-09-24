@@ -3,6 +3,26 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.11.0] - 2026-09
+
+### Added (frontend)
+- **What-if Scenario page** (`/scenario`, Tools menu) wired to `POST /api/scenario/analysis`:
+  per-station baseline-vs-scenario PM2.5 outlook for 6–72 h with wind speed, wind direction,
+  PBL height, regional fire-activity and inversion perturbations; baseline/scenario chart,
+  per-horizon Δ bars, input-change table, hourly detail. Explicitly labelled "Scenario
+  simulation — not a real forecast".
+- **Data & Methodology page** (`/data-methodology`, Tools menu): data provenance with value-kind
+  classification (observed / reanalysis / forecast / derived / ML predicted / scenario simulated),
+  per-source table (provides / update frequency / spatial / temporal / limitations), pipeline
+  diagram, scientific-methodology summaries, honesty commitment.
+
+### Docs
+- `docs/SIH26082_TRACEABILITY.md` — PS clause → implementation → file → API → UI → evidence/test →
+  status matrix covering every explicit SIH26082 clause.
+- `docs/SIH26082_FINAL_AUDIT.md` — final audit (sections A–P) with FULLY / PARTIALLY /
+  NOT IMPLEMENTED classification; 23 IMPLEMENTED, 1 PARTIALLY (real-engine WRF-Chem run is the
+  gated adapter), 0 NOT IMPLEMENTED.
+
 ## [1.10.0] - 2026-09
 
 ### Added (backend)

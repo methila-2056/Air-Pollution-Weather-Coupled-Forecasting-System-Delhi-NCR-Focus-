@@ -1,6 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { latestForecastRun } from '../lib/forecast'
-import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CouplingFeaturesResponse, ForecastContextResponse, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials, PollutionEventsCurrent, DataQualityResponse, SystemResponse } from '../types'
+import type { Station, CurrentAQI, ForecastPoint, WeatherData, InversionData, FireActivity, FireHotspotsResponse, PlumeRisk, Explanation, ForecastExplanation, Alert, ModelMetric, CouplingData, CouplingFeaturesResponse, ForecastContextResponse, CoupledForecastResult, GridForecast, DispersionForecast, SummaryResponse, PollutionReading, PollutionIngestSummary, DataImportSummary, ModelPerformanceResponse, Pm25ForecastResponse, AtmosphereCurrentResponse, TransportRiskResponse, GrapAssessment, GrapStagesResponse, LoginResponse, AuthUser, DemoCredentials, PollutionEventsCurrent, DataQualityResponse, SystemResponse, ScenarioAnalysisRequest, ScenarioAnalysisResponse } from '../types'
 
 const TOKEN_KEY = 'aerocast_token'
 const USER_KEY = 'aerocast_user'
@@ -134,3 +134,6 @@ export const importWeatherCsv = (csv: string) =>
   api.post<DataImportSummary>('/import/weather', csv, { headers: csvHeaders })
 export const importPollutionCsv = (csv: string) =>
   api.post<DataImportSummary>('/import/pollution', csv, { headers: csvHeaders })
+
+export const postScenarioAnalysis = (payload: ScenarioAnalysisRequest) =>
+  api.post<ScenarioAnalysisResponse>('/scenario/analysis', payload, { timeout: 120000 })
