@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getGridForecast, getDispersionForecast, generateCoupledForecast, getStations } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import { AQI_CATEGORIES, aqiCategoryHex, aqiStyle } from '../lib/aqi'
@@ -19,10 +19,28 @@ export default function SpatialForecastPage() {
   const [selStation, setSelStation] = useState('Anand Vihar')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [stationError, setStationError] = useState<string | null>(null)
+
+  const loadStations = useCallback(() => {
+    setStationError(null)
+    getStations()
+      .then((r) => setStations(r.data))
+      .catch(() => setStationError('Failed to load stations. The backend may have been sleeping — click Retry.'))
+  }, [])
 
   useEffect(() => {
-    getStations().then(r => setStations(r.data)).catch(() => setError('Failed to load stations'))
-  }, [])
+    loadStations()
+  }, [loadStations])
+
+  // If the (scale-to-zero) backend was cold on first paint, retry loading
+  // stations when the user returns to a visible tab.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && stations.length === 0) loadStations()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [stations.length, loadStations])
 
   useEffect(() => {
     if (!selStation) return
@@ -101,6 +119,14 @@ export default function SpatialForecastPage() {
       />
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {stationError && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <span>{stationError}</span>
+          <button type="button" onClick={loadStations} className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-amber-100">
+            Retry stations
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Heatmap */}

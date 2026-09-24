@@ -3,6 +3,36 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.13.0] - 2026-09
+
+### Fixed (frontend resilience — cold-start recovery)
+
+The Render free-tier backend scales to zero after ~15 min idle; its cold boot
+(heavy ML imports) can exceed the old 32 s retry budget, leaving panels frozen
+on empty states ("No stations loaded", hotspots 0, plume/smoke "--") until a
+manual reload. Deployed endpoints were verified working (all GET + coupled/
+scenario POSTs return 200 both direct and via the Vercel proxy); the app now
+survives cold starts instead of leaving permanent placeholders.
+
+- `api/client` — transient retry budget raised to 8 attempts × 10 s (covers
+  90–120 s boots); the two idempotent compute POSTs (`/forecast/coupled`,
+  `/scenario/analysis`) now also retry on 502/503/504.
+- `api/warmup.ts` + `main.tsx` — while any tab is open, a background pinger
+  polls `/system` every 4 min so the demo never hits a cold start mid-session.
+- `pages/NCRMap.tsx` — `load()` extracted, Retry actions on the map error and
+  "No stations loaded", auto-refetch on tab visibility when data is empty.
+- `pages/Dashboard.tsx` — refetch stations on tab visibility + Retry control on
+  the map empty state.
+- `pages/SpatialForecastPage.tsx` — separate station-error banner with Retry
+  button + auto-refetch on tab visibility.
+
+Verified live (proxy + direct): `/stations`, `/pollution/latest`,
+`/fire/hotspots`, `/plume-risk`, `/fire-activity`, `/summary`, `/grid/forecast`,
+`/transport-risk/current`, `/alerts`, `/atmosphere/current`, `/coupling[+/features]`,
+`/events/current`, `/data-quality`, `/grap/current`, `/dispersion/forecast`,
+`/model/performance`, `/model/metrics`, `POST /forecast/coupled` (coupled+
+uncoupled series), `POST /scenario/analysis` — all 200.
+
 ## [1.12.0] - 2026-09
 
 ### Added (frontend)

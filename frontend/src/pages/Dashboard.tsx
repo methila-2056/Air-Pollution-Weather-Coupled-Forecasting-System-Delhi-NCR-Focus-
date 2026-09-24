@@ -109,6 +109,18 @@ export default function Dashboard() {
       .catch(() => setStations([]))
   }, [])
 
+  // If the (scale-to-zero) backend was cold on first paint, stations can be
+  // empty; refetch when the user returns to a visible tab.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && stations.length === 0) {
+        getStations().then((r) => setStations(r.data)).catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [stations.length])
+
   const refreshAll = useCallback(() => {
     setError(null)
     return Promise.allSettled([
@@ -470,7 +482,16 @@ export default function Dashboard() {
                   onSelectStation={setSelected}
                 />
               ) : (
-                <EmptyState title="No stations loaded" />
+                <div className="text-center">
+                  <EmptyState title="No stations loaded" />
+                  <button
+                    type="button"
+                    onClick={() => { getStations().then((r) => setStations(r.data)).catch(() => {}); refreshAll() }}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-inst-300 bg-white px-3 py-1.5 text-xs font-semibold text-inst-700 hover:bg-inst-50"
+                  >
+                    Retry
+                  </button>
+                </div>
               )}
             </div>
           </section>

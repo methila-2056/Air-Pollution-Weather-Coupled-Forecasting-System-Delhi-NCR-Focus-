@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { MapPin, Route, Wind } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { MapPin, Route, Wind, RefreshCcw } from 'lucide-react'
 import { getStations, getFireHotspots, getPlumeRisk, getPollutionLatest, getTransportRisk } from '../api/client'
 import StationMap from '../components/StationMap'
 import PageHeader from '../components/PageHeader'
@@ -18,24 +18,36 @@ export default function NCRMap() {
   const [pollution, setPollution] = useState<PollutionReading[]>([])
   const [transport, setTransport] = useState<TransportRiskResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
+
+  const load = useCallback(() => {
+    setError(null)
+    setRetrying(true)
+    Promise.allSettled([
+      getStations().then((r) => setStations(r.data)).catch(() => {}),
+      getFireHotspots().then((r) => setFires(r.data.hotspots)).catch(() => {}),
+      getPlumeRisk().then((r) => setPlume(r.data)).catch(() => {}),
+      getPollutionLatest().then((r) => setPollution(r.data)).catch(() => {}),
+      getTransportRisk().then((r) => setTransport(r.data)).catch(() => {}),
+    ]).then((results) => {
+      const failed = results.filter((r) => r.status === 'rejected').length
+      if (failed >= 3) setError('Database or service unavailable — the backend may have been sleeping. Click Retry.')
+    }).finally(() => setRetrying(false))
+  }, [])
 
   useEffect(() => {
-    getStations()
-      .then((r) => setStations(r.data))
-      .catch(() => setError('Failed to load station data'))
-    getFireHotspots()
-      .then((r) => setFires(r.data.hotspots))
-      .catch(() => {})
-    getPlumeRisk()
-      .then((r) => setPlume(r.data))
-      .catch(() => {})
-    getPollutionLatest()
-      .then((r) => setPollution(r.data))
-      .catch(() => {})
-    getTransportRisk()
-      .then((r) => setTransport(r.data))
-      .catch(() => {})
-  }, [])
+    load()
+  }, [load])
+
+  // If the (scale-to-zero) backend was cold on first paint, the panels can be
+  // empty; retry automatically when the user returns to a visible tab.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && stations.length === 0) load()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [stations.length, load])
 
   const latestByStation = new Map<number, PollutionReading>()
   pollution.forEach((p) => {
@@ -69,7 +81,13 @@ export default function NCRMap() {
         lastUpdated={transport?.generated_at ?? pollution[0]?.timestamp}
       />
 
-      {error && <ErrorState message={error} onRetry={() => window.location.reload()} />}
+      {error && <ErrorState message={error} onRetry={load} />}
+
+      {retrying && !stations.length && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+          <RefreshCcw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading NCR data…
+        </div>
+      )}
 
       <div className="card overflow-hidden p-0">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-6 pt-4 text-xs text-slate-500">
@@ -144,7 +162,14 @@ export default function NCRMap() {
               </div>
             )
           })}
-          {!stations.length && <EmptyState title="No stations loaded" />}
+          {!stations.length && (
+            <div className="col-span-full">
+              <EmptyState title="No stations loaded" />
+              <div className="mt-2 text-center">
+                <button type="button" onClick={load} className="btn-outline">Retry loading stations</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

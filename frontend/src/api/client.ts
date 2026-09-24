@@ -45,18 +45,25 @@ api.interceptors.request.use((config) => {
 
 // Render free-tier instances scale to zero after ~15 min idle; the first
 // requests after a cold start are answered with gateway 502/503/504 or a
-// network timeout while the container boots (often 45-90 s). Panels fire a
+// network timeout while the container boots (often 45-120 s). Panels fire a
 // single GET on mount, so without retrying every page would surface an
-// error/spinner whenever a demo restarts. Idempotent GETs are retried a few
-// times on those transient failures until the backend is awake.
-const MAX_TRANSIENT_RETRIES = 4
-const TRANSIENT_RETRY_DELAY_MS = 8000
+// error/spinner whenever a demo restarts. Idempotent GETs (and the two pure
+// compute POSTs /forecast/coupled and /scenario/analysis, which only read
+// stored data and compute) are retried until the backend is awake.
+const MAX_TRANSIENT_RETRIES = 8
+const TRANSIENT_RETRY_DELAY_MS = 10000
+
+const IDEMPOTENT_POST = /^\/(forecast\/coupled|scenario\/analysis)(\?|$)/
 
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const config = error?.config as (InternalAxiosRequestConfig & { retryCount?: number }) | undefined
-    if (!config || config.method !== 'get') return Promise.reject(error)
+    if (!config) return Promise.reject(error)
+    const method = (config.method ?? 'get').toLowerCase()
+    const isGet = method === 'get'
+    const isIdempotentPost = method === 'post' && typeof config.url === 'string' && IDEMPOTENT_POST.test(config.url)
+    if (!isGet && !isIdempotentPost) return Promise.reject(error)
     const status = error?.response?.status
     const transient = !error.response || status === 0 || status === 502 || status === 503 || status === 504
     if (!transient) return Promise.reject(error)
@@ -137,3 +144,8 @@ export const importPollutionCsv = (csv: string) =>
 
 export const postScenarioAnalysis = (payload: ScenarioAnalysisRequest) =>
   api.post<ScenarioAnalysisResponse>('/scenario/analysis', payload, { timeout: 120000 })
+
+// Exported for the keep-warm pinger (see ../warmup). While a browser tab is
+// open the Render instance is polled so the demo never hits a cold start
+// mid-session.
+export { api }
