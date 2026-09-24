@@ -233,6 +233,12 @@ def get_forecast_comparison(
 
 @router.get("/forecast/ncr", response_model=dict[str, list[ForecastPoint]])
 def get_ncr_forecast(hours: int = Query(default=72, ge=1, le=72), db: Session = Depends(get_db)):
+    from ..services.ttl_cache import cached
+
+    return cached(f"forecast-ncr:{hours}", 120, lambda: _read_ncr_forecast(db, hours))
+
+
+def _read_ncr_forecast(db: Session, hours: int) -> dict[str, list[ForecastPoint]]:
     stations = db.query(Station).order_by(Station.name).all()
     result = {}
     for station in stations:
@@ -263,6 +269,12 @@ def get_forecast_context(station_name: str, db: Session = Depends(get_db)):
 @router.get("/forecast/{station_name}", response_model=list[ForecastPoint])
 def get_forecast(station_name: str, hours: int = Query(default=72, ge=1, le=72), db: Session = Depends(get_db)):
     station = _station_or_404(db, station_name)
+    from ..services.ttl_cache import cached
+
+    return cached(f"forecast:{station_name}:{hours}", 120, lambda: _read_station_forecast(db, station, hours))
+
+
+def _read_station_forecast(db: Session, station: Station, hours: int) -> list[ForecastPoint]:
     forecasts = (
         db.query(Forecast)
         .filter(Forecast.station_id == station.id, Forecast.horizon_hours <= hours)

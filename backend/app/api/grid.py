@@ -20,6 +20,12 @@ def get_grid_forecast(
     Interpolates the latest persisted station forecasts (IDW + wind advection)
     onto a ~2.2km grid for a chosen horizon, returning cells for mapping.
     """
+    from ..services.ttl_cache import cached
+
+    return cached(f"grid:forecast:{horizon_hours}", 120, lambda: _compute_grid(db, horizon_hours))
+
+
+def _compute_grid(db: Session, horizon_hours: int) -> dict:
     stations = db.query(Station).order_by(Station.name).all()
     if not stations:
         return {"error": "no stations", "cells": []}
@@ -67,6 +73,12 @@ def get_grid_forecast(
 @router.get("/grid/overview", response_model=dict)
 def get_grid_overview(db: Session = Depends(get_db)):
     """Summary of forecast coverage across NCR stations and horizons."""
+    from ..services.ttl_cache import cached
+
+    return cached("grid:overview", 300, lambda: _compute_grid_overview(db))
+
+
+def _compute_grid_overview(db: Session) -> dict:
     stations = db.query(Station).order_by(Station.name).all()
     counts = {
         s.name: db.query(Forecast).filter(Forecast.station_id == s.id).count()

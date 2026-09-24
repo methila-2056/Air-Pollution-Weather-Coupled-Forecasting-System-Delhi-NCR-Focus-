@@ -42,7 +42,13 @@ def get_current_events(
         target = first.name
 
     try:
-        payload = svc.detect_current_events(db, target, horizon_hours=hours)
+        from ..services.ttl_cache import cached
+
+        payload = cached(
+            f"events:current:{target}:{hours}",
+            300,
+            lambda: svc.detect_current_events(db, target, horizon_hours=hours),
+        )
     except ValueError as exc:
         msg = str(exc)
         if msg.startswith("station_not_found"):

@@ -20,4 +20,10 @@ def get_dispersion_forecast(
     AQI grid frames over the 72-hour horizon. Aerosol loading feeds back into
     PBL suppression and stability (two-way coupled meteorology-chemistry).
     """
-    return run_dispersion_forecast_service(db, horizon_hours=horizon_hours, start_hour=start_hour)
+    from ..services.ttl_cache import cached
+
+    return cached(
+        f"dispersion:{horizon_hours}:{start_hour}",
+        300,
+        lambda: run_dispersion_forecast_service(db, horizon_hours=horizon_hours, start_hour=start_hour),
+    )

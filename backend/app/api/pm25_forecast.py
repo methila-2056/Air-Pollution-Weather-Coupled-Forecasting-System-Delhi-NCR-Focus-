@@ -48,7 +48,13 @@ def get_pm25_forecast(
         target = first.name
 
     try:
-        payload = svc.forecast_pm25(db, target, hours)
+        from ..services.ttl_cache import cached
+
+        payload = cached(
+            f"pm25-forecast:{target}:{hours}",
+            120,
+            lambda: svc.forecast_pm25(db, target, hours),
+        )
     except ValueError as exc:
         msg = str(exc)
         if msg.startswith("station_not_found"):

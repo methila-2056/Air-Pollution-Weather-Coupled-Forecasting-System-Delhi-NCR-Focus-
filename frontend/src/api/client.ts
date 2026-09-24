@@ -45,13 +45,34 @@ api.interceptors.request.use((config) => {
 
 // Render free-tier instances scale to zero after ~15 min idle; the first
 // requests after a cold start are answered with gateway 502/503/504 or a
-// network timeout while the container boots (often 45-120 s). Panels fire a
-// single GET on mount, so without retrying every page would surface an
-// error/spinner whenever a demo restarts. Idempotent GETs (and the two pure
-// compute POSTs /forecast/coupled and /scenario/analysis, which only read
-// stored data and compute) are retried until the backend is awake.
-const MAX_TRANSIENT_RETRIES = 8
-const TRANSIENT_RETRY_DELAY_MS = 10000
+// network timeout while the container boots (often 45-120 s). Instead of every
+// panel retrying independently (a request storm that hammers a 512 MB box and
+// leaves a patchwork of dead panels), a SINGLE shared warm-up loop pings the
+// cheap /system endpoint until the backend is awake; every panel then retries
+// its request exactly once. Idempotent GETs (and the two pure compute POSTs
+// /forecast/coupled and /scenario/analysis, which only read stored data and
+// compute) take part in this wake-and-retry.
+const MAX_WARM_ATTEMPTS = 12
+const WARM_RETRY_DELAY_MS = 8000
+
+let warmUpPromise: Promise<boolean> | null = null
+
+async function ensureWarm(): Promise<boolean> {
+  if (!warmUpPromise) {
+    warmUpPromise = (async () => {
+      for (let i = 0; i < MAX_WARM_ATTEMPTS; i++) {
+        try {
+          await api.get('/system', { timeout: 90000 })
+          return true
+        } catch {
+          if (i < MAX_WARM_ATTEMPTS - 1) await new Promise((r) => setTimeout(r, WARM_RETRY_DELAY_MS))
+        }
+      }
+      return false
+    })().finally(() => { warmUpPromise = null })
+  }
+  return warmUpPromise
+}
 
 const IDEMPOTENT_POST = /^\/(forecast\/coupled|scenario\/analysis)(\?|$)/
 
@@ -67,10 +88,10 @@ api.interceptors.response.use(
     const status = error?.response?.status
     const transient = !error.response || status === 0 || status === 502 || status === 503 || status === 504
     if (!transient) return Promise.reject(error)
-    const retryCount = config.retryCount ?? 0
-    if (retryCount >= MAX_TRANSIENT_RETRIES) return Promise.reject(error)
-    config.retryCount = retryCount + 1
-    await new Promise((r) => setTimeout(r, TRANSIENT_RETRY_DELAY_MS))
+    if (config.retryCount) return Promise.reject(error)
+    config.retryCount = 1
+    const warm = await ensureWarm()
+    if (!warm) return Promise.reject(error)
     return api.request(config)
   },
 )

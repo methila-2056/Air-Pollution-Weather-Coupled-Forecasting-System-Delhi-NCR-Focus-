@@ -39,6 +39,12 @@ def grap_stages():
 @router.get("/grap/current", response_model=GrapAssessment)
 def grap_current(db: Session = Depends(get_db)):
     """Assess the operative GRAP stage for NCR from current persisted state."""
+    from ..services.ttl_cache import cached
+
+    return cached("grap:current", 300, lambda: _compute_grap_current(db))
+
+
+def _compute_grap_current(db: Session) -> GrapAssessment:
     since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
 
     stations = db.query(Station).order_by(Station.name).all()

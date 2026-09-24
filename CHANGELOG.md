@@ -3,6 +3,29 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.14.0] - 2026-09
+
+### Fixed (backend latency + cold-start consistency)
+
+Measured warm latencies showed the Render free tier (0.5 CPU) answering slow
+for several uncached read endpoints (plume-risk ~6s, grid ~7s, events ~10s,
+pm25 forecast ~7s, GRAP ~4.5s) and a 45–120 s boot after idle. Now:
+
+- TTL cache (already used for `/summary`, `/data-quality`, `/atmosphere/current`,
+  `/transport-risk/current`) is applied to the remaining slow reads: `/plume-risk`,
+  `/fire-activity`, `/fire/hotspots`, `/grid/forecast` (per horizon),
+  `/grid/overview`, `/dispersion/forecast` (per horizon/start), `/grap/current`,
+  `/events/current` (per station/hours), `/forecast/pm25` (per station/hours),
+  `/forecast/{station}`, `/forecast/ncr`. Cache is keyed by query params, bypassed
+  on SQLite (tests keep full isolation), invalidated on live-refresh/seed.
+- Frontend: transient failures now go through a SINGLE shared warm-up loop
+  (`ensureWarm`) that pings `/system` until the scale-to-zero Render instance has
+  booted, then every queued panel retries exactly once — no more per-panel retry
+  storm leaving a patchwork of dead cards, and no multi-minute per-request hangs.
+
+Verified: warm POST `/forecast/coupled` (coupled-two-way) + `/scenario/analysis`
+return 200; all GET surfaces return 200 direct and via the Vercel proxy.
+
 ## [1.13.0] - 2026-09
 
 ### Fixed (frontend resilience — cold-start recovery)

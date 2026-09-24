@@ -67,6 +67,12 @@ def _latest_network_pm25(db: Session) -> float | None:
 
 @router.get("/fire-activity", response_model=FireActivityResponse)
 def get_fire_activity(db: Session = Depends(get_db)):
+    from ..services.ttl_cache import cached
+
+    return cached("fire-activity", 300, lambda: _compute_fire_activity(db))
+
+
+def _compute_fire_activity(db: Session) -> FireActivityResponse:
     fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(1000).all()
     if not fires:
         return FireActivityResponse(total_fires=0, high_confidence_fires=0, mean_frp=0.0, region="Delhi NCR", date=datetime.now())
@@ -100,6 +106,12 @@ def get_transport_direction(station_name: str = "Anand Vihar", db: Session = Dep
 
 @router.get("/plume-risk", response_model=PlumeRiskResponse)
 def get_plume_risk(db: Session = Depends(get_db)):
+    from ..services.ttl_cache import cached
+
+    return cached("plume-risk", 300, lambda: _compute_plume_risk(db))
+
+
+def _compute_plume_risk(db: Session) -> PlumeRiskResponse:
     fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(500).all()
     if not fires:
         return PlumeRiskResponse(
@@ -198,6 +210,12 @@ def get_plume_risk(db: Session = Depends(get_db)):
 @router.get("/fire/hotspots", response_model=FireHotspotsResponse)
 def get_fire_hotspots(db: Session = Depends(get_db)):
     """Recent FIRMS active-fire locations for map overlay (SIH26082)."""
+    from ..services.ttl_cache import cached
+
+    return cached("fire-hotspots", 300, lambda: _compute_fire_hotspots(db))
+
+
+def _compute_fire_hotspots(db: Session) -> FireHotspotsResponse:
     fires = db.query(FireReading).order_by(FireReading.acq_date.desc()).limit(1000).all()
     hotspots = [
         FireHotspot(
