@@ -102,7 +102,7 @@ export default function Atmosphere() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <CouplingPanel data={coupling} />
+            <CouplingPanel data={coupling} features={features} />
 
             <div className="card">
               <div className="flex items-center gap-2">

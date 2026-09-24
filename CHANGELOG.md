@@ -3,6 +3,26 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.12.0] - 2026-09
+
+### Added (frontend)
+- **Coupling directional status + scientific flow (Phases 19/20).** New `CouplingStatusFlow`
+  component on the Atmosphere page (inside `CouplingPanel`): directional availability chips
+  (Meteorology → Pollution / Pollution → Meteorology = ACTIVE / LIMITED / UNAVAILABLE) derived
+  only from the live coupling-features payload (`coupling_state`, `coupling_domains`,
+  `data_quality` + input availability) and the aerosol-feedback diagnostics; plus a clickable
+  5-stage flow (weather → atmospheric state → pollutants → aerosol feedback → atmospheric
+  response) where every stage shows its actual variables, current values and source/method.
+  Unavailable inputs render "Unavailable" — never a fabricated value; the feedback term is
+  explicitly labelled an ML surrogate, not WRF-Chem.
+- `CouplingFeaturesResponse` type now carries `coupling_state` / `coupling_domains` /
+  `data_quality` (present in the backend response since 1.10.0).
+
+### Docs
+- `docs/SIH26082_GAP_AUDIT.md` — nine-point gap audit (implemented / partially implemented /
+  missing / UI-only / ML-connected / real-data / scientifically weak / simulated / improvable)
+  with the Phase 19/20 change set appended.
+
 ## [1.11.0] - 2026-09
 
 ### Added (frontend)

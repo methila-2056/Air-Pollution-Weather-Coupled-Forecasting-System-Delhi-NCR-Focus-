@@ -447,6 +447,7 @@ Mandatory env vars on Render: `DATABASE_URL`, `CORS_ORIGINS`
 | [`docs/methodology.md`](docs/methodology.md) | AQI, features, models, SHAP, coupling, dispersion (§9 surrogate vs. WRF-Chem) |
 | [`docs/SCIENTIFIC_METHODOLOGY.md`](docs/SCIENTIFIC_METHODOLOGY.md) | Formal formulas, constants, units & assumptions (coupling engine, inversion, fire impact, AQI, alerts, models) |
 | [`docs/SIH26082_TRACEABILITY.md`](docs/SIH26082_TRACEABILITY.md) | PS clause → implementation → file → API → UI → evidence/test → status matrix |
+| [`docs/SIH26082_GAP_AUDIT.md`](docs/SIH26082_GAP_AUDIT.md) | Nine-point gap audit (implemented / partial / missing / UI-only / ML-connected / real-data / weak / simulated / improvable) |
 | [`docs/SIH26082_FINAL_AUDIT.md`](docs/SIH26082_FINAL_AUDIT.md) | Final audit (A–P) with FULLY / PARTIALLY / NOT IMPLEMENTED classification |
 | [`docs/SIH26082_IMPLEMENTATION_AUDIT.md`](docs/SIH26082_IMPLEMENTATION_AUDIT.md) | Requirement-by-requirement 24-row status table + verification runs |
 | [`docs/architecture.md`](docs/architecture.md) | System layers & component diagram |

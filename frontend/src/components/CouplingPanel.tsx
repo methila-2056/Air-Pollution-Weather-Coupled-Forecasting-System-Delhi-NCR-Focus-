@@ -1,6 +1,12 @@
-import type { CouplingData } from '../types'
+import type { CouplingData, CouplingFeaturesResponse } from '../types'
+import CouplingStatusFlow from './CouplingStatusFlow'
 
-export default function CouplingPanel({ data }: { data: CouplingData | null }) {
+interface Props {
+  data: CouplingData | null
+  features?: CouplingFeaturesResponse | null
+}
+
+export default function CouplingPanel({ data, features }: Props) {
   if (!data) return <div className="card"><p className="text-slate-500">Loading coupling data...</p></div>
 
   const d = data.diag
@@ -57,6 +63,8 @@ export default function CouplingPanel({ data }: { data: CouplingData | null }) {
             ))}
           </ul>
         </div>
+
+        <CouplingStatusFlow data={data} features={features ?? null} />
       </div>
     </div>
   )

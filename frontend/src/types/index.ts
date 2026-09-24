@@ -222,6 +222,9 @@ export interface CouplingFeaturesResponse {
   inputs: Record<string, number | string | boolean | null>
   methodology: { note: string; constants: Record<string, number> }
   provenance: Record<string, string | number | boolean | null>
+  coupling_state?: string
+  coupling_domains?: string
+  data_quality?: string
 }
 
 export interface ForecastHorizonContext {
