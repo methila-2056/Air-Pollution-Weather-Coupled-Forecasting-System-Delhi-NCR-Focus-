@@ -263,8 +263,9 @@ def get_forecast_context(station_name: str, db: Session = Depends(get_db)):
     """
     station = _station_or_404(db, station_name)
     from ..services.coupling_service import get_forecast_context as _context
+    from ..services.ttl_cache import cached
 
-    return _context(db, station)
+    return cached(f"forecast-context:{station_name}", 300, lambda: _context(db, station))
 
 @router.get("/forecast/{station_name}", response_model=list[ForecastPoint])
 def get_forecast(station_name: str, hours: int = Query(default=72, ge=1, le=72), db: Session = Depends(get_db)):

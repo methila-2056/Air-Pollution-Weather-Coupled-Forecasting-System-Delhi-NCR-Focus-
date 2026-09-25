@@ -23,6 +23,7 @@ import {
   getSummary,
   getAlerts,
   getDataQuality,
+  ensureWarm,
 } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import AQIBadge from '../components/AQIBadge'
@@ -99,6 +100,8 @@ export default function Dashboard() {
   const [history, setHistory] = useState<PollutionReading[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [failedPanels, setFailedPanels] = useState<string[]>([])
+  const [warming, setWarming] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
 
   const stationId = stations.find((s) => s.name === selected)?.id ?? null
@@ -123,28 +126,39 @@ export default function Dashboard() {
 
   const refreshAll = useCallback(() => {
     setError(null)
-    return Promise.allSettled([
-      getSummary().then((r) => setSummary(r.data)).catch(() => {}),
-      getCurrentAQI(selected).then((r) => setCurrent(r.data)).catch(() => setCurrent(null)),
-      getForecast(selected).then((r) => setForecast(r.data)).catch(() => setForecast([])),
-      getPm25Forecast(selected)
-        .then((r) => setPm25(r.data))
-        .catch(() => setPm25(null)),
-      getAtmosphereCurrent(selected).then((r) => setAtmosphere(r.data)).catch(() => setAtmosphere(null)),
-      getFireActivity().then((r) => setFireActivity(r.data)).catch(() => setFireActivity(null)),
-      getFireHotspots()
-        .then((r) => setHotspots(r.data.hotspots))
-        .catch(() => setHotspots([])),
-      getTransportRisk().then((r) => setTransport(r.data)).catch(() => setTransport(null)),
-      getModelPerformance().then((r) => setModelPerf(r.data)).catch(() => setModelPerf(null)),
-      getPollutionLatest().then((r) => setPollution(r.data)).catch(() => setPollution([])),
-      stationId != null
-        ? getPollutionHistory(stationId, 168).then((r) => setHistory(r.data)).catch(() => setHistory([]))
-        : Promise.resolve(),
-      getGrapCurrent().then((r) => setGrap(r.data)).catch(() => setGrap(null)),
-      getAlerts().then((r) => setAlerts(r.data)).catch(() => setAlerts([])),
-      getDataQuality().then((r) => setDataQuality(r.data)).catch(() => setDataQuality(null)),
-    ]).then()
+    const failures: string[] = []
+    // Runs one panel fetch, keeps the last good data on failure and records
+    // the panel name so the banner below can offer a retry (nothing is
+    // silently dropped any more).
+    const settle = <T,>(label: string, promise: Promise<{ data: T }>, set: (v: T) => void) =>
+      promise
+        .then((r) => set(r.data))
+        .catch(() => { failures.push(label) })
+    const run = async () => {
+      setWarming(true)
+      await ensureWarm()
+      setWarming(false)
+      await Promise.allSettled([
+        settle('Summary', getSummary(), setSummary),
+        settle('Current AQI', getCurrentAQI(selected), setCurrent),
+        settle('72h forecast', getForecast(selected), setForecast),
+        settle('PM2.5 forecast', getPm25Forecast(selected), setPm25),
+        settle('Atmospheric state', getAtmosphereCurrent(selected), setAtmosphere),
+        settle('Fire activity', getFireActivity(), setFireActivity),
+        settle('Fire hotspots', getFireHotspots().then((r) => ({ data: r.data.hotspots })), setHotspots),
+        settle('Transport risk', getTransportRisk(), setTransport),
+        settle('Model performance', getModelPerformance(), setModelPerf),
+        settle('Latest pollution', getPollutionLatest(), setPollution),
+        stationId != null
+          ? settle('Pollution history', getPollutionHistory(stationId, 168), setHistory)
+          : Promise.resolve(),
+        settle('GRAP', getGrapCurrent(), setGrap),
+        settle('Alerts', getAlerts(), setAlerts),
+        settle('Data quality', getDataQuality(), setDataQuality),
+      ])
+      setFailedPanels([...failures])
+    }
+    return run()
   }, [selected, stationId])
 
   useEffect(() => {
@@ -194,6 +208,29 @@ export default function Dashboard() {
             refreshAll().finally(() => setLoading(false))
           }}
         />
+      )}
+
+      {warming && (
+        <div className="flex items-center gap-2 rounded-lg border border-inst-200 bg-inst-50 px-4 py-2.5 text-sm text-inst-800" role="status">
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-inst-600" aria-hidden="true" />
+          Connecting to the API server — the free-tier backend may be waking up…
+        </div>
+      )}
+
+      {!error && failedPanels.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900" role="alert">
+          <p>
+            {failedPanels.length === 1 ? '1 panel' : `${failedPanels.length} panels`} couldn&apos;t load:&nbsp;
+            <span className="font-medium">{failedPanels.join(', ')}</span>. Everything else is still live.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setLoading(true); refreshAll().finally(() => setLoading(false)) }}
+            className="rounded-lg border border-amber-400 bg-white px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+          >
+            Retry
+          </button>
+        </div>
       )}
 
       {loading && !current && !summary ? (

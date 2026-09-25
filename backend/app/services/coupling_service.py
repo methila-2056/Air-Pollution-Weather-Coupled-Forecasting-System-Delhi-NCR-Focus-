@@ -300,12 +300,31 @@ def _parse_dt(value):
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value
+        return _utc_naive(value)
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
     except (TypeError, ValueError):
         return None
+
+
+def _utc_naive(value: datetime) -> datetime:
+    """Normalise a DB timestamp to naive-UTC (the repo-wide convention).
+
+    SQLite stores naive datetimes while PostgreSQL ``timestamp with time zone``
+    columns come back tz-aware. Subtracting one of each raises
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes``, so
+    every comparison path normalises first (mirrors
+    ``forecast_service._as_naive_utc`` / ``atmosphere_service._utc_naive``).
+    A naive value is treated as UTC wall-clock and left unchanged.
+    """
+    if value is None:
+        return None
+    try:
+        aware = value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+    except (TypeError, ValueError, OSError):
+        return value
+    return aware.replace(tzinfo=None)
 
 
 _FORECAST_WINDOW_HOURS = 72
@@ -391,7 +410,7 @@ def get_forecast_context(db, station) -> dict[str, Any]:
             {
                 "horizon_hours": h,
                 "target_timestamp": target.isoformat() + "Z",
-                "weather_match_timestamp": wx.timestamp.isoformat() if wx and wx.timestamp else None,
+                "weather_match_timestamp": _utc_naive(wx.timestamp).isoformat() + "Z" if wx and wx.timestamp else None,
                 "temperature_c": inputs.temperature_c,
                 "humidity_pct": inputs.humidity_pct,
                 "pressure_hpa": inputs.pressure_hpa,
@@ -433,13 +452,19 @@ def get_forecast_context(db, station) -> dict[str, Any]:
 
 
 def _nearest_weather_row(rows, target, tolerance: timedelta, within_max_hours: int = 6):
-    """Nearest stored weather row to *target* time (worst case +/- 6h)."""
+    """Nearest stored weather row to *target* time (worst case +/- 6h).
+
+    ``rows`` come from the DB and may carry naive (SQLite) or tz-aware
+    (PostgreSQL) timestamps; ``target`` is naive-UTC. Both are normalised to
+    naive-UTC before ``abs(a - b)`` so the subtraction never raises.
+    """
     best = None
     best_delta = None
     for r in rows:
-        if r.timestamp is None:
+        ts = _utc_naive(r.timestamp)
+        if ts is None:
             continue
-        d = abs(r.timestamp - target)
+        d = abs(ts - target)
         if d > timedelta(hours=within_max_hours) and d > tolerance:
             continue
         if best_delta is None or d < best_delta:

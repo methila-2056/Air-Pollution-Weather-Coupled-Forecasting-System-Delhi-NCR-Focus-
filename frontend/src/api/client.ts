@@ -28,10 +28,14 @@ export const clearSession = () => {
 
 // Render free-tier instances sleep after ~15 min idle and take tens of
 // seconds to wake; a page load right after a cold start must not drop every
-// panel because of the client timeout.
+// panel because of the client timeout. The heavy control-room endpoints
+// (/events/current, /dispersion/forecast, /data-quality, /transport-risk/current,
+// /summary, ...) legitimately take 30-50 s on a cold cache, so the default
+// timeout is set well above that. Transient wake failures are retried by the
+// interceptor below.
 const api = axios.create({
   baseURL: '/api',
-  timeout: 60000,
+  timeout: 120000,
 })
 
 api.interceptors.request.use((config) => {
@@ -169,4 +173,4 @@ export const postScenarioAnalysis = (payload: ScenarioAnalysisRequest) =>
 // Exported for the keep-warm pinger (see ../warmup). While a browser tab is
 // open the Render instance is polled so the demo never hits a cold start
 // mid-session.
-export { api }
+export { api, ensureWarm }
