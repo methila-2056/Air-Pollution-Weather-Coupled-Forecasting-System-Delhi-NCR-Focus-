@@ -56,8 +56,15 @@ api.interceptors.request.use((config) => {
 // then retries its request. Idempotent GETs (and the two pure compute POSTs
 // /forecast/coupled and /scenario/analysis, which only read stored data and
 // compute) take part in this wake-and-retry.
-const MAX_WARM_ATTEMPTS = 12
-const WARM_RETRY_DELAY_MS = 8000
+// Bounded so a cold start cannot hold the page hostage. The previous
+// 12 x 8000 ms = up to 96 s meant a blank dashboard for a minute and a half
+// before the first panel was even requested. The gate now gives up after
+// WARM_BUDGET_MS and lets the per-request interceptor retries (plus the
+// dashboard's own self-heal) carry the remainder.
+const MAX_WARM_ATTEMPTS = 10
+const WARM_RETRY_DELAY_MS = 2500
+const WARM_BUDGET_MS = 25_000
+const WARM_PROBE_TIMEOUT_MS = 5000
 
 // A sleeping instance answers with 502/503 *and* 429 (Render throttles the
 // wake-up burst). 429 used to fall through as a hard error, which is what put
@@ -101,22 +108,39 @@ function releaseSlot(): void {
 
 let warmUpPromise: Promise<boolean> | null = null
 
+// The warm-up probe deliberately bypasses the axios instance.
+//
+// `ensureWarm` is called *from* the response interceptor below, so probing
+// through `api` let the gate re-enter itself: a transient failure of the probe
+// (502/503/429 while Render is waking) sent the interceptor to
+// `await ensureWarm()`, which returned the very `warmUpPromise` that the probe
+// was already awaiting. Nothing could ever settle, so any page opened during a
+// cold start hung forever on its empty state instead of rendering. A bare
+// same-origin `fetch` carries no interceptors, so the gate is structurally
+// incapable of re-entering itself, and `AbortController` guarantees each
+// attempt settles even if the socket hangs.
+async function probeAlive(timeoutMs: number): Promise<boolean> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch('/api/health', { signal: controller.signal, cache: 'no-store' })
+    return res.ok
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function ensureWarm(): Promise<boolean> {
   if (!warmUpPromise) {
     warmUpPromise = (async () => {
+      const deadline = Date.now() + WARM_BUDGET_MS
       for (let i = 0; i < MAX_WARM_ATTEMPTS; i++) {
-        try {
-          // DB-free liveness probe, deliberately NOT /health. The warm gate
-          // only needs to know "is the process accepting connections yet?" --
-          // /health additionally round-trips Postgres, so on a pooled or
-          // free-tier database that adds a network round-trip (and, mid-wake,
-          // seconds) before the gate can even open. Data endpoints retry on
-          // their own, so the database catching up is not our problem here.
-          await api.get('/api/health', { timeout: 20000 })
-          return true
-        } catch {
-          if (i < MAX_WARM_ATTEMPTS - 1) await new Promise((r) => setTimeout(r, WARM_RETRY_DELAY_MS))
-        }
+        if (await probeAlive(WARM_PROBE_TIMEOUT_MS)) return true
+        const remaining = deadline - Date.now()
+        if (remaining <= 0 || i === MAX_WARM_ATTEMPTS - 1) return false
+        await sleep(Math.min(WARM_RETRY_DELAY_MS, remaining))
       }
       return false
     })().finally(() => { warmUpPromise = null })

@@ -50,6 +50,10 @@ import type {
   ModelPerformanceResponse, PollutionReading, Alert, SummaryResponse, GrapAssessment, DataQualityResponse,
 } from '../types'
 
+// Backoff schedule for the self-heal fan-out below. Render's cold wake measured
+// 76 s in production, so the retries deliberately span that window.
+const SELF_HEAL_DELAYS_MS = [4_000, 10_000, 20_000, 30_000]
+
 interface WindVectorInput {
   lat: number
   lon: number
@@ -101,6 +105,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [failedPanels, setFailedPanels] = useState<string[]>([])
+  const [selfHealAttempt, setSelfHealAttempt] = useState(0)
   const [warming, setWarming] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
 
@@ -165,6 +170,27 @@ export default function Dashboard() {
     setLoading(true)
     refreshAll().finally(() => setLoading(false))
   }, [refreshAll])
+
+  // Self-heal. A scale-to-zero cold start can outlast the warm-up gate and the
+  // per-request retries, and the failure mode was permanent: every panel stayed
+  // empty until the user manually reloaded, because nothing re-polled after the
+  // instance finally came up. Retry the whole fan-out on a widening backoff a
+  // few times, then stop and let the banner offer a manual retry.
+  useEffect(() => {
+    if (failedPanels.length === 0) {
+      setSelfHealAttempt(0)
+      return
+    }
+    if (selfHealAttempt >= SELF_HEAL_DELAYS_MS.length) return
+    const timer = setTimeout(() => {
+      setWarming(true)
+      refreshAll().finally(() => {
+        setWarming(false)
+        setSelfHealAttempt((n) => n + 1)
+      })
+    }, SELF_HEAL_DELAYS_MS[selfHealAttempt])
+    return () => clearTimeout(timer)
+  }, [failedPanels.length, selfHealAttempt, refreshAll])
 
   useIntervalRefresh(refreshAll, 60_000, autoRefresh)
 

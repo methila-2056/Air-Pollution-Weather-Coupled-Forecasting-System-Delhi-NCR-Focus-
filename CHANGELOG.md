@@ -3,6 +3,39 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.15.2] - 2026-09
+
+### Fixed (deadlock in the warm-up gate, and a blank page that never recovered)
+
+A cold start could hang the dashboard **permanently**. The warm-up gate
+`ensureWarm()` probed `/api/health` through the same axios instance that
+carries the retry interceptor, and the interceptor calls `ensureWarm()` on a
+transient failure. A 502/503/429 from the probe -- exactly what a waking
+Render instance returns -- therefore sent the interceptor to `await
+ensureWarm()`, which returned the very `warmUpPromise` the probe was already
+awaiting. Neither could ever settle. Any page opened during a cold start hung
+on its empty state instead of rendering, and `Dashboard` blocked on
+`await ensureWarm()` before requesting a single panel.
+
+- The probe now uses a bare same-origin `fetch('/api/health')`. It has no
+  interceptors, so the gate is structurally incapable of re-entering itself,
+  and an `AbortController` guarantees each attempt settles even if the socket
+  hangs.
+- Warm-up gate cut from `12 x 8 s` (up to **96 s** of blank dashboard) to a
+  hard 25 s budget, after which the per-request retries take over.
+
+### Fixed (control room stayed empty after a slow cold start)
+
+The failure mode behind a fully blank Control Room was permanent: panels that
+failed were recorded and shown in a banner, but nothing ever re-polled, so the
+page sat on `--` / "Awaiting live data" / "No active alerts" until the user
+manually reloaded -- even once the instance was up and serving.
+
+- `Dashboard` now retries the whole fan-out on a widening backoff
+  (4 s / 10 s / 20 s / 30 s) while any panel is failing, then stops and leaves
+  the manual retry to the user. The backoff deliberately spans the 76 s cold
+  wake measured in production.
+
 ## [1.15.1] - 2026-09
 
 ### Fixed (free-tier cold start: the warm path was using the wrong probe)
