@@ -141,10 +141,15 @@ def test_generate_forecast_for_station(client, db_session):
 
 
 def test_generate_forecast_persists_alerts(client, db_session):
-    before = client.get("/api/alerts").json()
+    """``POST /api/forecast/generate`` still appends to the ``alerts`` table for
+    audit history, even though the served feed is now evaluated live."""
+    from app.database import SessionLocal
+    from app.models.db_models import Alert
+    with SessionLocal() as session:
+        before = session.query(Alert).count()
     client.post("/api/forecast/generate", json={"station_name": "Anand Vihar"})
-    after = client.get("/api/alerts").json()
-    assert len(after) > len(before)
+    with SessionLocal() as session:
+        assert session.query(Alert).count() > before
 
 
 def test_generate_forecast_station_not_found(client, db_session):
@@ -348,14 +353,51 @@ def test_get_alerts(client, db_session):
 
 
 def test_get_alerts_empty(client, db_session):
+    """The feed is evaluated live per station, so an empty ``alerts`` table no
+    longer means an empty response. A station with neither a forecast nor an
+    observation has nothing to alert on and must return an empty list."""
     from app.database import SessionLocal
-    from app.models.db_models import Alert
+    from app.models.db_models import Alert, Forecast, PollutionReading
     with SessionLocal() as session:
         session.query(Alert).delete()
+        session.query(Forecast).delete()
+        session.query(PollutionReading).delete()
         session.commit()
     response = client.get("/api/alerts")
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_get_alerts_covers_every_station(client, db_session):
+    """Regression: the feed used to replay the persisted ``alerts`` table, which
+    only ever held one station's rows, so 16 of 17 NCR stations were missing."""
+    from app.database import SessionLocal
+    from app.models.db_models import Station
+    with SessionLocal() as session:
+        session.query(Station).filter(Station.name == "Faridabad").delete()
+        session.commit()
+        session.add(Station(name="Faridabad", latitude=28.4089, longitude=77.3178))
+        session.commit()
+    response = client.get("/api/alerts")
+    assert response.status_code == 200
+    body = response.json()
+    assert body, "expected the seeded stations to raise alerts"
+    assert "Anand Vihar" in {a["station"] for a in body}
+
+
+def test_get_alerts_station_filter(client, db_session):
+    all_alerts = client.get("/api/alerts").json()
+    assert all_alerts
+    station = all_alerts[0]["station"]
+    response = client.get("/api/alerts", params={"station": station})
+    assert response.status_code == 200
+    body = response.json()
+    assert {a["station"] for a in body} == {station}
+
+
+def test_get_alerts_unknown_station(client, db_session):
+    response = client.get("/api/alerts", params={"station": "Not A Station"})
+    assert response.status_code == 404
 
 
 def test_get_model_metrics(client, db_session):

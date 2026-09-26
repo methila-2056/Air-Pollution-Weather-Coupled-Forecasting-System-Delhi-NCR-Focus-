@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models.db_models import Alert, FireReading, Forecast, ModelMetrics, PollutionReading, Station
+from ..models.db_models import FireReading, Forecast, ModelMetrics, PollutionReading, Station
 from ..schemas.schemas import StationAQISummary, SummaryResponse
+from ..services import alert_service
 from ..services.aqi_calculator import get_aqi_category, get_dominant_pollutant
 
 settings = get_settings()
@@ -71,7 +72,7 @@ def _build_summary(db: Session) -> object:
         .filter(FireReading.acq_date >= since)
         .count()
     )
-    open_alerts = db.query(Alert).count()
+    open_alerts = len(alert_service.all_station_alerts(db))
     models_trained = db.query(ModelMetrics).count()
 
     stations_with_forecast = (
@@ -79,18 +80,23 @@ def _build_summary(db: Session) -> object:
     )
     latest_forecast = db.query(Forecast).order_by(Forecast.forecast_timestamp.desc()).first()
 
-    if getattr(settings, "live_refresh_enabled", False):
-        data_mode = "live"
-        data_mode_note = (
-            "Live-refresh scheduler is enabled; observations are re-pulled from "
-            "the upstream feed on a schedule."
-        )
-    elif getattr(settings, "demo_hydrate_empty_db", False):
+    # Demo hydration is checked FIRST on purpose. On the hosted demo both
+    # DEMO_HYDRATE_EMPTY_DB and LIVE_REFRESH_ENABLED are set, and the
+    # re-stamped archive rows are what actually surface as "current" readings —
+    # so reporting "live" there would overstate the provenance. Order matters:
+    # the more specific, more conservative mode wins.
+    if getattr(settings, "demo_hydrate_empty_db", False):
         data_mode = "demo_seeded"
         data_mode_note = (
             "Demo-seeded mode (DEMO_HYDRATE_EMPTY_DB=true): stored historical "
             "CPCB/fire/weather records are re-stamped into the recent window so "
             "a fresh database renders a live-looking demo. Not real-time data."
+        )
+    elif getattr(settings, "live_refresh_enabled", False):
+        data_mode = "live"
+        data_mode_note = (
+            "Live-refresh scheduler is enabled; observations are re-pulled from "
+            "the upstream feed on a schedule."
         )
     else:
         data_mode = "static_archive"

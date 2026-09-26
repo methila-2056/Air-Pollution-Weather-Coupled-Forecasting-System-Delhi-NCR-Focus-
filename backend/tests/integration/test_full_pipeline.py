@@ -134,10 +134,13 @@ class TestExplainability:
 
 class TestAlerts:
     def test_alerts_generated_from_forecast(self, client, db_session):
-        before = len(client.get("/api/alerts").json())
+        """The served feed is derived from the current forecast state, so a fresh
+        generation for a station must be reflected without the caller reloading
+        a persisted snapshot."""
         client.post("/api/forecast/generate", json={"station_name": "Anand Vihar"})
-        after = len(client.get("/api/alerts").json())
-        assert after > before
+        body = client.get("/api/alerts").json()
+        assert body, "expected alerts for the regenerated station"
+        assert "Anand Vihar" in {a["station"] for a in body}
 
     def test_alert_structure(self, client, db_session):
         resp = client.get("/api/alerts")
@@ -145,7 +148,7 @@ class TestAlerts:
         alerts = resp.json()
         assert len(alerts) >= 1
         for alert in alerts:
-            assert alert["station"] == "Anand Vihar"
+            assert alert["station"]
             assert alert["alert_level"] in {"WATCH", "ADVISORY", "WARNING", "SEVERE"}
             assert alert["title"]
 

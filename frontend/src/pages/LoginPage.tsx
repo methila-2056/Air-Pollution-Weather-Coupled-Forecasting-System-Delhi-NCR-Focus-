@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, AlertCircle, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react'
+import { Activity, AlertCircle, Eye, EyeOff, Loader2, LockKeyhole, Mail } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { getDemoCredentials } from '../api/client'
+import { isTransientStatus } from '../api/client'
 import type { DemoCredentials } from '../types'
 
 const STATIC_DEMO: DemoCredentials = {
@@ -24,17 +24,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [demo, setDemo] = useState<DemoCredentials>(STATIC_DEMO)
+  const [status, setStatus] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Render free back-ends sleep after idle; when the demo-credentials
-    // endpoint answers with a gateway 502 the button must still be usable,
-    // so the page renders immediately with STATIC_DEMO and simply refreshes
-    // the details here when the server is reachable.
-    getDemoCredentials()
-      .then((res) => setDemo(res.data))
-      .catch(() => {})
-  }, [])
+  // The demo account is a fixed, published constant, so no request is made for
+  // it. It used to be fetched on mount, which on a cold start put a second
+  // request into the wake-up path alongside the login POST — two competing
+  // retry loops on one 0.5-CPU instance, for a value already known.
+  const demo = STATIC_DEMO
 
   if (user && token) {
     return <Navigate to={next && !next.startsWith('/login') ? next : '/dashboard'} replace />
@@ -42,31 +38,34 @@ export default function LoginPage() {
 
   function isTransient(error: any) {
     if (!error || !error.response) return true
-    const status = error.response.status
-    return status === 0 || status === 502 || status === 503 || status === 504
+    return isTransientStatus(error.response.status)
   }
 
-  // Render free back-ends sleep after ~15 min idle and can take 45-90 s to
-  // wake; the first sign-in attempts are answered with gateway 502/503/504
+  // Render free back-ends sleep after ~15 min idle and can take 45-120 s to
+  // wake; the first sign-in attempts are answered with gateway 502/503/429
   // while the container boots. Keep retrying inside that wake window so demo
-  // sign-in works on the first click even right after a cold start, instead of
-  // giving up after one short pause.
-  const WAKE_RETRY_DELAY_MS = 8000
-  const WAKE_MAX_ATTEMPTS = 11
+  // sign-in works on the first click even right after a cold start.
+  const WAKE_MAX_ATTEMPTS = 12
 
   async function signIn(useEmail: string, usePassword: string) {
     for (let attempt = 1; attempt <= WAKE_MAX_ATTEMPTS; attempt++) {
       try {
+        setStatus(attempt === 1 ? 'Signing in…' : 'Server is waking up — retrying…')
         await login(useEmail.trim(), usePassword)
         navigate(next && !next.startsWith('/login') ? next : '/dashboard', { replace: true })
         return
       } catch (err) {
-        if (attempt === WAKE_MAX_ATTEMPTS || !isTransient(err)) {
-          throw err
-        }
-        setError('Air-quality server is waking up — signing you in shortly…')
+        if (attempt === WAKE_MAX_ATTEMPTS || !isTransient(err)) throw err
+        setError(
+          (err as any)?.response?.status === 429
+            ? 'Server is rate-limiting requests — retrying in a moment…'
+            : 'Air-quality server is waking up — signing you in shortly…',
+        )
         setSubmitting(true)
-        await new Promise((r) => setTimeout(r, WAKE_RETRY_DELAY_MS))
+        // Back off progressively so a rate-limited instance is not hammered
+        // into staying rate-limited, while still retrying quickly enough to
+        // land within the wake window.
+        await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** (attempt - 1), 8000)))
       }
     }
   }
@@ -74,6 +73,7 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    setStatus(null)
     const useEmail = email.trim() || demo?.email || ''
     const usePassword = password || demo?.password || ''
     if (!useEmail || !usePassword) {
@@ -96,6 +96,7 @@ export default function LoginPage() {
 
   async function demoSignIn() {
     setError(null)
+    setStatus(null)
     setSubmitting(true)
     try {
       await signIn(demo.email, demo.password)
@@ -198,11 +199,22 @@ export default function LoginPage() {
                 type="button"
                 onClick={demoSignIn}
                 disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-inst-300 bg-inst-50 px-4 py-2.5 text-sm font-semibold text-inst-800 transition-colors hover:bg-inst-100 focus:outline-none focus:ring-2 focus:ring-inst-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-inst-300 bg-inst-50 px-4 py-2.5 text-sm font-semibold text-inst-800 transition-colors hover:bg-inst-100 focus:outline-none focus:ring-2 focus:ring-inst-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                <Activity className="h-4 w-4" aria-hidden="true" />
-                Continue with Demo Account
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Activity className="h-4 w-4" aria-hidden="true" />
+                )}
+                {submitting ? (status ?? 'Signing in…') : 'Continue with Demo Account'}
               </button>
+
+              {submitting && (
+                <p className="text-center text-xs text-slate-500">
+                  Cold starts on the free tier can take up to 2 minutes. This page will
+                  sign you in automatically — no need to click again.
+                </p>
+              )}
 
               <div className="flex items-center gap-3 text-xs text-slate-400">
                 <span className="h-px flex-1 bg-slate-200" />

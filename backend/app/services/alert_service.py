@@ -1,6 +1,20 @@
+"""Threshold alert engine plus the live, all-station alert builder.
+
+``generate_alerts`` is the pure rule engine: it maps one station's forecast /
+weather / fire context onto advisory records. ``all_station_alerts`` is the
+read-side driver used by ``GET /api/alerts`` — it evaluates the rules for
+*every* station on demand so the Alerts view is never limited to whichever
+station happened to be persisted last.
+"""
+
+from datetime import UTC, datetime
 from typing import Any
 
 ALERT_LEVEL_RANK = {"WATCH": 1, "ADVISORY": 2, "WARNING": 3, "SEVERE": 4}
+
+# A run is the set of horizon rows written by one forecast generation. Six
+# horizons are persisted in a single commit, so they share one ``created_at``.
+_MAX_RUN_ROWS = 24
 
 
 def generate_alerts(
@@ -179,3 +193,166 @@ def generate_alerts(
 
     alerts.sort(key=lambda a: ALERT_LEVEL_RANK.get(a["alert_level"], 0), reverse=True)
     return alerts
+
+
+# ---------------------------------------------------------------------------
+# Live all-station evaluation (read path for GET /api/alerts)
+# ---------------------------------------------------------------------------
+def _naive_utc(value: datetime | None) -> datetime | None:
+    """Normalise a DB timestamp to naive UTC.
+
+    The project stores observation/forecast timestamps as naive UTC, but
+    PostgreSQL ``DateTime(timezone=True)`` columns hand back aware values. The
+    two can never be compared, so strip the tzinfo at the boundary.
+    """
+    if value is None:
+        return None
+    return value.replace(tzinfo=None) if value.tzinfo else value
+
+
+def _trend(aqi_series: list[float | None]) -> str:
+    values = [v for v in aqi_series if v is not None]
+    if len(values) < 2 or not values[0]:
+        return "stable"
+    if values[-1] > values[0] * 1.05:
+        return "rising"
+    if values[-1] < values[0] * 0.95:
+        return "falling"
+    return "stable"
+
+
+def _latest_forecast_run(db, station_id: int) -> list[Any]:
+    """Return the horizon rows of the most recent forecast run for a station.
+
+    Rows are grouped by ``created_at`` so a partially-written run (or several
+    runs committed inside the same clock second) still yields one coherent
+    outlook instead of a mix of two runs.
+    """
+    from ..models.db_models import Forecast
+
+    rows = (
+        db.query(Forecast)
+        .filter(Forecast.station_id == station_id)
+        .order_by(Forecast.created_at.desc(), Forecast.horizon_hours.asc())
+        .limit(_MAX_RUN_ROWS)
+        .all()
+    )
+    if not rows:
+        return []
+    newest = rows[0].created_at
+    run = [r for r in rows if r.created_at == newest]
+    # A single-row group means the run was truncated; fall back to the whole
+    # window so the outlook still spans multiple horizons.
+    if len(run) == 1 and len(rows) > 1:
+        run = rows
+    return run
+
+
+def _forecast_inputs(db, station_id: int) -> dict[str, Any] | None:
+    """Build the forecast-side alert inputs for one station.
+
+    Prefers the latest persisted forecast run. When a station has no forecast
+    at all (for example a freshly seeded station) it falls back to the latest
+    pollution observation so the station is still represented instead of
+    silently disappearing from the Alerts view.
+    """
+    from ..models.db_models import PollutionReading
+    from .aqi_calculator import calculate_aqi, get_dominant_pollutant
+
+    run = _latest_forecast_run(db, station_id)
+    if run:
+        worst = max(run, key=lambda r: r.aqi_pred if r.aqi_pred is not None else -1)
+        if worst.aqi_pred is not None:
+            return {
+                "aqi_pred": int(worst.aqi_pred),
+                "dominant_pollutant": worst.dominant_pollutant or "",
+                "trend": _trend([r.aqi_pred for r in run]),
+                "horizon_hours": worst.horizon_hours,
+                "as_of": _naive_utc(worst.created_at),
+            }
+
+    reading = (
+        db.query(PollutionReading)
+        .filter(PollutionReading.station_id == station_id)
+        .order_by(PollutionReading.timestamp.desc())
+        .first()
+    )
+    if reading is None:
+        return None
+    aqi, _category, dominant = calculate_aqi(
+        pm25=reading.pm25,
+        pm10=reading.pm10,
+        o3=reading.o3,
+        no2=reading.no2,
+        so2=reading.so2,
+        co=reading.co,
+    )
+    if not aqi:
+        return None
+    return {
+        "aqi_pred": int(aqi),
+        "dominant_pollutant": dominant or get_dominant_pollutant(
+            reading.pm25, reading.pm10, reading.o3, reading.no2, reading.so2, reading.co
+        ),
+        "trend": "stable",
+        "horizon_hours": None,
+        "as_of": _naive_utc(reading.timestamp),
+    }
+
+
+def build_station_alerts(
+    db, station, fire_data: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Evaluate the alert rules for a single station.
+
+    ``fire_data`` is the NCR-wide fire context; pass the same dict for every
+    station in a batch so the 500-row fire scan is only paid once.
+    """
+    from . import forecast_service
+
+    inputs = _forecast_inputs(db, station.id)
+    if inputs is None:
+        return []
+    weather = forecast_service.get_weather_context(db, station.id)
+    if fire_data is None:
+        fire_data = forecast_service.get_fire_context(db)
+    as_of = inputs.get("as_of") or datetime.now(UTC).replace(tzinfo=None)
+    return [
+        {
+            "station": station.name,
+            "station_id": station.id,
+            "alert_level": alert["alert_level"],
+            "title": alert["title"],
+            "description": alert.get("description", ""),
+            "factors": alert.get("factors"),
+            "recommendation": alert.get("recommendation"),
+            "forecast_horizon_hours": alert.get("forecast_horizon_hours"),
+            "created_at": as_of,
+        }
+        for alert in generate_alerts(inputs, weather, fire_data)
+    ]
+
+
+def all_station_alerts(db, station_name: str | None = None) -> list[dict[str, Any]]:
+    """Evaluate the alert rules across the whole NCR network.
+
+    Stations without a forecast or an observation are skipped (there is nothing
+    to alert on); every other station is always represented, so the Alerts view
+    covers the full network rather than a single persisted station.
+    """
+    from ..models.db_models import Station
+    from . import forecast_service
+
+    query = db.query(Station)
+    if station_name:
+        query = query.filter(Station.name == station_name)
+    stations = query.order_by(Station.name).all()
+
+    # One NCR-wide fire scan shared by every station.
+    fire_data = forecast_service.get_fire_context(db)
+
+    rows: list[dict[str, Any]] = []
+    for station in stations:
+        rows.extend(build_station_alerts(db, station, fire_data))
+    rows.sort(key=lambda a: (-ALERT_LEVEL_RANK.get(a["alert_level"], 0), a["station"]))
+    return rows

@@ -3,6 +3,72 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.15.0] - 2026-09
+
+### Fixed (429 / "API offline", alerts coverage, station menu)
+
+Three defects surfaced during a live demo of the deployed Vercel + Render
+free-tier stack. All three were reproducible against production.
+
+**1. HTTP 429 was never treated as retryable, so panels died permanently.**
+Render's free tier answers a waking instance with 429 as well as 502/503, but
+the client only classified `0/502/503/504` as transient. A rate-limited wake
+was therefore surfaced as a hard error: a red "API offline" badge plus
+"Request failed with status code 429" that never recovered, even though the
+instance came up seconds later. The same missing case made `AuthContext`
+treat a 429 as a rejected session (spurious mid-demo logout) and `LoginPage`
+report it as **"Invalid email or password"**.
+
+- `api/client.ts` -- `isTransientStatus()` now covers `0/408/429/500/502/503/504`;
+  up to 2 retries with exponential backoff; upstream `Retry-After` honoured. A
+  429 backs off directly instead of paying the full wake-up wait, because the
+  instance is already up.
+- The shared warm-up gate now probes `/health` instead of `/system`. `/system`
+  runs a real database round-trip, which is precisely what should not be
+  hammered while the container is still importing.
+- Request storm removed: a dashboard mount fanned out ~14 requests at once --
+  the exact shape that trips the free-tier rate limiter. Requests now queue
+  behind a 4-in-flight cap, duplicate in-flight GETs are de-duplicated by URL,
+  and POSTs are staggered. Every panel still loads; they just no longer arrive
+  as a thundering herd.
+- `api/warmup.ts` -- keep-warm pinger on `/health` every 3 min, skipped while
+  the tab is hidden.
+- `pages/LoginPage.tsx` -- demo sign-in no longer issues a `GET /api/auth/demo`
+  on mount (the value is a published constant; the request only added a second
+  competing retry loop during cold start). Progressive backoff, and the button
+  now shows a spinner plus "Server is waking up" / "retrying" instead of
+  greying out silently.
+
+**2. Alerts covered 1 of 17 stations.** `GET /api/alerts` replayed the persisted
+`alerts` table, which is only appended to by `POST /api/forecast/generate` -- an
+endpoint the UI never calls. Production returned 6 alerts, all for Anand Vihar,
+all frozen at a single timestamp; the other 16 stations had none.
+
+- `services/alert_service.py` -- added `all_station_alerts()` /
+  `build_station_alerts()`, which evaluate the existing rule engine for every
+  station on demand from the latest forecast run, with a latest-observation
+  fallback for stations that have no forecast. One NCR-wide fire scan is shared
+  across the batch. Measured locally: 53 alerts across 15 stations, up from 6 on 1.
+- `GET /api/alerts` serves the live evaluation (120 s TTL cache) and accepts
+  `?station=` to scope the feed; unknown stations 404.
+- `api/summary.py` `open_alerts` now counts the same live set, so the header
+  figure and the Alerts view agree.
+- `POST /api/forecast/generate` still appends to the table for audit history.
+
+**3. No way to reach a station other than the default.** New **Stations**
+dropdown in the primary and mobile navigation listing all 17 monitoring stations
+(session-cached, no refetch per menu open) which routes to
+`/alerts?station=<name>`; the Alerts page also gained a station `<select>` and a
+station badge on the active-alert count.
+
+### Fixed (provenance honesty)
+
+- `api/summary.py` checked `live_refresh_enabled` **before**
+  `demo_hydrate_empty_db`, and the hosted demo sets both -- so the UI always
+  reported `data_mode: "live"` even though demo re-stamping is what makes the
+  observations look current, and the honest `demo_seeded` branch was unreachable
+  in production. The more specific, more conservative mode now wins.
+
 ## [1.14.0] - 2026-09
 
 ### Fixed (backend latency + cold-start consistency)

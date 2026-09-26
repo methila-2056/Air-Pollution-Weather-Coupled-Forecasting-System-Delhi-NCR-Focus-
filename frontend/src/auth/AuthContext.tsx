@@ -4,6 +4,7 @@ import {
   getMe,
   getStoredToken,
   getStoredUser,
+  isTransientStatus,
   login as apiLogin,
   logout as apiLogout,
   storeSession,
@@ -46,12 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch((err) => {
         if (cancelled) return
-        // Render free-tier back-ends sleep after idle; a gateway 502/503 while
-        // waking means the token is still valid — keep the stored session so
-        // panels can retry instead of logging the analyst out mid-demo.
+        // Render free-tier back-ends sleep after idle; a gateway 502/503/429
+        // while waking means the token is still valid — keep the stored
+        // session so panels can retry instead of logging the analyst out
+        // mid-demo. A 429 was previously read as "session rejected", which is
+        // how a rate-limited wake turned into a spurious logout.
         const status = err?.response?.status
-        const transient = !status || status === 0 || status === 502 || status === 503 || status === 504
-        if (transient) return
+        if (isTransientStatus(status)) return
         clearSession()
         setUser(null)
         setToken(null)

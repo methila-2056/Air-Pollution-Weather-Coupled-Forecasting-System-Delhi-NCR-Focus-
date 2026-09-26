@@ -20,6 +20,7 @@ import {
 import { useAuth } from '../auth/AuthContext'
 import SystemStatus from './SystemStatus'
 import AboutModal from './AboutModal'
+import StationsMenu, { useStationNames } from './StationsMenu'
 
 const primaryNav = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -172,6 +173,7 @@ function ToolsMenu() {
 export default function Layout({ children }: { children?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const { names: stationNames, loading: stationsLoading } = useStationNames()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -229,6 +231,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
               <item.icon className="h-4 w-4" aria-hidden="true" /> {item.label}
             </NavLink>
           ))}
+          <StationsMenu />
           <ToolsMenu />
         </div>
 
@@ -249,6 +252,23 @@ export default function Layout({ children }: { children?: ReactNode }) {
                   <item.icon className="h-4 w-4" aria-hidden="true" /> {item.label}
                 </NavLink>
               ))}
+              <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Stations</p>
+              {stationNames.length ? (
+                stationNames.map((name) => (
+                  <NavLink
+                    key={name}
+                    to={`/alerts?station=${encodeURIComponent(name)}`}
+                    onClick={() => setMobileOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    {name}
+                  </NavLink>
+                ))
+              ) : (
+                <p className="px-3 py-1 text-sm text-slate-400">
+                  {stationsLoading ? 'Loading stations…' : 'Stations unavailable'}
+                </p>
+              )}
               <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Tools</p>
               {tools.map((t) => (
                 <NavLink
