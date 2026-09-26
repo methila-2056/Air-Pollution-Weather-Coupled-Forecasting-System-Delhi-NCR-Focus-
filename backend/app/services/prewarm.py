@@ -58,7 +58,6 @@ def _entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
     # runs the app is fully imported.
     from ..main import _data_quality_report
     from ..services import alert_service, atmosphere_service, transport_risk_service
-    from ..services.dispersion_service import run_dispersion_forecast_service
 
     return [
         ("atmosphere:current", "atmosphere:current", 300, lambda db: atmosphere_service.get_current_atmosphere(db)),
@@ -73,10 +72,49 @@ def _entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
         ("fire-hotspots", "fire-hotspots", 300, lambda db: fire_api._compute_fire_hotspots(db)),
         ("plume-risk", "plume-risk", 300, lambda db: fire_api._compute_plume_risk(db)),
         ("grid:forecast:24", "grid:forecast:24", 120, lambda db: grid_api._compute_grid(db, 24)),
-        # Most expensive single panel (72 hourly x 1575-cell grids). Last, so the
-        # cheap high-traffic panels are warm before the CPU goes into the solver.
-        ("dispersion:72:8:all", "dispersion:72:8:all", 300,
-         lambda db: run_dispersion_forecast_service(db, horizon_hours=72, start_hour=8)),
+    ] + _dispersion_entries()
+
+
+def _dispersion_frame_hours(horizon_hours: int) -> list[int]:
+    """Six-hourly frames — must match the Spatial Forecast page's cadence.
+
+    Kept as a function of the horizon so it cannot drift from the client's
+    ``FRAME_STEP_H`` the way a hard-coded list would.
+    """
+    return list(range(6, horizon_hours + 1, 6))
+
+
+def _dispersion_entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
+    """Pre-warm the dispersion keys the UI actually requests.
+
+    The solver is the single most expensive read in the app (~12 s for 72 h on
+    the production box), so warming a key nobody asks for is the worst outcome
+    available: it burns the one CPU during the cold-boot window and speeds
+    nothing up. An earlier version warmed ``dispersion:72:8:all`` while the page
+    had already moved to filtered ``frame_hours`` requests, so every entry it
+    created was unreadable garbage.
+
+    Keys therefore come from :func:`..api.dispersion.dispersion_cache_key` and
+    the frame sets from the same six-hourly cadence the client requests. Three
+    horizons at ~10-12 s each is ~33 s of background CPU after boot — bounded,
+    off the request path, and it lands well inside the 76 s cold wake the
+    dashboard is already retrying through.
+    """
+    from ..api.dispersion import DISPERSION_TTL_SECONDS, dispersion_cache_key
+    from .dispersion_service import run_dispersion_forecast_service
+
+    return [
+        (
+            f"dispersion:{horizon}:8:{'-'.join(str(h) for h in hours)}",
+            dispersion_cache_key(horizon, 8, hours),
+            DISPERSION_TTL_SECONDS,
+            lambda db, horizon=horizon, hours=hours: run_dispersion_forecast_service(
+                db, horizon_hours=horizon, start_hour=8, frame_hours=hours
+            ),
+        )
+        # Cheapest first: 24 h is the horizon the page opens on, so it goes warm
+        # before the 48/72 h solvers take the CPU.
+        for horizon, hours in ((24, _dispersion_frame_hours(24)), (48, _dispersion_frame_hours(48)), (72, _dispersion_frame_hours(72)))
     ]
 
 

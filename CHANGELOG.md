@@ -46,14 +46,25 @@ Three separate defects added up:
   behaviour, so existing consumers and the integration tests are unaffected. The
   Spatial Forecast page asks for 6-hourly frames: 12 grids instead of 72.
 - `CONTROL_ROOM_PREWARM` (opt-in, on in `render.yaml`): a background task fills
-  the TTL cache with the ten heaviest read-only payloads right after startup —
-  atmosphere, alerts, summary, data-quality, transport risk, GRAP, the three
-  fire aggregates, the statistical grid and the 72 h dispersion run — using the
-  same cache keys the HTTP layer uses. The first dashboard load after a cold
+  the TTL cache with the heaviest read-only payloads right after startup —
+  atmosphere, alerts, summary, data-quality, transport risk, GRAP, the three fire
+  aggregates, the statistical grid, and the dispersion runs for the 24/48/72 h
+  horizons the Spatial Forecast page requests. Every key is built by the same
+  `dispersion_cache_key()` helper the endpoint uses, so the sweep can only ever
+  warm entries that are actually read. The first dashboard load after a cold
   wake is then served warm instead of queueing behind a set of cold ~12 s
   aggregations. Runs off the event loop, one entry at a time with a pause
   between, best-effort per entry, and never blocks readiness. Off by default so
-  local dev, pytest and CI never pay for it.
+  local dev, pytest and CI never pay for it. The three dispersion solves cost
+  ~33 s of background CPU on the production 0.5-CPU instance, which lands inside
+  the 76 s cold wake the dashboard is already retrying through.
+
+  An earlier build of this release warmed `dispersion:72:8:all`, which no client
+  requested any more once the page moved to filtered `frame_hours` — spending
+  the most expensive read in the app on an entry nothing could read. Fixed
+  before release; the key/frame-set equivalence is now asserted in the test
+  suite, as is cache-key canonicalisation (`?frame_hours=12,6` and
+  `?frame_hours=6,12` must share one solve, not two).
 - `resilientGet()` in the API client: warm-gate + widening-delay retry for
   panels that live outside the dashboard's fan-out.
 - A **Retry** button on the Spatial Forecast error banner, and honest
@@ -65,11 +76,12 @@ Three separate defects added up:
 
 ### Tests
 
-659 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
+660 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
 smaller, frames numerically identical to the unfiltered run, malformed values
-fall back to every frame) and a `prewarm` suite (cache keys match the HTTP
-layer, a failing entry does not abort the sweep, the stop event is honoured, the
-setting is opt-in).
+fall back to every frame), dispersion cache-key separation/canonicalisation, and
+a `prewarm` suite (pre-warmed keys are exactly the keys the endpoint serves for
+the client's six-hourly frame sets, a failing entry does not abort the sweep, the
+stop event is honoured, the setting is opt-in).
 
 ## [1.15.2] - 2026-09
 

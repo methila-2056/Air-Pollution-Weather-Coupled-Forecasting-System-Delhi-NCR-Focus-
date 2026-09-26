@@ -6,6 +6,21 @@ from ..services.dispersion_service import run_dispersion_forecast_service
 
 router = APIRouter()
 
+DISPERSION_TTL_SECONDS = 300
+
+
+def dispersion_cache_key(horizon_hours: int, start_hour: int, frame_hours: list[int] | None) -> str:
+    """Cache key for a dispersion response.
+
+    Deliberately exported: the control-room pre-warm has to build *exactly* the
+    keys this endpoint serves or it burns its CPU warming entries nothing reads.
+    The frame set is part of the key because it is part of the response, and it
+    is sorted here so two callers asking for the same hours in a different order
+    share one entry instead of solving the PDE twice.
+    """
+    frame_part = "-".join(str(h) for h in sorted(frame_hours)) if frame_hours else "all"
+    return f"dispersion:{horizon_hours}:{start_hour}:{frame_part}"
+
 
 def _parse_frame_hours(raw: str | None) -> list[int] | None:
     """Parse ``?frame_hours=6,12,24`` into a sorted list of hours.
@@ -62,10 +77,9 @@ def get_dispersion_forecast(
     from ..services.ttl_cache import cached
 
     hours = _parse_frame_hours(frame_hours)
-    key = f"dispersion:{horizon_hours}:{start_hour}:{'-'.join(str(h) for h in hours) if hours else 'all'}"
     return cached(
-        key,
-        300,
+        dispersion_cache_key(horizon_hours, start_hour, hours),
+        DISPERSION_TTL_SECONDS,
         lambda: run_dispersion_forecast_service(
             db, horizon_hours=horizon_hours, start_hour=start_hour, frame_hours=hours
         ),

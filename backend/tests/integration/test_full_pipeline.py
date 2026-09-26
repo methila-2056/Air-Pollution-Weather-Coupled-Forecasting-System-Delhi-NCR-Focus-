@@ -371,6 +371,23 @@ class TestDispersionForecast:
             assert resp.status_code == 200, resp.text
             assert len(resp.json()["frames"]) == 24, raw
 
+    def test_dispersion_cache_key_separates_frame_sets(self):
+        """A filtered response must not be served from the unfiltered entry.
+
+        The frame set is part of the response, so it has to be part of the key —
+        otherwise a cold client asking for 12 frames receives a cached 72-frame
+        body (or worse, the pre-warm's entry poisons a filtered request).
+        """
+        from app.api.dispersion import dispersion_cache_key
+
+        key = dispersion_cache_key
+        assert key(72, 8, [6, 12, 24, 48, 72]) != key(72, 8, None)
+        # Canonicalised: the same hours in another order must not solve the PDE
+        # a second time.
+        assert key(72, 8, [12, 6]) == key(72, 8, [6, 12])
+        assert key(24, 8, [6, 12]) != key(48, 8, [6, 12])
+        assert key(24, 8, [6, 12]) != key(24, 9, [6, 12])
+
 
 class TestSummaryEndpoint:
     def test_summary_kpis(self, client, db_session):

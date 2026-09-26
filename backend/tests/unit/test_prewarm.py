@@ -30,15 +30,28 @@ def test_entries_use_the_same_keys_as_the_http_layer():
     ):
         assert key in entries, key
 
-    # The dispersion key is assembled in two places; an unfiltered 72 h request
-    # must hit the entry the pre-warm fills.
-    unfiltered = dispersion._parse_frame_hours(None)
-    assert f"dispersion:72:8:{'all' if unfiltered is None else 'x'}" == "dispersion:72:8:all"
-    assert "dispersion:72:8:all" in entries
+    # The dispersion entries must be the exact keys the endpoint derives from
+    # the query the Spatial Forecast page sends. The frame set is part of the
+    # key, so an unfiltered pre-warm is unreadable garbage the moment the client
+    # filters — the bug this assertion was written for.
+    for horizon in (24, 48, 72):
+        hours = prewarm._dispersion_frame_hours(horizon)
+        parsed = dispersion._parse_frame_hours(",".join(str(h) for h in hours))
+        assert parsed == hours
+        assert dispersion.dispersion_cache_key(horizon, 8, parsed) in entries
 
-    # Cheap high-traffic panels are warmed before the solver-heavy one.
+    assert "dispersion:72:8:all" not in entries
+    assert [hours for hours in (prewarm._dispersion_frame_hours(h) for h in (24, 48, 72))] == [
+        [6, 12, 18, 24],
+        [6, 12, 18, 24, 30, 36, 42, 48],
+        [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72],
+    ]
+
+    # Cheap high-traffic panels are warmed before the solver-heavy ones, and the
+    # 24 h horizon (the one the page opens on) goes first.
     labels = [label for label, _key, _ttl, _builder in prewarm._entries()]
-    assert labels.index("summary") < labels.index("dispersion:72:8:all")
+    assert labels.index("summary") < labels.index("dispersion:24:8:6-12-18-24")
+    assert labels.index("dispersion:24:8:6-12-18-24") < labels.index("dispersion:72:8:6-12-18-24-30-36-42-48-54-60-66-72")
 
 
 def test_prewarm_populates_cache_and_survives_a_failing_entry(monkeypatch):
