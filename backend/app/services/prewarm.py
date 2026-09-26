@@ -68,6 +68,12 @@ def note_scheduled() -> None:
     _mark(enabled=True, state="scheduled")
 
 
+def note_disabled() -> None:
+    """Record that this environment runs without the sweep (dev, test, opt-out)."""
+    _STATUS.clear()
+    _STATUS.update({"enabled": False, "state": "disabled"})
+
+
 def _entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
     """``(label, cache_key, ttl, builder)`` for every heavy read-only panel.
 

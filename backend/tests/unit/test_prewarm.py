@@ -174,8 +174,29 @@ def test_prewarm_setting_parses_from_the_environment(value, expected):
     assert Settings(control_room_prewarm=value).control_room_prewarm is expected
 
 
-def test_prewarm_is_off_by_default():
+def test_prewarm_defaults_to_on_in_production_and_off_elsewhere():
+    """A cold-start fix must not depend on a manual dashboard toggle.
+
+    The first cut of this feature defaulted to off everywhere and relied on
+    `render.yaml`. Render does not push newly added env vars to an
+    already-created service, so the sweep never ran on the live deployment: the
+    whole cold-start fix was silently inert in production, verifiable only by
+    hand-timing requests. Production is where the ~76 s cold wake makes ~75 s of
+    off-request-path CPU worth paying, so it is the default there.
+    """
+    from app.config import Settings
+
+    assert Settings(environment="production").prewarm_enabled is True
+    assert Settings(environment="development").prewarm_enabled is False
+    assert Settings(environment="test").prewarm_enabled is False
+    # An explicit setting always wins, in either direction.
+    assert Settings(environment="production", control_room_prewarm=False).prewarm_enabled is False
+    assert Settings(environment="development", control_room_prewarm=True).prewarm_enabled is True
+
+
+def test_prewarm_is_off_by_default_outside_production():
     """Local dev, pytest and CI must never pay for the sweep unasked."""
     from app.config import Settings
 
-    assert Settings().control_room_prewarm is False
+    assert Settings().prewarm_enabled is False
+    assert Settings().control_room_prewarm is None

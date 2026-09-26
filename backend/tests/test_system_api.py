@@ -19,9 +19,13 @@ def test_system_status(client):
         "explanation",
     }
     # The pre-warm state has to be readable over HTTP: it is the only way to tell
-    # a working cache warm-up from a dead one without hand-timing requests.
-    assert body["prewarm"]["enabled"] is False
-    assert body["prewarm"]["state"] == "disabled"
+    # a working cache warm-up from a dead one without hand-timing requests, and
+    # `setting`/`default_applied` say whether it is on because of the environment
+    # default or because it was configured explicitly.
+    assert isinstance(body["prewarm"]["enabled"], bool)
+    assert body["prewarm"]["setting"] in {True, False, None}
+    assert isinstance(body["prewarm"]["default_applied"], bool)
+    assert body["prewarm"]["state"] in {"disabled", "scheduled", "running", "complete", "cancelled"}
 
 
 def test_system_status_reports_the_prewarm_sweep(client, monkeypatch):

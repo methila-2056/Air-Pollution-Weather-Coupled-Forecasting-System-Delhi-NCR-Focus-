@@ -40,7 +40,7 @@ Phase 19/20 coupling-status + flow additions described at the end.
 - **Auth (JWT + demo), CORS via env, Pydantic validation** — no keys in source.
 - **Dashboard, maps, 72h page, atmosphere, transport, alerts, performance, spatial outlook,
   scenario, data & methodology** pages (all with Loading/Error/Empty states).
-- **663 tests passing** — AQI, inversion, PBL, wind vectors, dispersion, fire, coupling,
+- **664 tests passing** — AQI, inversion, PBL, wind vectors, dispersion, fire, coupling,
   forecast pipeline, time-series split, leakage checks, API validation.
 
 ## 2. Partially implemented (honest boundaries)
@@ -117,4 +117,4 @@ Phase 19/20 coupling-status + flow additions described at the end.
 - `frontend/src/pages/Atmosphere.tsx` — passes `features` to `CouplingPanel`.
 
 Validation after change: `tsc --noEmit`, `vite build`, `ruff check backend/app backend/tests ml`,
-`pytest backend/tests -q` (663 at 1.16.0; 635 when this phase landed). No backend/DB/API-shape changes — this phase is frontend/docs only.
+`pytest backend/tests -q` (664 at 1.16.0; 635 when this phase landed). No backend/DB/API-shape changes — this phase is frontend/docs only.

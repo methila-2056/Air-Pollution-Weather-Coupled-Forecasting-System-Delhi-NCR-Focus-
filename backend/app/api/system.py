@@ -60,10 +60,14 @@ def system_status():
     # Cold-start cache pre-warm. Reported because a cache warm-up is invisible
     # from the outside: if it stops working, the only symptom is a slow first
     # load, which is exactly what nobody is watching. The state also tells you
-    # whether the instance you are talking to has finished warming yet.
+    # whether the instance you are talking to has finished warming yet, and
+    # `setting`/`default_applied` distinguish "on because production" from
+    # "on because somebody set it".
     from ..services.prewarm import prewarm_status
 
     prewarm = prewarm_status()
+    prewarm["setting"] = settings.control_room_prewarm
+    prewarm["default_applied"] = settings.control_room_prewarm is None
 
     engines = {
         "weather_forecast": {

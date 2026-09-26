@@ -45,33 +45,34 @@ Three separate defects added up:
   run produced. Omitting the parameter keeps the previous every-frame
   behaviour, so existing consumers and the integration tests are unaffected. The
   Spatial Forecast page asks for 6-hourly frames: 12 grids instead of 72.
-- `CONTROL_ROOM_PREWARM` (opt-in, on in `render.yaml`): a background task fills
-  the TTL cache with the heaviest read-only payloads right after startup —
-  atmosphere, alerts, summary, data-quality, transport risk, GRAP, the three fire
-  aggregates, the statistical grid, and the dispersion runs for the 24/48/72 h
-  horizons the Spatial Forecast page requests. Every key is built by the same
-  `dispersion_cache_key()` helper the endpoint uses, so the sweep can only ever
-  warm entries that are actually read. The first dashboard load after a cold
-  wake is then served warm instead of queueing behind a set of cold ~12 s
-  aggregations. Runs off the event loop, one entry at a time with a pause
-  between, best-effort per entry, and never blocks readiness. Off by default so
-  local dev, pytest and CI never pay for it. Off the request path on the
-  production 0.5-CPU instance, the sweep is dispatched first (the three solver
-  runs are ~33 s of the 76 s cold wake, and dispatch is the one panel a retry
-  cannot rescue) and the cheaper reads follow.
+- `CONTROL_ROOM_PREWARM`: a background task fills the TTL cache with the heaviest
+  read-only payloads right after startup — atmosphere, alerts, summary,
+  data-quality, transport risk, GRAP, the three fire aggregates, the statistical
+  grid, and the dispersion runs for the 24/48/72 h horizons the Spatial Forecast
+  page requests. Every key is built by the same `dispersion_cache_key()` helper
+  the endpoint uses, so the sweep can only ever warm entries that are actually
+  read. The first dashboard load after a cold wake is then served warm instead of
+  queueing behind a set of cold ~12 s aggregations. Runs off the event loop, one
+  entry at a time with a pause between, best-effort per entry, and never blocks
+  readiness. Unset, it follows the environment: **on when `ENVIRONMENT=production`**
+  (where the ~76 s cold wake makes ~75 s of off-request-path CPU worth paying),
+  off for local dev, pytest and CI. `CONTROL_ROOM_PREWARM=false` opts out. It
+  dispatches the solver first — the three dispersion solves are ~33 s of the 76 s
+  wake, and dispatch is the one panel a retry cannot rescue — then the cheap reads.
 - `GET /api/system` now reports a `prewarm` block (`enabled`, `state`,
-  `entries_warmed`, `entries_failed`, `seconds`, `last_entry`). A cache warm-up
-  is invisible by construction: verified against production, a sweep that was
-  not warming anything looked exactly like one that was, and the only way to
-  tell was to time requests by hand. The state also tells you whether the
-  instance you are talking to has finished warming yet.
+  `setting`, `default_applied`, `entries_warmed`, `entries_failed`, `seconds`,
+  `last_entry`). A cache warm-up is invisible by construction: verified against
+  production, a sweep that was not warming anything looked exactly like one that
+  was, and the only way to tell was to time requests by hand. The state also
+  tells you whether the instance you are talking to has finished warming yet,
+  and whether it is on because of the environment default or explicit config.
 
-  An earlier build of this release warmed `dispersion:72:8:all`, which no client
-  requested any more once the page moved to filtered `frame_hours` — spending
-  the most expensive read in the app on an entry nothing could read. Fixed
-  before release; the key/frame-set equivalence is now asserted in the test
-  suite, as is cache-key canonicalisation (`?frame_hours=12,6` and
-  `?frame_hours=6,12` must share one solve, not two).
+  This block immediately paid for itself: it reported `{"enabled": false}` on the
+  live deployment, proving the sweep had never run there. The cause was that
+  `CONTROL_ROOM_PREWARM` defaulted to `false` and Render does not push newly added
+  `render.yaml` env vars to an already-created service — so the whole cold-start
+  half of this release was inert in production. Hence the environment-aware
+  default above rather than a silent `false`.
 - `resilientGet()` in the API client: warm-gate + widening-delay retry for
   panels that live outside the dashboard's fan-out.
 - A **Retry** button on the Spatial Forecast error banner, and honest
@@ -83,13 +84,20 @@ Three separate defects added up:
 
 ### Tests
 
-663 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
+664 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
 smaller, frames numerically identical to the unfiltered run, malformed values
 fall back to every frame), dispersion cache-key separation/canonicalisation, and
 a `prewarm` suite (the sweep runs the expensive solver first, pre-warmed keys are
 exactly the keys the endpoint serves for the client's six-hourly frame sets, a
 failing entry does not abort the sweep, the stop event is honoured, the setting
-is opt-in, and its progress is reported on `/api/system`).
+defaults on in production and honours an explicit opt-out, and its progress is
+reported on `/api/system`).
+
+Also worth recording from production verification of this release: an earlier
+build warmed `dispersion:72:8:all`, which no client requested any more once the
+page moved to filtered `frame_hours` — spending the most expensive read in the app
+on an entry nothing could read. Fixed, and the key/frame-set equivalence is now
+asserted in the suite.
 
 ## [1.15.2] - 2026-09
 

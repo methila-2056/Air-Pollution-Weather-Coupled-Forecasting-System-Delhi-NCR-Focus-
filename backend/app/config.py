@@ -24,12 +24,21 @@ class Settings(BaseSettings):
     # makes a brand-new or stale database render a live-looking demo with no
     # manual steps (see backend/app/services/demo_hydration.py).
     demo_hydrate_empty_db: bool = False
-    # Cold-start cache pre-warm (Render free tier). When true, a background task
-    # populates the TTL cache with the control room's heavy read-only payloads
-    # right after startup, so the first dashboard load after a ~76 s cold wake is
-    # served from cache instead of serialising ~12 s aggregations on 0.5 CPU.
-    # Off by default: local dev, pytest and CI never pay for it.
-    control_room_prewarm: bool = False
+    # Cold-start cache pre-warm (Render free tier). When enabled, a background
+    # task populates the TTL cache with the control room's heavy read-only
+    # payloads right after startup, so the first dashboard load after a ~76 s
+    # cold wake is served from cache instead of serialising ~12 s aggregations on
+    # 0.5 CPU.
+    #
+    # Tri-state on purpose. `None` means "follow the default for this
+    # environment" (on in production, off everywhere else), and an explicit
+    # true/false always wins. It used to be a plain `bool = False`, which meant
+    # the feature was silently off in production: Render does not push newly
+    # added `render.yaml` env vars to an already-created service, so the sweep
+    # never ran on the live deployment and `/api/system` reported
+    # `{"enabled": false}` for the whole life of the release. A cold-start fix
+    # that quietly depends on a manual dashboard toggle is not a fix.
+    control_room_prewarm: bool | None = None
     # Public URL of the deployed frontend (Vercel). When set, `GET /` on the
     # API redirects the browser there instead of answering a bare 404.
     frontend_url: str = ""
@@ -69,6 +78,22 @@ class Settings(BaseSettings):
     demo_user_password: str = "AeroCast@2026"
 
     model_config = {"env_file": _ENV_FILE}
+
+    @property
+    def prewarm_enabled(self) -> bool:
+        """Whether the cold-start cache sweep should run.
+
+        An explicit ``CONTROL_ROOM_PREWARM`` always wins. Unset, the sweep
+        follows the environment: production is exactly where a 76 s cold wake
+        makes it worth ~75 s of off-request-path CPU, and local dev / pytest /
+        CI are exactly where nobody wants it. The sweep is best-effort,
+        cancellable and never blocks readiness, so the production default is
+        safe; ``CONTROL_ROOM_PREWARM=false`` turns it off if a deployment would
+        rather not pay for it.
+        """
+        if self.control_room_prewarm is not None:
+            return self.control_room_prewarm
+        return self.environment.strip().lower() == "production"
 
 @lru_cache
 def get_settings() -> Settings:

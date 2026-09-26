@@ -139,12 +139,14 @@ async def lifespan(app: FastAPI):
     # Off the event loop, best-effort, and never blocks readiness.
     prewarm_stop = threading.Event()
     prewarm_task = None
-    if getattr(settings, "control_room_prewarm", False):
-        from .services import prewarm as prewarm_service
+    from .services import prewarm as prewarm_service
 
+    if settings.prewarm_enabled:
         prewarm_service.note_scheduled()
         prewarm_task = asyncio.create_task(asyncio.to_thread(prewarm_service.prewarm_control_room, prewarm_stop))
-        logger.info("Control-room pre-warm task scheduled (CONTROL_ROOM_PREWARM=true)")
+        logger.info("Control-room pre-warm task scheduled (CONTROL_ROOM_PREWARM=%s)", settings.control_room_prewarm)
+    else:
+        prewarm_service.note_disabled()
 
     logger.info("AeroCast-NCR backend ready")
     yield
