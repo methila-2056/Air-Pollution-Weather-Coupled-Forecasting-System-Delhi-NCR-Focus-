@@ -51,8 +51,15 @@ import type {
 } from '../types'
 
 // Backoff schedule for the self-heal fan-out below. Render's cold wake measured
-// 76 s in production, so the retries deliberately span that window.
-const SELF_HEAL_DELAYS_MS = [4_000, 10_000, 20_000, 30_000]
+// 76 s in production, so the retries have to span that window *from the end of
+// the failed attempt*, not from page load: the previous 4/10/20/30 schedule
+// fired its last retry 64 s after mount — while the instance was still booting —
+// and then gave up for good, which is how a page opened during a cold start
+// stayed permanently empty (dead atmosphere panels, "No active alerts", an empty
+// verification chart) even after the backend was serving normally. Each entry is
+// the wait *before* the next attempt, so the sweep now runs to ~229 s and every
+// retry is issued against an instance that has had time to finish booting.
+const SELF_HEAL_DELAYS_MS = [4_000, 10_000, 20_000, 30_000, 45_000, 60_000, 60_000]
 
 interface WindVectorInput {
   lat: number

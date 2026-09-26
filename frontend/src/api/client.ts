@@ -66,6 +66,13 @@ const WARM_RETRY_DELAY_MS = 2500
 const WARM_BUDGET_MS = 25_000
 const WARM_PROBE_TIMEOUT_MS = 5000
 
+// Per-request retries for a transient failure. Three, not two: a Render cold
+// wake measured 76 s in production, and each attempt can burn a 25 s warm-up
+// budget before the request is even re-issued. Two retries gave up at roughly
+// the 50 s mark — still inside the wake window — which is how panels ended up
+// permanently empty on a page opened during a cold start.
+const MAX_RETRIES = 3
+
 // A sleeping instance answers with 502/503 *and* 429 (Render throttles the
 // wake-up burst). 429 used to fall through as a hard error, which is what put
 // "Request failed with status code 429" and a permanent red "API offline" badge
@@ -177,7 +184,7 @@ api.interceptors.response.use(
     if (!isGet && !isIdempotentPost) return Promise.reject(error)
     const status = error?.response?.status
     if (!isTransientStatus(status)) return Promise.reject(error)
-    if ((config.retryCount ?? 0) >= 2) return Promise.reject(error)
+    if ((config.retryCount ?? 0) >= MAX_RETRIES) return Promise.reject(error)
     config.retryCount = (config.retryCount ?? 0) + 1
     // For a wake-up failure, gate every queued panel behind the single shared
     // warm-up loop first. For a plain 429 the instance is already up, so just
@@ -262,8 +269,19 @@ export const getForecastContext = (station: string) => get<ForecastContextRespon
 export const generateCoupledForecast = (station: string, horizons?: number[]) =>
   post<CoupledForecastResult>('/forecast/coupled', { station_name: station, horizons: horizons ?? [1, 6, 12, 24, 48, 72] }, { timeout: 120000 })
 export const getGridForecast = (horizon = 24) => get<GridForecast>('/grid/forecast', { params: { horizon_hours: horizon } })
-export const getDispersionForecast = (horizon = 72, startHour = 8) =>
-  get<DispersionForecast>('/dispersion/forecast', { params: { horizon_hours: horizon, start_hour: startHour } })
+// `frameHours` limits how many hourly AQI grids the server materialises. The
+// solver always integrates the full horizon, but building the per-cell grid is
+// what costs: 72 h x 1575 cells is 113,400 cell objects (~7 MB of JSON and ~10 s
+// of serialisation on the 0.5-CPU instance). A client that renders one frame at
+// a time asks for the hours it can actually display.
+export const getDispersionForecast = (horizon = 72, startHour = 8, frameHours?: number[]) =>
+  get<DispersionForecast>('/dispersion/forecast', {
+    params: {
+      horizon_hours: horizon,
+      start_hour: startHour,
+      ...(frameHours?.length ? { frame_hours: frameHours.join(',') } : {}),
+    },
+  })
 export const getAlerts = (station?: string) =>
   get<Alert[]>('/alerts', station ? { params: { station } } : undefined)
 export const getModelMetrics = () => get<ModelMetric[]>('/model/metrics')
@@ -303,3 +321,40 @@ export const postScenarioAnalysis = (payload: ScenarioAnalysisRequest) =>
 // open the Render instance is polled so the demo never hits a cold start
 // mid-session.
 export { api, ensureWarm }
+
+/**
+ * Fetch for panels that live outside the dashboard's fan-out.
+ *
+ * The dashboard retries its whole panel set on a widening backoff while
+ * anything is failing, but a standalone panel (the "Why this forecast"
+ * explanation, the coupled two-way feedback card) had exactly one shot: a
+ * single failure during a cold start left it on its empty state forever, and
+ * in the explanation panel's case the empty state actively claimed the
+ * explainability pipeline had never been run — a confident, false statement
+ * about data that exists and loads in under 3 s once the instance is awake.
+ *
+ * This gives those panels the same recovery behaviour: wait for the shared
+ * warm-up gate, then retry a few times on a widening delay. It resolves as soon
+ * as the request succeeds and only rejects once the budget is spent, so the
+ * caller's error state means "genuinely unavailable" rather than "arrived during
+ * a wake".
+ */
+export async function resilientGet<T>(
+  run: () => Promise<AxiosResponse<T>>,
+  attempts = 4,
+): Promise<AxiosResponse<T>> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      await ensureWarm()
+      await sleep(Math.min(2000 * 2 ** (attempt - 1), 15000))
+    }
+    try {
+      return await run()
+    } catch (error) {
+      lastError = error
+      if (!isTransientStatus((error as { response?: { status?: number } })?.response?.status)) throw error
+    }
+  }
+  throw lastError
+}

@@ -14,7 +14,7 @@
 
 AeroCast-NCR ingests real **CPCB** air-quality observations, **NASA FIRMS**
 VIIRS fire detections, and **Open-Meteo** full vertical-profile meteorology for
-18 Delhi-NCR stations into a weather-coupled machine-learning forecasting
+17 Delhi-NCR stations into a weather-coupled machine-learning forecasting
 engine. It couples atmospheric physics explicitly: **lapse-rate inversion
 scores, PBL-driven ventilation, a PDE dispersion solver, HYSPLIT-aware fire
 plume transport**, and a **two-way aerosol–PBL coupling surrogate** flow back
@@ -52,8 +52,9 @@ validated on a chronological test split and deployed as a working product
     ▼                       · dispersion PDE solver        alerts + CAQM GRAP stages I–IV
  prediction engine          · HYSPLIT transport engine     forecast CSV export / import
  XGBoost · RF · GRU         · 2-way aerosol–PBL feedback    login + analyst session
- 4 pollutants × 6 horizons (1,6,12,24,48,72h)
- split-conformal intervals · SHAP feature attribution
+  6 pollutants × 6 horizons (1,6,12,24,48,72h)
+  split-conformal intervals · SHAP feature attribution
+
 ```
 
 *Engines marked **gated** turn real the moment the institution provides keys /
@@ -67,17 +68,17 @@ HPC output — the code paths exist and are feature-flagged (see `/api/system`).
 |---|---|---|---|
 | R1 | Vertical (pressure-level) atmospheric data | Open-Meteo 900/1000 hPa profile per station | ✅ live |
 | R2 | Meteorological observations for NCR | Open-Meteo + IMD integration path | ✅ live (IMD gated honestly) |
-| R3 | CPCB air-quality ingestion | Pollution readings for 18 NCR stations | ✅ live (archive) |
+| R3 | CPCB air-quality ingestion | Pollution readings for 17 NCR stations | ✅ live (archive) |
 | R4 | AQI computation & categories | CPCB rulebook AQI + dominant pollutant | ✅ live |
 | R5 | Statistical / ML forecasting engine | XGBoost, Random Forest, GRU | ✅ live |
 | R6 | Chemical transport / dispersion (WRF-Chem, HYSPLIT) | HYSPLIT engine adapter + analytic dispersion PDE | ✅ live (surrogate flag, engine-gated) |
-| R7 | 72-hour multi-pollutant forecasts | 4 pollutants × 6 horizons | ✅ live |
+| R7 | 72-hour multi-pollutant forecasts | 6 pollutants × 6 horizons | ✅ live |
 | R8 | Coupled weather–pollution (inversion, PBL, transport) | Inversion scores, ventilation, transport risk, 2-way coupling | ✅ live |
 | R9 | IMD weather forecast integration | `/api/imd/forecast` with honest 401 why | ✅ live (gated) |
 | R10 | Explainability | SHAP feature contribution per forecast | ✅ live |
 | R11 | Uncertainty/forecast quality | Split-conformal intervals + MAE/R²/coverage | ✅ live |
 | R12 | Model validation vs baselines | Chronological split, persisted metrics vs persistence | ✅ live |
-| R13 | Regional/national air quality (NCR regime) | 18 NCR stations + NCR-average outlook | ✅ live |
+| R13 | Regional/national air quality (NCR regime) | 17 NCR stations + NCR-average outlook | ✅ live |
 | R14 | Biomass / stubble burning transport | FIRMS detections, FRP-weighted plume risk, µg/m³ contribution estimate | ✅ live |
 | R15 | Actionable response / alerts | Alerts with drivers + CAQM GRAP stages | ✅ live |
 | R16 | Forecasting → warning products | Episodes/surges events page + scenario analysis | ✅ live |

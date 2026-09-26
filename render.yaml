@@ -66,3 +66,9 @@ services:
       # or stale database renders a live-looking dashboard without manual steps.
       - key: DEMO_HYDRATE_EMPTY_DB
         value: "true"
+      # Cold-start cache pre-warm. The free tier wakes in ~76 s and the dashboard
+      # then fans out ~14 requests, several of them ~11 s aggregations over the
+      # pooled database; warming the TTL cache in the background after boot makes
+      # the first load after a wake fast instead of a queue of cold queries.
+      - key: CONTROL_ROOM_PREWARM
+        value: "true"

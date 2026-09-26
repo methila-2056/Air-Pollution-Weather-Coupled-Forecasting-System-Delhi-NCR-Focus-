@@ -154,6 +154,8 @@ export interface DispersionForecast {
   fires: Array<{ lat: number; lon: number; frp: number; confidence: string | null; satellite: string | null }>
   dt_used: number
   steps_per_hour: number
+  /** Every hour the solver produced, even when the request asked for a subset. */
+  frame_hours_available?: number[]
   frames: DispersionFrame[]
 }
 

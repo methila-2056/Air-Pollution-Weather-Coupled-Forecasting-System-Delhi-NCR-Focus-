@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # makes a brand-new or stale database render a live-looking demo with no
     # manual steps (see backend/app/services/demo_hydration.py).
     demo_hydrate_empty_db: bool = False
+    # Cold-start cache pre-warm (Render free tier). When true, a background task
+    # populates the TTL cache with the control room's heavy read-only payloads
+    # right after startup, so the first dashboard load after a ~76 s cold wake is
+    # served from cache instead of serialising ~12 s aggregations on 0.5 CPU.
+    # Off by default: local dev, pytest and CI never pay for it.
+    control_room_prewarm: bool = False
     # Public URL of the deployed frontend (Vercel). When set, `GET /` on the
     # API redirects the browser there instead of answering a bare 404.
     frontend_url: str = ""

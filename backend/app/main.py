@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import threading
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
@@ -130,10 +131,27 @@ async def lifespan(app: FastAPI):
         hydrate_task = asyncio.create_task(hydrate_demo_if_empty(_refresh_stop))
         logger.info("Demo hydration task scheduled (DEMO_HYDRATE_EMPTY_DB=true)")
 
+    # 5. Optional control-room cache pre-warm. Render's free tier wakes in ~76 s
+    # and the dashboard then fans out ~14 requests, several of which are ~11 s
+    # aggregations over the pooled database. Filling the TTL cache in the
+    # background right after boot means the first real user request is served
+    # warm instead of joining a queue of cold 12 s queries on a 0.5-CPU box.
+    # Off the event loop, best-effort, and never blocks readiness.
+    prewarm_stop = threading.Event()
+    prewarm_task = None
+    if getattr(settings, "control_room_prewarm", False):
+        from .services.prewarm import prewarm_control_room
+
+        prewarm_task = asyncio.create_task(asyncio.to_thread(prewarm_control_room, prewarm_stop))
+        logger.info("Control-room pre-warm task scheduled (CONTROL_ROOM_PREWARM=true)")
+
     logger.info("AeroCast-NCR backend ready")
     yield
 
     # --- Shutdown ---
+    prewarm_stop.set()
+    if prewarm_task is not None:
+        prewarm_task.cancel()
     if refresh_task is not None:
         _refresh_stop.set()
         refresh_task.cancel()

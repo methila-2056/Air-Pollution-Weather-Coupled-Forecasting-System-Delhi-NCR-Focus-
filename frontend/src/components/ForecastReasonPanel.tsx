@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Lightbulb } from 'lucide-react'
-import { getPm25ForecastExplanation } from '../api/client'
+import { getPm25ForecastExplanation, resilientGet } from '../api/client'
 import { fmt, tsFmt } from '../lib/aqi'
 import type { ForecastExplanation } from '../types'
 import EmptyState from './EmptyState'
@@ -13,16 +13,26 @@ export default function ForecastReasonPanel({ station }: Props) {
   const [data, setData] = useState<ForecastExplanation | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(false)
     setData(null)
-    getPm25ForecastExplanation(station, 24)
-      .then((r) => setData(r.data))
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }, [station])
+    // The explanation endpoint is a live SHAP pass over the deployed model, not
+    // a stored row — but a failed *request* used to be reported as "no stored
+    // explanation yet", which is both wrong and unfalsifiable from the UI. It
+    // retries through the shared warm-up gate instead, and only falls through to
+    // the error state once the instance is genuinely not answering.
+    resilientGet(() => getPm25ForecastExplanation(station, 24))
+      .then((r) => { if (!cancelled) setData(r.data) })
+      .catch(() => { if (!cancelled) setError(true) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [station, attempt])
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
   const positives = data?.top_positive_drivers ?? []
   const negatives = data?.top_negative_drivers ?? []
@@ -70,9 +80,19 @@ export default function ForecastReasonPanel({ station }: Props) {
           ))}
         </div>
       ) : error ? (
-        <p className="text-sm text-slate-500">
-          No stored SHAP explanation for {station} at t+24h yet — run the explainability pipeline to populate it.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">
+            Couldn&apos;t reach the explainability service for {station}. The forecast itself is unaffected — this
+            panel only explains it.
+          </p>
+          <button
+            type="button"
+            onClick={retry}
+            className="shrink-0 rounded-lg border border-inst-300 bg-white px-3 py-1.5 text-xs font-semibold text-inst-700 hover:bg-inst-50"
+          >
+            Retry
+          </button>
+        </div>
       ) : data ? (
         <>
           <p className="text-sm leading-relaxed text-slate-700">{data.summary}</p>

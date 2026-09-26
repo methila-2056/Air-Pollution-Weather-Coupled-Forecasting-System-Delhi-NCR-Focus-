@@ -335,6 +335,42 @@ class TestDispersionForecast:
         assert hours_of_day  # diurnal cycle present
         assert all(0 <= h <= 23 for h in hours_of_day)
 
+    def test_dispersion_frame_hours_subset(self, client, db_session):
+        """`?frame_hours=` must shrink the payload without changing the run.
+
+        The 72 h response serialises 72 x 1575 per-cell grids, which is what
+        made the panel time out on the free tier. Asking for a subset has to
+        return exactly those frames, keep full cell fidelity on them, and still
+        advertise the complete hour list.
+        """
+        client.post("/api/forecast/generate", json={"station_name": "Dwarka"})
+        full = client.get("/api/dispersion/forecast?horizon_hours=72&start_hour=8")
+        assert full.status_code == 200, full.text
+        subset = client.get(
+            "/api/dispersion/forecast?horizon_hours=72&start_hour=8&frame_hours=6,12,24,48,72"
+        )
+        assert subset.status_code == 200, subset.text
+        body = subset.json()
+        assert [f["hour"] for f in body["frames"]] == [6, 12, 24, 48, 72]
+        assert body["frame_hours_available"] == [f["hour"] for f in full.json()["frames"]]
+        for frame in body["frames"]:
+            assert len(frame["cells"]) > 0
+            assert {"lat", "lon", "aqi", "aqi_category"} <= set(frame["cells"][0])
+        # Same physics: the requested frames match the unfiltered run.
+        by_hour_full = {f["hour"]: f for f in full.json()["frames"]}
+        for frame in body["frames"]:
+            assert frame["aqi_mean"] == by_hour_full[frame["hour"]]["aqi_mean"]
+        assert len(subset.content) < len(full.content)
+
+    def test_dispersion_frame_hours_malformed_falls_back_to_all(self, client, db_session):
+        client.post("/api/forecast/generate", json={"station_name": "Dwarka"})
+        for raw in ("not-a-number", "-4", ""):
+            resp = client.get(
+                f"/api/dispersion/forecast?horizon_hours=24&start_hour=8&frame_hours={raw}"
+            )
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()["frames"]) == 24, raw
+
 
 class TestSummaryEndpoint:
     def test_summary_kpis(self, client, db_session):

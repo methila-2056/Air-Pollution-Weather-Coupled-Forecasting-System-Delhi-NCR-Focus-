@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getGridForecast, getDispersionForecast, generateCoupledForecast, getStations } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import { AQI_CATEGORIES, aqiCategoryHex, aqiStyle } from '../lib/aqi'
@@ -6,6 +6,11 @@ import type { GridForecast, CoupledForecastResult, DispersionForecast, Station, 
 
 const HORIZONS = [1, 6, 12, 24, 48, 72]
 const DISP_HORIZONS = [24, 48, 72]
+// Frame cadence requested from the solver. Six-hourly keeps every value the
+// horizon selector offers (24/48/72) plus room to scrub, at 12 grids instead of
+// 72 — the full request serialised 113,400 cells (~7 MB) and was the panel that
+// failed outright on the free tier.
+const FRAME_STEP_H = 6
 type Mode = 'statistical' | 'numerical'
 
 export default function SpatialForecastPage() {
@@ -20,6 +25,16 @@ export default function SpatialForecastPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [stationError, setStationError] = useState<string | null>(null)
+  // The coupled two-way forecast used to fail silently (`.catch(() => {})`),
+  // leaving a permanently empty "Run the coupled forecast…" card that reads like
+  // an action the operator still has to take rather than a request that dropped.
+  const [coupledError, setCoupledError] = useState<string | null>(null)
+  const [coupledAttempt, setCoupledAttempt] = useState(0)
+
+  const frameHours = useMemo(
+    () => Array.from({ length: Math.floor(horizon / FRAME_STEP_H) }, (_, i) => (i + 1) * FRAME_STEP_H),
+    [horizon],
+  )
 
   const loadStations = useCallback(() => {
     setStationError(null)
@@ -42,22 +57,42 @@ export default function SpatialForecastPage() {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [stations.length, loadStations])
 
+  const runCoupled = useCallback(() => {
+    setCoupledError(null)
+    // Never leave another station's result under this station's heading.
+    setCoupled(null)
+    return generateCoupledForecast(selStation)
+      .then((r) => setCoupled(r.data))
+      .catch(() => setCoupledError('The coupled two-way forecast could not be computed for this station.'))
+  }, [selStation])
+
+  const runField = useCallback(() => {
+    if (mode === 'statistical') {
+      return getGridForecast(horizon)
+        .then(r => setGrid(r.data))
+        .catch(() => setError('Failed to load spatial forecast'))
+    }
+    return getDispersionForecast(horizon, 8, frameHours)
+      .then(r => setDisp(r.data))
+      .catch(() => setError('Failed to load numerical dispersion forecast'))
+  }, [mode, horizon, frameHours])
+
   useEffect(() => {
     if (!selStation) return
     setError(null)
-    if (mode === 'statistical') {
-      getGridForecast(horizon)
-        .then(r => setGrid(r.data))
-        .catch(() => setError('Failed to load spatial forecast'))
-    } else {
-      getDispersionForecast(horizon, 8)
-        .then(r => setDisp(r.data))
-        .catch(() => setError('Failed to load numerical dispersion forecast'))
-    }
-    generateCoupledForecast(selStation)
-      .then(r => setCoupled(r.data))
-      .catch(() => {})
-  }, [selStation, horizon, mode])
+    runField()
+    runCoupled()
+  }, [selStation, runField, runCoupled])
+
+  useEffect(() => {
+    if (coupledAttempt > 0) runCoupled()
+  }, [coupledAttempt, runCoupled])
+
+  const retryAll = useCallback(() => {
+    setError(null)
+    setLoading(true)
+    Promise.all([runField(), runCoupled()]).finally(() => setLoading(false))
+  }, [runField, runCoupled])
 
   const width = 480
   const height = 420
@@ -110,7 +145,7 @@ export default function SpatialForecastPage() {
             </select>
             <button
               className="btn-primary"
-              onClick={() => { setLoading(true); generateCoupledForecast(selStation).then(r => setCoupled(r.data)).catch(() => setError('Failed to run coupled forecast')).finally(() => setLoading(false)) }}
+              onClick={() => { setLoading(true); runCoupled().finally(() => setLoading(false)) }}
             >
               {loading ? 'Running...' : 'Run Coupled'}
             </button>
@@ -118,7 +153,18 @@ export default function SpatialForecastPage() {
         }
       />
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={retryAll}
+            className="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {stationError && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <span>{stationError}</span>
@@ -254,6 +300,17 @@ export default function SpatialForecastPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : coupledError ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-500">{coupledError}</p>
+                <button
+                  type="button"
+                  onClick={() => setCoupledAttempt((n) => n + 1)}
+                  className="shrink-0 rounded-lg border border-inst-300 bg-white px-3 py-1.5 text-xs font-semibold text-inst-700 hover:bg-inst-50"
+                >
+                  Retry
+                </button>
               </div>
             ) : (
               <p className="text-sm text-slate-500">Run the coupled forecast to see the two-way weather-chemistry feedback path.</p>

@@ -21,6 +21,7 @@ documented analytic path stays active (``mode="numerical_advection_diffusion"``)
 from __future__ import annotations
 
 import datetime as _dt
+from collections.abc import Sequence
 from datetime import UTC
 
 import numpy as np
@@ -189,13 +190,28 @@ def run_dispersion_forecast_service(
     horizon_hours: int = 72,
     start_hour: int = 8,
     start_utc: _dt.datetime | None = None,
+    frame_hours: Sequence[int] | None = None,
 ) -> dict:
-    """Run the numerical dispersion forecast from the latest DB state."""
+    """Run the numerical dispersion forecast from the latest DB state.
+
+    ``frame_hours`` restricts which hourly frames are serialised into the
+    response. The solver always integrates the full horizon (the field evolves
+    hourly, so every frame depends on the ones before it), but the per-cell
+    AQI grid is only materialised for the requested hours: on the ~2.2 km NCR
+    grid a 72 h run is 72 x 1575 = 113,400 cell dictionaries, and building
+    those dominates both the response time and the memory footprint of the
+    endpoint. A client that renders one frame at a time (the Spatial Forecast
+    page) asks for the handful of hours it can actually show and gets a payload
+    one to two orders of magnitude smaller. ``None`` keeps the historical
+    behaviour of returning every frame.
+    """
+    wanted: set[int] | None = None if frame_hours is None else {int(h) for h in frame_hours}
     wx = _latest_weather(db)
     initial_aqi = _initial_aqi_field(db, min(horizon_hours, 24))
     if initial_aqi is None:
         return {
             "error": "no forecast surface available; generate a coupled forecast first (POST /api/forecast/coupled)",
+            "frame_hours_available": [],
             "frames": [],
         }
 
@@ -212,8 +228,11 @@ def run_dispersion_forecast_service(
     if engine is not None:
         name, result = engine
         blend_note, aqi_frames = _composite_from_ctm(result, initial_aqi)
+        available = [int(fr["hour"]) for fr in aqi_frames]
         frames = []
         for fr in aqi_frames:
+            if wanted is not None and int(fr["hour"]) not in wanted:
+                continue
             frames.append({
                 "hour": fr["hour"],
                 "hour_of_day": fr["hour_of_day"],
@@ -237,6 +256,7 @@ def run_dispersion_forecast_service(
             "fire_count": len(fires),
             "fires": fires[:20],
             "composite": blend_note,
+            "frame_hours_available": available,
             "ctm": {
                 "engine": result.engine,
                 "pollutant": result.pollutant,
@@ -278,8 +298,11 @@ def run_dispersion_forecast_service(
         pbl_hourly=pbl_hourly,
     )
 
+    available = [int(fr["hour"]) for fr in result["frames"]]
     frames = []
     for fr in result["frames"]:
+        if wanted is not None and int(fr["hour"]) not in wanted:
+            continue
         aqi = fr["aqi"]
         frames.append({
             "hour": fr["hour"],
@@ -306,5 +329,6 @@ def run_dispersion_forecast_service(
         "fires": fires[:20],
         "dt_used": round(result["dt_used"], 1),
         "steps_per_hour": result["steps_per_hour"],
+        "frame_hours_available": available,
         "frames": frames,
     }

@@ -3,6 +3,74 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.16.0] - 2026-09
+
+### Fixed (dead panels on a cold start: "Atmospheric profile unavailable", "No active alerts", an empty verification chart)
+
+Reported from the live deployment: opening the Control Room during a Render
+cold wake left whole panels permanently empty — the three atmospheric panels
+("Atmospheric profile unavailable"), the alerts strip ("No active alerts" while
+`/api/summary` reported 115 open alerts), the verification chart, and the
+numerical dispersion panel. Every one of those endpoints answers in **under 12 s
+once the instance is awake** (verified directly against production), so none of
+it was missing data.
+
+Three separate defects added up:
+
+1. **The self-heal window was shorter than the cold start it was meant to
+   survive.** The retry backoff (4/10/20/30 s) fired its last attempt 64 s after
+   mount. The measured production cold wake is 76 s, so the final retry landed
+   while the instance was still booting and then gave up for good. The schedule
+   now spans ~229 s, and per-request retries went from 2 to 3 — with a 25 s
+   warm-up budget per attempt, two retries gave up at roughly the 50 s mark.
+2. **A panel claimed data was missing when the request had simply failed.** The
+   "Why this forecast" card had exactly one attempt and reported any failure as
+   *"No stored SHAP explanation for … yet — run the explainability pipeline to
+   populate it"*. The pipeline is fine: `/api/forecast/pm25/explanation` returns
+   a live `shap.TreeExplainer` pass in ~3 s. The panel now retries through the
+   shared warm-up gate and, if it still cannot reach the service, says so and
+   offers a retry instead of asserting something false about the database.
+3. **`/api/dispersion/forecast` serialised 113,400 grid cells.** A 72 h run is
+   72 frames × 1575 cells — **7.3 MB of JSON and ~11 s** of serialisation on a
+   0.5-CPU instance — for a page that renders exactly one frame at a time. That
+   is why the numerical dispersion panel was the one panel that could not be
+   rescued by retrying.
+
+### Added
+
+- `GET /api/dispersion/forecast?frame_hours=6,12,24,48,72` — the solver still
+  integrates the full horizon (the field evolves hourly, so every frame depends
+  on the one before it), but only the requested hours get their per-cell grid
+  materialised. `frame_hours_available` in the body advertises every hour the
+  run produced. Omitting the parameter keeps the previous every-frame
+  behaviour, so existing consumers and the integration tests are unaffected. The
+  Spatial Forecast page asks for 6-hourly frames: 12 grids instead of 72.
+- `CONTROL_ROOM_PREWARM` (opt-in, on in `render.yaml`): a background task fills
+  the TTL cache with the ten heaviest read-only payloads right after startup —
+  atmosphere, alerts, summary, data-quality, transport risk, GRAP, the three
+  fire aggregates, the statistical grid and the 72 h dispersion run — using the
+  same cache keys the HTTP layer uses. The first dashboard load after a cold
+  wake is then served warm instead of queueing behind a set of cold ~12 s
+  aggregations. Runs off the event loop, one entry at a time with a pause
+  between, best-effort per entry, and never blocks readiness. Off by default so
+  local dev, pytest and CI never pay for it.
+- `resilientGet()` in the API client: warm-gate + widening-delay retry for
+  panels that live outside the dashboard's fan-out.
+- A **Retry** button on the Spatial Forecast error banner, and honest
+  "couldn't be computed" state (with retry) for the coupled two-way forecast,
+  which previously swallowed its failure and left a permanent *"Run the coupled
+  forecast…"* prompt that read like an action still owed rather than a dropped
+  request. A station switch no longer leaves the previous station's coupled
+  result under the new station's heading.
+
+### Tests
+
+659 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
+smaller, frames numerically identical to the unfiltered run, malformed values
+fall back to every frame) and a `prewarm` suite (cache keys match the HTTP
+layer, a failing entry does not abort the sweep, the stop event is honoured, the
+setting is opt-in).
+
 ## [1.15.2] - 2026-09
 
 ### Fixed (deadlock in the warm-up gate, and a blank page that never recovered)

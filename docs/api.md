@@ -46,6 +46,7 @@ Authoritative definitions live in `backend/app/api/*.py` and
 | GET | `/api/grid/forecast?horizon_hours=24` | Statistical IDW AQI surface (cells) |
 | GET | `/api/grid/overview` | Grid coverage summary |
 | GET | `/api/dispersion/forecast?horizon_hours=72&start_hour=8` | Numerical advection–diffusion run; hourly frames + coupling diagnostics |
+| GET | `/api/dispersion/forecast?horizon_hours=72&frame_hours=6,12,24,48,72` | Same run, but only the listed hours get their per-cell AQI grid serialised. The solver still integrates the whole horizon; this bounds the response, which for 72 h is otherwise 72 × 1575 cells (~7 MB). `frame_hours_available` in the body lists every hour the run produced. Omit the parameter for all frames. |
 
 ## Fire & plume
 | Method | Path | Description |
