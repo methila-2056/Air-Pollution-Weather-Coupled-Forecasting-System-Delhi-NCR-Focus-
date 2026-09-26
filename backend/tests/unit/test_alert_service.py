@@ -217,3 +217,46 @@ def test_all_none_inputs_yield_no_alerts():
 def test_missing_weather_and_fire_keys_do_not_crash():
     alerts = generate_alerts({"aqi_pred": 350}, {}, {})
     assert _levels(alerts) == ["WARNING"]
+
+
+def test_all_station_alerts_filter_is_a_subset_of_the_full_sweep():
+    """``all_station_alerts`` caches the unfiltered 17-station sweep and applies
+    the station name afterwards. That refactor moved filtering out of the SQL
+    query, so lock in the invariant: a filtered call must be exactly the subset
+    of the full call for that station, not an independently computed answer.
+    """
+    from backend.app.database import SessionLocal
+    from backend.app.services.alert_service import all_station_alerts
+
+    with SessionLocal() as db:
+        every = all_station_alerts(db)
+        if not every:
+            return  # empty test database: nothing to relate a subset to
+        for station in {row["station"] for row in every}:
+            filtered = all_station_alerts(db, station)
+            assert filtered, f"expected alerts for {station}"
+            assert {row["station"] for row in filtered} == {station}
+            assert filtered == [row for row in every if row["station"] == station]
+
+
+def test_all_station_alerts_unknown_station_is_empty():
+    from backend.app.database import SessionLocal
+    from backend.app.services.alert_service import all_station_alerts
+
+    with SessionLocal() as db:
+        assert all_station_alerts(db, "Definitely Not A Station") == []
+
+
+def test_all_station_alerts_never_mutates_the_cached_sweep():
+    """The endpoint hands the cached list straight to callers, so a filter must
+    not be able to corrupt it for the next request."""
+    from backend.app.database import SessionLocal
+    from backend.app.services.alert_service import all_station_alerts
+
+    with SessionLocal() as db:
+        every = all_station_alerts(db)
+        if not every:
+            return
+        before = list(every)
+        all_station_alerts(db, every[0]["station"]).clear()
+        assert all_station_alerts(db) == before

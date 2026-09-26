@@ -28,17 +28,16 @@ def get_alerts(
 ):
     """Active pollution alerts for the whole NCR network.
 
-    Cached for 120 s: the underlying forecast/weather/fire state only moves on
-    the live-refresh cadence, and the 17-station sweep is far too expensive to
-    repeat on every dashboard mount.
+    Cached for 120 s inside :func:`..services.alert_service.all_station_alerts`,
+    keyed on the full unfiltered sweep: a ``?station=`` filter reuses that one
+    sweep instead of recomputing the whole network, and ``/api/summary``'s
+    ``open_alerts`` shares the same cache entry rather than paying for its own
+    pass over all 17 stations.
     """
-    from ..services.ttl_cache import cached
-
     if station and not db.query(Station).filter(Station.name == station).first():
         raise HTTPException(status_code=404, detail=f"Station '{station}' not found")
 
-    key = f"alerts:{station}" if station else "alerts:all"
-    rows = cached(key, 120, lambda: alert_service.all_station_alerts(db, station))
+    rows = alert_service.all_station_alerts(db, station)
     return [
         AlertResponse(
             id=0,

@@ -339,20 +339,31 @@ def all_station_alerts(db, station_name: str | None = None) -> list[dict[str, An
     Stations without a forecast or an observation are skipped (there is nothing
     to alert on); every other station is always represented, so the Alerts view
     covers the full network rather than a single persisted station.
+
+    The expensive part is the 17-station sweep (latest forecast run + observation
+    per station, plus one shared NCR-wide fire scan), so it is computed **once**
+    and cached here rather than per caller. On the pooled Neon Postgres the first
+    sweep costs several seconds, and ``/api/alerts`` and ``/api/summary`` both
+    need it; caching inside the service means the second caller is free and a
+    ``?station=`` filter reuses the same sweep instead of recomputing the whole
+    network. The cache is bypassed on SQLite (local dev / pytest) by
+    :func:`..services.ttl_cache.cached`.
     """
     from ..models.db_models import Station
     from . import forecast_service
+    from .ttl_cache import cached
 
-    query = db.query(Station)
+    def _sweep() -> list[dict[str, Any]]:
+        stations = db.query(Station).order_by(Station.name).all()
+        # One NCR-wide fire scan shared by every station.
+        fire_data = forecast_service.get_fire_context(db)
+        rows: list[dict[str, Any]] = []
+        for station in stations:
+            rows.extend(build_station_alerts(db, station, fire_data))
+        rows.sort(key=lambda a: (-ALERT_LEVEL_RANK.get(a["alert_level"], 0), a["station"]))
+        return rows
+
+    rows = cached("alerts:all_stations", 120, _sweep)
     if station_name:
-        query = query.filter(Station.name == station_name)
-    stations = query.order_by(Station.name).all()
-
-    # One NCR-wide fire scan shared by every station.
-    fire_data = forecast_service.get_fire_context(db)
-
-    rows: list[dict[str, Any]] = []
-    for station in stations:
-        rows.extend(build_station_alerts(db, station, fire_data))
-    rows.sort(key=lambda a: (-ALERT_LEVEL_RANK.get(a["alert_level"], 0), a["station"]))
-    return rows
+        return [row for row in rows if row["station"] == station_name]
+    return list(rows)

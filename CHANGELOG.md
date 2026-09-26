@@ -3,6 +3,47 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.15.1] - 2026-09
+
+### Fixed (free-tier cold start: the warm path was using the wrong probe)
+
+A measured live cold wake took **76.4 s** (then 818 ms warm). Python import is
+only 2.6 s, so the cost was not the app -- it was the wake path itself.
+
+The app exposes two probes, and everything on the wake path was using the wrong
+one:
+
+| probe | behaviour |
+| --- | --- |
+| `GET /api/health` | DB-free, returns as soon as the process accepts connections |
+| `GET /health` | additionally round-trips Postgres to report `"database"` |
+
+`client.ts ensureWarm()`, the `warmup.ts` keep-alive pinger and the Render
+`healthCheckPath` all used `/health`. So every wake demanded a database
+round-trip at the exact moment the connection pool had no connection yet,
+which kept the client on "API offline" for longer than the process actually
+needed and held the service "not ready" in Render's eyes. Warm, before any cold
+start, the difference is already visible: `/health` 975-1910 ms vs
+`/api/health` 306-1533 ms.
+
+- Warm gate, keep-alive pinger, `render.yaml healthCheckPath` and
+  `scripts/run_dev.py` now all use `/api/health`.
+- `backend/Dockerfile` `HEALTHCHECK` also moved to `/api/health`. It ran the
+  DB-backed probe against a **5 s** timeout, so a slow first connect would mark
+  a healthy container unhealthy and risk a needless restart loop.
+
+### Fixed (duplicate 17-station sweeps)
+
+`/api/alerts` cached its result under `alerts:{station}`, so every distinct
+station filter ran its own full network sweep; `/api/summary` then called the
+same sweep **uncached** just to produce `open_alerts`. On the pooled Neon
+Postgres that showed up as `/api/alerts` 7.8 s and `/api/summary` 11.9 s.
+
+The 120 s cache now lives inside `alert_service.all_station_alerts`, keyed once
+on the unfiltered sweep, with the station name applied afterwards. Both
+endpoints share one computation, and browsing stations from the new menu
+reuses the sweep instead of recomputing the network.
+
 ## [1.15.0] - 2026-09
 
 ### Fixed (429 / "API offline", alerts coverage, station menu)
