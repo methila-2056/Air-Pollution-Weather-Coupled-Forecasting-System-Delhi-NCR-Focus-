@@ -17,7 +17,10 @@ export function startKeepWarm(intervalMs: number = DEFAULT_INTERVAL_MS): void {
     // Never ping a hidden tab — background tabs do not need the instance kept
     // warm, and a ping per hidden tab is pure rate-limit pressure.
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-    api.get('/health', { timeout: 15000 }).catch(() => {
+    // `/api/health` is the DB-free liveness probe; `/health` would add a
+    // Postgres round-trip to every keep-alive ping, which is wasted work on a
+    // 0.5-CPU instance and cannot succeed any faster than the process itself.
+    api.get('/api/health', { timeout: 15000 }).catch(() => {
       // Backend sleeping or waking; the axios warm-up gate handles recovery.
     })
   }

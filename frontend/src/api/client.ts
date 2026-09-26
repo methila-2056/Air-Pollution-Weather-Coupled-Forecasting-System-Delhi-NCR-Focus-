@@ -106,10 +106,13 @@ async function ensureWarm(): Promise<boolean> {
     warmUpPromise = (async () => {
       for (let i = 0; i < MAX_WARM_ATTEMPTS; i++) {
         try {
-          // Cheap liveness probe. /system runs a real database round-trip,
-          // which is exactly what we do not want to hammer while the container
-          // is still importing.
-          await api.get('/health', { timeout: 20000 })
+          // DB-free liveness probe, deliberately NOT /health. The warm gate
+          // only needs to know "is the process accepting connections yet?" --
+          // /health additionally round-trips Postgres, so on a pooled or
+          // free-tier database that adds a network round-trip (and, mid-wake,
+          // seconds) before the gate can even open. Data endpoints retry on
+          // their own, so the database catching up is not our problem here.
+          await api.get('/api/health', { timeout: 20000 })
           return true
         } catch {
           if (i < MAX_WARM_ATTEMPTS - 1) await new Promise((r) => setTimeout(r, WARM_RETRY_DELAY_MS))

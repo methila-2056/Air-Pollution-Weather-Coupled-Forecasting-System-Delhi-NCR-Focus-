@@ -48,7 +48,10 @@ def main() -> int:
             subprocess.Popen([npm, "run", "dev"], cwd=os.path.join(ROOT, "frontend"))
         )
 
-    health = f"http://localhost:{args.port}/health"
+    # Liveness, not readiness: this is "is the server accepting connections",
+    # which is what we are waiting for. `/health` also round-trips the database
+    # and would make the dev script report "not ready" on a slow first connect.
+    health = f"http://localhost:{args.port}/api/health"
     if wait_for_backend(health):
         print(f"Backend ready at http://localhost:{args.port} (docs at /docs)")
     else:

@@ -26,7 +26,12 @@ services:
     runtime: python
     plan: free
     pythonVersion: 3.11.9
-    healthCheckPath: /health
+    # DB-free liveness probe. `/health` additionally round-trips Postgres, so
+    # pointing readiness at it makes Render keep the service "not ready" while a
+    # pooled/free database is still waking. `/api/health` returns as soon as the
+    # process accepts connections; database readiness is proven by the data
+    # endpoints themselves, which now retry on transient failures.
+    healthCheckPath: /api/health
     autoDeploy: true
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
