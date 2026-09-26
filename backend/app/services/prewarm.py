@@ -41,6 +41,32 @@ logger = logging.getLogger("aerocast.prewarm")
 # finishes inside a typical cold-boot window.
 _ENTRY_GAP_S = 1.0
 
+# Last sweep's outcome, surfaced on /api/system. A cache warm-up is invisible by
+# construction -- if it silently stops working, the only symptom is a slow first
+# load, which is exactly the thing nobody is watching. Making the state
+# inspectable is what turns "the pre-warm should help" into something that can
+# be verified against production.
+_STATUS: dict[str, object] = {"enabled": False, "state": "disabled"}
+
+
+def prewarm_status() -> dict[str, object]:
+    """Snapshot of the last control-room sweep. Never raises."""
+    return dict(_STATUS)
+
+
+def _mark(**fields: object) -> None:
+    _STATUS.update(fields)
+
+
+def note_scheduled() -> None:
+    """Record that the sweep has been handed to a worker thread.
+
+    Without this the state reads ``disabled`` for the fraction of a second
+    between scheduling and the thread starting, which is exactly the window where
+    someone checks whether the deployment has the feature on.
+    """
+    _mark(enabled=True, state="scheduled")
+
 
 def _entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
     """``(label, cache_key, ttl, builder)`` for every heavy read-only panel.
@@ -59,7 +85,7 @@ def _entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
     from ..main import _data_quality_report
     from ..services import alert_service, atmosphere_service, transport_risk_service
 
-    return [
+    return _dispersion_entries() + [
         ("atmosphere:current", "atmosphere:current", 300, lambda db: atmosphere_service.get_current_atmosphere(db)),
         ("alerts:all_stations", "alerts:all_stations", 120, lambda db: alert_service.all_station_alerts(db)),
         ("summary", "summary", 60, lambda db: summary_api._build_summary(db)),
@@ -72,7 +98,7 @@ def _entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
         ("fire-hotspots", "fire-hotspots", 300, lambda db: fire_api._compute_fire_hotspots(db)),
         ("plume-risk", "plume-risk", 300, lambda db: fire_api._compute_plume_risk(db)),
         ("grid:forecast:24", "grid:forecast:24", 120, lambda db: grid_api._compute_grid(db, 24)),
-    ] + _dispersion_entries()
+    ]
 
 
 def _dispersion_frame_hours(horizon_hours: int) -> list[int]:
@@ -85,20 +111,25 @@ def _dispersion_frame_hours(horizon_hours: int) -> list[int]:
 
 
 def _dispersion_entries() -> list[tuple[str, str, float, Callable[[object], object]]]:
-    """Pre-warm the dispersion keys the UI actually requests.
+    """Pre-warm the dispersion keys the UI actually requests, and warm them first.
 
-    The solver is the single most expensive read in the app (~12 s for 72 h on
-    the production box), so warming a key nobody asks for is the worst outcome
-    available: it burns the one CPU during the cold-boot window and speeds
-    nothing up. An earlier version warmed ``dispersion:72:8:all`` while the page
-    had already moved to filtered ``frame_hours`` requests, so every entry it
-    created was unreadable garbage.
+    Two rules, both learned the hard way from a production measurement:
 
-    Keys therefore come from :func:`..api.dispersion.dispersion_cache_key` and
-    the frame sets from the same six-hourly cadence the client requests. Three
-    horizons at ~10-12 s each is ~33 s of background CPU after boot — bounded,
-    off the request path, and it lands well inside the 76 s cold wake the
-    dashboard is already retrying through.
+    * **Only keys the client asks for.** The solver is the most expensive read in
+      the app (~10-12 s for 72 h on the production box), so warming a key nobody
+      requests is the worst outcome available: it burns the one CPU during the
+      cold-boot window and speeds nothing up. An earlier version warmed
+      ``dispersion:72:8:all`` while the page had already moved to filtered
+      ``frame_hours`` requests, so every entry it created was unreadable garbage.
+      Keys now come from :func:`..api.dispersion.dispersion_cache_key`.
+    * **Before the cheap reads, not after.** The whole sweep runs in background
+      against a single CPU, and the first real user request lands ~76 s after the
+      wake. Cheapest-first is the usual instinct, but measured cold-boot timings
+      put the three dispersion solves at ~33 s of that window on their own --
+      last-in-list they would still have been running when the user's request
+      arrived. Dispatch is the one panel a retry cannot rescue (a cold 12 s
+      serialisation either clears or blows the client timeout), so it goes first
+      and the rest of the list follows.
     """
     from ..api.dispersion import DISPERSION_TTL_SECONDS, dispersion_cache_key
     from .dispersion_service import run_dispersion_forecast_service
@@ -129,8 +160,13 @@ def prewarm_control_room(stop: threading.Event | None = None) -> None:
 
     started = time.monotonic()
     warmed, failed = 0, 0
+    # Recorded per entry so /api/system can show how far the sweep got, not just
+    # whether it finished: a sweep that dies on entry 2 and a sweep that is still
+    # running at 40 s look identical from the outside otherwise.
+    _mark(enabled=True, state="running", entries_warmed=0, entries_failed=0)
     for label, key, ttl, builder in _entries():
         if stop is not None and stop.is_set():
+            _mark(state="cancelled", seconds=round(time.monotonic() - started, 1))
             logger.info("Pre-warm cancelled after %d entries", warmed)
             return
         try:
@@ -141,7 +177,10 @@ def prewarm_control_room(stop: threading.Event | None = None) -> None:
         except Exception:
             failed += 1
             logger.exception("Pre-warm failed for %s (continuing)", label)
+        _mark(entries_warmed=warmed, entries_failed=failed, last_entry=label)
         time.sleep(_ENTRY_GAP_S)
+    _mark(state="complete", entries_warmed=warmed, entries_failed=failed,
+          seconds=round(time.monotonic() - started, 1))
     logger.info(
         "Pre-warm complete: %d entries warm, %d failed, %.1fs", warmed, failed, time.monotonic() - started
     )

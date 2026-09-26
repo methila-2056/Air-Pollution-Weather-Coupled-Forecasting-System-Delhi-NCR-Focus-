@@ -141,7 +141,7 @@ python -m alembic upgrade head
 | `LIVE_REFRESH_ENABLED` | `false` | Whether the refresh scheduler runs |
 | `LIVE_REFRESH_INTERVAL_HOURS` | `3` | Scheduler cadence |
 | `DEMO_HYDRATE_EMPTY_DB` | `false` | Re-stamp the bundled archive into the recent window when the database has no fresh readings |
-| `CONTROL_ROOM_PREWARM` | `false` | Fill the TTL cache with the heavy control-room reads in the background after startup. Set it on scale-to-zero hosts (Render free tier), where a cold wake otherwise leaves the first dashboard load queueing behind cold ~12 s aggregations. Never blocks readiness; failures are logged and skipped. |
+| `CONTROL_ROOM_PREWARM` | `false` | Fill the TTL cache with the heavy control-room reads in the background after startup. Set it on scale-to-zero hosts (Render free tier), where a cold wake otherwise leaves the first dashboard load queueing behind cold ~12 s aggregations. Never blocks readiness; failures are logged and skipped. Check it took effect with `GET /api/system` → `prewarm`. |
 
 See `docs/deploy.env.example` for a production template.
 

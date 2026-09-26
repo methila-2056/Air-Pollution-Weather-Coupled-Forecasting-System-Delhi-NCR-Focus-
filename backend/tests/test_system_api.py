@@ -18,6 +18,23 @@ def test_system_status(client):
         "demo_hydrate_empty_db",
         "explanation",
     }
+    # The pre-warm state has to be readable over HTTP: it is the only way to tell
+    # a working cache warm-up from a dead one without hand-timing requests.
+    assert body["prewarm"]["enabled"] is False
+    assert body["prewarm"]["state"] == "disabled"
+
+
+def test_system_status_reports_the_prewarm_sweep(client, monkeypatch):
+    from app.services import prewarm
+
+    monkeypatch.setattr(
+        prewarm, "_STATUS",
+        {"enabled": True, "state": "complete", "entries_warmed": 13, "entries_failed": 0, "seconds": 71.4},
+    )
+    body = client.get("/api/system").json()
+    assert body["prewarm"]["state"] == "complete"
+    assert body["prewarm"]["entries_warmed"] == 13
+    assert body["prewarm"]["seconds"] == 71.4
 
 
 def test_system_status_reports_disconnected_db(client, monkeypatch):

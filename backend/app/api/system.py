@@ -57,6 +57,14 @@ def system_status():
 
     db_status = "connected" if database_reachable() else "disconnected"
 
+    # Cold-start cache pre-warm. Reported because a cache warm-up is invisible
+    # from the outside: if it stops working, the only symptom is a slow first
+    # load, which is exactly what nobody is watching. The state also tells you
+    # whether the instance you are talking to has finished warming yet.
+    from ..services.prewarm import prewarm_status
+
+    prewarm = prewarm_status()
+
     engines = {
         "weather_forecast": {
             "source": "Open-Meteo",
@@ -121,6 +129,7 @@ def system_status():
             "demo_hydrate_empty_db": getattr(settings, "demo_hydrate_empty_db", False),
             "explanation": "live_refresh_enabled re-pulls upstream feeds on a schedule; demo_hydrate_empty_db re-stamps the historical archive into the recent window for a fresh database.",
         },
+        "prewarm": prewarm,
         "engines": engines,
         "schema_version": "1.0.0",
     }

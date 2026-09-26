@@ -47,11 +47,16 @@ def test_entries_use_the_same_keys_as_the_http_layer():
         [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72],
     ]
 
-    # Cheap high-traffic panels are warmed before the solver-heavy ones, and the
-    # 24 h horizon (the one the page opens on) goes first.
+    # The expensive solver is the one panel a retry cannot rescue (a cold 12 s
+    # serialisation either clears or blows the client timeout), and the sweep
+    # shares one CPU with the inbound request, so it has to go first. Measured
+    # against production: the three dispersion solves are ~33 s of the 76 s wake.
     labels = [label for label, _key, _ttl, _builder in prewarm._entries()]
-    assert labels.index("summary") < labels.index("dispersion:24:8:6-12-18-24")
-    assert labels.index("dispersion:24:8:6-12-18-24") < labels.index("dispersion:72:8:6-12-18-24-30-36-42-48-54-60-66-72")
+    assert labels[0] == "dispersion:24:8:6-12-18-24"
+    assert labels[1] == "dispersion:48:8:6-12-18-24-30-36-42-48"
+    assert labels[2] == "dispersion:72:8:6-12-18-24-30-36-42-48-54-60-66-72"
+    assert "summary" in labels
+    assert labels.index("dispersion:72:8:6-12-18-24-30-36-42-48-54-60-66-72") < labels.index("summary")
 
 
 def test_prewarm_populates_cache_and_survives_a_failing_entry(monkeypatch):
@@ -103,6 +108,60 @@ def test_prewarm_honours_the_stop_event(monkeypatch):
     stop.set()
     prewarm.prewarm_control_room(stop=stop)
     assert ran == []
+
+
+def test_status_reports_progress_and_completion(monkeypatch):
+    """A cache warm-up is invisible unless it says what it did.
+
+    Verified live: a sweep that silently failed looked exactly like a sweep that
+    was working, and the only way to tell was to time a request by hand.
+    """
+    from app.services import prewarm
+
+    # The status is a module global, so isolate it from any earlier sweep in the
+    # session rather than asserting on whatever the previous test left behind.
+    monkeypatch.setattr(prewarm, "_STATUS", {"enabled": False, "state": "disabled"})
+    monkeypatch.setattr(prewarm, "_ENTRY_GAP_S", 0)
+    monkeypatch.setattr(
+        prewarm, "_entries", lambda: [("one", "one", 60, lambda _db: {}), ("two", "two", 60, lambda _db: {})]
+    )
+    monkeypatch.setattr(prewarm, "cached", lambda *a, **k: None, raising=False)
+
+    prewarm.note_scheduled()
+    scheduled = prewarm.prewarm_status()
+    assert scheduled["enabled"] is True
+    assert scheduled["state"] == "scheduled"
+
+    prewarm.prewarm_control_room()
+
+    status = prewarm.prewarm_status()
+    assert status["enabled"] is True
+    assert status["state"] == "complete"
+    assert status["entries_warmed"] == 2
+    assert status["entries_failed"] == 0
+    assert status["last_entry"] == "two"
+    assert status["seconds"] >= 0
+    # A snapshot, not the live dict: callers must not be able to mutate it.
+    status["state"] = "tampered"
+    assert prewarm.prewarm_status()["state"] == "complete"
+
+
+def test_status_records_failures_instead_of_raising(monkeypatch):
+    from app.services import prewarm
+
+    def boom(_db):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(prewarm, "_STATUS", {"enabled": False, "state": "disabled"})
+    monkeypatch.setattr(prewarm, "_ENTRY_GAP_S", 0)
+    monkeypatch.setattr(prewarm, "_entries", lambda: [("broken", "broken", 60, boom)])
+
+    prewarm.prewarm_control_room()
+
+    status = prewarm.prewarm_status()
+    assert status["state"] == "complete"
+    assert status["entries_warmed"] == 0
+    assert status["entries_failed"] == 1
 
 
 @pytest.mark.parametrize("value,expected", [

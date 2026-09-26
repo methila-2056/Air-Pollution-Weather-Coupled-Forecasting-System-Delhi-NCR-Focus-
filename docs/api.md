@@ -104,3 +104,7 @@ route protection is enforced client-side on the protected portal pages.
 - Horizon values: `[1, 6, 12, 24, 48, 72]` hours.
 - AQI categories: `Good`, `Satisfactory`, `Moderate`, `Poor`, `Very Poor`, `Severe`.
 - Interactive docs: `http://localhost:8000/docs` (Swagger UI).
+- `GET /api/system` reports run mode and integration status, including a
+  `prewarm` block (`enabled`, `state`, `entries_warmed`, `entries_failed`,
+  `seconds`) for the `CONTROL_ROOM_PREWARM` cache sweep. On a scale-to-zero host
+  this is how you tell a warm instance from one whose caches are still cold.

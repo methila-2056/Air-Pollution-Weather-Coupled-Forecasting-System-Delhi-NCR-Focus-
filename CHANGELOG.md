@@ -55,9 +55,16 @@ Three separate defects added up:
   wake is then served warm instead of queueing behind a set of cold ~12 s
   aggregations. Runs off the event loop, one entry at a time with a pause
   between, best-effort per entry, and never blocks readiness. Off by default so
-  local dev, pytest and CI never pay for it. The three dispersion solves cost
-  ~33 s of background CPU on the production 0.5-CPU instance, which lands inside
-  the 76 s cold wake the dashboard is already retrying through.
+  local dev, pytest and CI never pay for it. Off the request path on the
+  production 0.5-CPU instance, the sweep is dispatched first (the three solver
+  runs are ~33 s of the 76 s cold wake, and dispatch is the one panel a retry
+  cannot rescue) and the cheaper reads follow.
+- `GET /api/system` now reports a `prewarm` block (`enabled`, `state`,
+  `entries_warmed`, `entries_failed`, `seconds`, `last_entry`). A cache warm-up
+  is invisible by construction: verified against production, a sweep that was
+  not warming anything looked exactly like one that was, and the only way to
+  tell was to time requests by hand. The state also tells you whether the
+  instance you are talking to has finished warming yet.
 
   An earlier build of this release warmed `dispersion:72:8:all`, which no client
   requested any more once the page moved to filtered `frame_hours` — spending
@@ -76,12 +83,13 @@ Three separate defects added up:
 
 ### Tests
 
-660 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
+663 passing (was 635). New: dispersion `frame_hours` subset (payload strictly
 smaller, frames numerically identical to the unfiltered run, malformed values
 fall back to every frame), dispersion cache-key separation/canonicalisation, and
-a `prewarm` suite (pre-warmed keys are exactly the keys the endpoint serves for
-the client's six-hourly frame sets, a failing entry does not abort the sweep, the
-stop event is honoured, the setting is opt-in).
+a `prewarm` suite (the sweep runs the expensive solver first, pre-warmed keys are
+exactly the keys the endpoint serves for the client's six-hourly frame sets, a
+failing entry does not abort the sweep, the stop event is honoured, the setting
+is opt-in, and its progress is reported on `/api/system`).
 
 ## [1.15.2] - 2026-09
 
