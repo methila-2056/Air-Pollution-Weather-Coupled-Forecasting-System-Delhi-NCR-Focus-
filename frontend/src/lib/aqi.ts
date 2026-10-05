@@ -4,18 +4,28 @@ export interface AqiStyle {
   chip: string   // tailwind classes for badges (light theme)
   text: string   // tailwind text color
   bar: string    // solid background
+  // Tinted icon tile: background + icon colour in one token, so a metric icon
+  // can carry the same severity as its badge. Same `bg-*-50` / `text-*-600`
+  // pairing the other metric cards already use (orange-50/600 for fires,
+  // red-50/600 for alerts), which keeps the 600-on-50 contrast of those cards
+  // rather than reusing `text`, which is tuned for text on white.
+  tile: string
 }
 
 // CPCB / MoEFCC air quality category thresholds (1-hour AQI, 8 pollutants).
-// The Tailwind chip/text/bar classes below are kept visually consistent with each
-// row's `hex` value (e.g. `#ca8a04` == Tailwind yellow-600 -> yellow classes).
+// The Tailwind chip/text/bar/tile classes below are kept visually consistent
+// with each row's `hex` value (e.g. `#ca8a04` == Tailwind yellow-600 -> yellow
+// classes).
 export const AQI_CATEGORIES: Array<{ min: number; max: number } & AqiStyle> = [
-  { min: 0, max: 50, label: 'Good', hex: '#16a34a', chip: 'bg-green-100 text-green-800 border-green-300', text: 'text-green-700', bar: 'bg-green-600' },
-  { min: 51, max: 100, label: 'Satisfactory', hex: '#ca8a04', chip: 'bg-yellow-100 text-yellow-800 border-yellow-300', text: 'text-yellow-700', bar: 'bg-yellow-600' },
-  { min: 101, max: 200, label: 'Moderate', hex: '#d97706', chip: 'bg-amber-100 text-amber-800 border-amber-300', text: 'text-amber-700', bar: 'bg-amber-600' },
-  { min: 201, max: 300, label: 'Poor', hex: '#dc2626', chip: 'bg-red-100 text-red-800 border-red-300', text: 'text-red-700', bar: 'bg-red-600' },
-  { min: 301, max: 400, label: 'Very Poor', hex: '#9333ea', chip: 'bg-purple-100 text-purple-800 border-purple-300', text: 'text-purple-700', bar: 'bg-purple-600' },
-  { min: 401, max: Infinity, label: 'Severe', hex: '#7f1d1d', chip: 'bg-red-200 text-red-900 border-red-400', text: 'text-red-900', bar: 'bg-red-900' },
+  { min: 0, max: 50, label: 'Good', hex: '#16a34a', chip: 'bg-green-100 text-green-800 border-green-300', text: 'text-green-700', bar: 'bg-green-600', tile: 'bg-green-50 text-green-600' },
+  { min: 51, max: 100, label: 'Satisfactory', hex: '#ca8a04', chip: 'bg-yellow-100 text-yellow-800 border-yellow-300', text: 'text-yellow-700', bar: 'bg-yellow-600', tile: 'bg-yellow-50 text-yellow-600' },
+  { min: 101, max: 200, label: 'Moderate', hex: '#d97706', chip: 'bg-amber-100 text-amber-800 border-amber-300', text: 'text-amber-700', bar: 'bg-amber-600', tile: 'bg-amber-50 text-amber-600' },
+  { min: 201, max: 300, label: 'Poor', hex: '#dc2626', chip: 'bg-red-100 text-red-800 border-red-300', text: 'text-red-700', bar: 'bg-red-600', tile: 'bg-red-50 text-red-600' },
+  { min: 301, max: 400, label: 'Very Poor', hex: '#9333ea', chip: 'bg-purple-100 text-purple-800 border-purple-300', text: 'text-purple-700', bar: 'bg-purple-600', tile: 'bg-purple-50 text-purple-600' },
+  // Severe keeps a deeper tint than Poor on purpose: 401+ is the band a reviewer
+  // should notice at a glance, and red-50/600 would otherwise render Severe and
+  // Poor identically.
+  { min: 401, max: Infinity, label: 'Severe', hex: '#7f1d1d', chip: 'bg-red-200 text-red-900 border-red-400', text: 'text-red-900', bar: 'bg-red-900', tile: 'bg-red-100 text-red-700' },
 ]
 
 // Resolve the canonical AQI hex for a category label (used by spatial heatmaps etc.).
@@ -38,7 +48,7 @@ export function readableOnHex(hex: string): string {
 
 export function aqiStyle(aqi: number | null | undefined): AqiStyle {
   if (typeof aqi !== 'number' || Number.isNaN(aqi)) {
-    return { label: 'No data', hex: '#94a3b8', chip: 'bg-slate-100 text-slate-500 border-slate-200', text: 'text-slate-400', bar: 'bg-slate-300' }
+    return { label: 'No data', hex: '#94a3b8', chip: 'bg-slate-100 text-slate-500 border-slate-200', text: 'text-slate-400', bar: 'bg-slate-300', tile: 'bg-slate-100 text-slate-500' }
   }
   // The CPCB bands above are integer-edged (0-50, 51-100, ...) so a fractional
   // value such as 50.5 falls into the gap between two ranges and would fall

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   Flame,
+  Gauge,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
@@ -227,6 +228,10 @@ export default function Dashboard() {
   }
 
   const rankStyle = aqiStyle(current?.aqi ?? null)
+  // Severity band for the regional-average tile. Resolved from `summary` rather
+  // than inside the `summary &&` block so it stays valid on the first render,
+  // when summary is still null and the tile has not mounted yet.
+  const ncrStyle = aqiStyle(summary?.ncr_avg_aqi ?? null)
 
   return (
     <div className="space-y-6">
@@ -297,15 +302,21 @@ export default function Dashboard() {
           {summary && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="card flex items-center gap-3">
+                {/*
+                  A gauge, because this tile reports an *index*, not a count --
+                  the same role the Flame/AlertTriangle tiles play for fires and
+                  open alerts. Its tint comes from `aqiStyle().tile`, so the
+                  icon carries the same severity band as the badge beside it
+                  instead of restating a count the number already shows.
+                */}
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${ncrStyle.tile}`}>
+                  <Gauge className="h-5 w-5" aria-hidden="true" />
+                </span>
                 <div>
                   <p className="text-xs text-slate-500">NCR average AQI</p>
                   <div className="flex items-center gap-2">
                     <p className="text-xl font-bold text-slate-900">{fmt(summary.ncr_avg_aqi, 0)}</p>
-                    <AQIBadge
-                      category={aqiStyle(summary.ncr_avg_aqi).label}
-                      aqi={summary.ncr_avg_aqi}
-                      showValue={false}
-                    />
+                    <AQIBadge category={ncrStyle.label} aqi={summary.ncr_avg_aqi} showValue={false} />
                   </div>
                 </div>
               </div>
