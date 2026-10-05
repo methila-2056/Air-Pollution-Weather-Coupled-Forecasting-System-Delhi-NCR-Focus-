@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   Flame,
-  Sparkles,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
@@ -298,14 +297,15 @@ export default function Dashboard() {
           {summary && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="card flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-inst-50">
-                  <Sparkles className="h-5 w-5 text-inst-700" aria-hidden="true" />
-                </span>
                 <div>
                   <p className="text-xs text-slate-500">NCR average AQI</p>
                   <div className="flex items-center gap-2">
                     <p className="text-xl font-bold text-slate-900">{fmt(summary.ncr_avg_aqi, 0)}</p>
-                    <AQIBadge category={aqiStyle(summary.ncr_avg_aqi).label} aqi={summary.ncr_avg_aqi} />
+                    <AQIBadge
+                      category={aqiStyle(summary.ncr_avg_aqi).label}
+                      aqi={summary.ncr_avg_aqi}
+                      showValue={false}
+                    />
                   </div>
                 </div>
               </div>
