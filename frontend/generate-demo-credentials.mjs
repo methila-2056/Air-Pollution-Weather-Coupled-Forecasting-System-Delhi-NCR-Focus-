@@ -1,5 +1,5 @@
 /**
- * Write `public/demo-credentials.json` at build time so the login page can show
+* Write `public/demo-credentials.json` at build time so the login page can show
  * the demo account without waiting on the backend.
  *
  * Why this exists
@@ -53,7 +53,12 @@ const DEFAULT_EMAIL = 'analyst@aerocast.in'
 const DEFAULT_NAME = 'Demo Analyst'
 const DEFAULT_ROLE = 'Analyst'
 
-const OUT_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'demo-credentials.json')
+// This file lives at the frontend root rather than in a `scripts/` directory
+// on purpose: the repo-root `.vercelignore` carries a bare `scripts` entry (it
+// trims the Python side out of the frontend build), and gitignore-style
+// patterns match at any depth, so `frontend/scripts/` was stripped from the
+// uploaded source and took the build down with MODULE_NOT_FOUND.
+const OUT_FILE = join(dirname(fileURLToPath(import.meta.url)), 'public', 'demo-credentials.json')
 
 // Same spelling as `Settings.demo_user_enabled`: an explicit value wins, and
 // unset means off.
