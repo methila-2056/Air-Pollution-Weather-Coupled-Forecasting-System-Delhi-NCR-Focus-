@@ -10,10 +10,14 @@
   various locations" API (`api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69`).
   Ingestion via `POST /api/pollution/ingest` → `backend/app/services/cpcb_service.py`.
 
-### 2. Weather (Open-Meteo)
-- **Parameters:** Temperature, relative humidity, MSL pressure, surface pressure, 10m wind speed & direction, precipitation, cloud cover, planetary boundary layer height
-- **Area:** Gridded over Delhi NCR (28.4°N–28.9°N, 76.8°E–77.4°E)
-- **Frequency:** Hourly; both historical and forecast
+  ### 2. Weather (Open-Meteo)
+  - **Parameters:** Temperature, relative humidity, MSL pressure, surface pressure, 10m wind speed & direction, precipitation, cloud cover, planetary boundary layer height
+  - **Area:** Gridded over Delhi NCR (28.4A°N–28.9A°N, 76.8A°E–77.4A°E)
+  - **Frequency:** Hourly; `weather_observations` holds archive (analysis) hours
+    only, bounded at the current instant. Forecast hours are never persisted —
+    they are fetched separately and served in memory by the forecast-context
+    builder (`docs/weather_data_source.md` §5–§6).
+  - **Provenance note (current schema):** `weather_observations` does **not** carry provenance columns (`data_source`, `re_stamped`/`is_re_stamped`) in the current schema. By contrast, `pollution_observations` carries `data_source` and `re_stamped`, and `fire_readings` carries `synthetic` and `source`. The `bootstrap_recent.py` script sets `re_stamped=True` when creating WeatherReading rows, but the `WeatherReading` model does not define a `re_stamped`/`is_re_stamped` column (schema drift). Any future addition of weather provenance requires a model + migration change.
 
 ### 3. Fire (NASA FIRMS)
 - **Parameters:** Latitude, longitude, acquisition datetime, confidence (nominal/high), Fire Radiative Power (FRP), satellite, day/night

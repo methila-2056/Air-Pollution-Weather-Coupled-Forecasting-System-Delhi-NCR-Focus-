@@ -125,6 +125,15 @@ def decode_access_token(token: str, secret: str) -> dict | None:
         return None
     header_b64, payload_b64, sig_b64 = parts
     try:
+        header = json.loads(_b64url_decode(header_b64))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(header, dict):
+        return None
+    alg = header.get("alg")
+    if alg != _JWT_ALG:
+        return None
+    try:
         expected = hmac.new(
             secret.encode(),
             f"{header_b64}.{payload_b64}".encode(),

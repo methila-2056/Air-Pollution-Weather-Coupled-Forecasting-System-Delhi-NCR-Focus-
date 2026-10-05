@@ -189,7 +189,7 @@ export default function Overview() {
         <div className="card border-dashed">
           <EmptyState
             title="No pollution data for this station yet"
-            hint="Run the official CPCB ingestion once the backend has a data.gov.in API key, then refresh this page."
+            hint="Run the official CPCB ingestion on the backend, then refresh this page."
           />
         </div>
       )}

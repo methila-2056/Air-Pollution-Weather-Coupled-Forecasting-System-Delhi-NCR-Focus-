@@ -195,3 +195,72 @@ def test_public_data_api_still_open(client):
     """Guard: the auth layer must NOT lock down the forecasting API."""
     response = client.get("/api/stations")
     assert response.status_code == 200
+def test_decode_rejects_non_hs256_alg():
+    from app.security import create_access_token, decode_access_token
+
+    secret = 'test-secret'
+    token = create_access_token(1, 'u@test.in', secret, expires_minutes=60)
+    parts = token.split('.')
+    import base64
+    import json
+
+    def b64e(d: bytes) -> str:
+        return base64.urlsafe_b64encode(d).rstrip(b'=').decode()
+
+    header = {'alg': 'HS384', 'typ': 'JWT'}
+    bad = b64e(json.dumps(header, separators=(',', ':')).encode()) + '.' + parts[1] + '.' + parts[2]
+    assert decode_access_token(bad, secret) is None
+    header = {'alg': 'none', 'typ': 'JWT'}
+    bad2 = b64e(json.dumps(header, separators=(',', ':')).encode()) + '.' + parts[1] + '.'
+    assert decode_access_token(bad2, secret) is None
+
+
+def test_decode_rejects_malformed_header():
+    from app.security import create_access_token, decode_access_token
+
+    secret = 'test-secret'
+    token = create_access_token(1, 'u@test.in', secret, expires_minutes=60)
+    parts = token.split('.')
+    import base64
+
+    def b64e(d: bytes) -> str:
+        return base64.urlsafe_b64encode(d).rstrip(b'=').decode()
+
+    bad = b64e(b'not-json') + '.' + parts[1] + '.' + parts[2]
+    assert decode_access_token(bad, secret) is None
+def _auth_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_protected_endpoints_require_auth(client):
+    from app.config import get_settings
+    from app.security import create_access_token
+
+    secret = get_settings().secret_key
+    valid = create_access_token(1, "test@test.in", secret, expires_minutes=5)
+
+    endpoints = [
+        ("POST", "/api/forecast/coupled", {}),
+        ("POST", "/api/forecast/generate", {}),
+        ("POST", "/api/import/weather", "station,time,temperature\nDelhi,2025-01-01T00:00:00Z,25\n"),
+        ("POST", "/api/import/pollution", "station,timestamp,pm25,pm10,o3,no2,so2,co,aqi\nDelhi,2025-01-01T00:00:00Z,30,60,40,20,5,1,\n"),
+        ("POST", "/api/pollution/ingest", {}),
+        ("POST", "/api/scenario/analysis", {"changes": {}}),
+        ("POST", "/api/model/metrics", {
+            "model_name": "xgb",
+            "pollutant": "pm25",
+            "horizon_hours": 24,
+            "mae": 1.0,
+            "rmse": 2.0,
+            "r2": 0.9,
+        }),
+    ]
+
+    for method, path, body in endpoints:
+        if method == "POST":
+            r = client.post(path, json=body) if isinstance(body, dict) else client.post(path, data=body, headers={"content-type": "text/csv"})
+            assert r.status_code == 401, f"{method} {path} should require auth"
+            r = client.post(path, json=body, headers=_auth_headers("garbage")) if isinstance(body, dict) else client.post(path, data=body, headers={"content-type": "text/csv", **_auth_headers("garbage")})
+            assert r.status_code == 401, f"{method} {path} should reject invalid token"
+            r = client.post(path, json=body, headers=_auth_headers(valid)) if isinstance(body, dict) else client.post(path, data=body, headers={"content-type": "text/csv", **_auth_headers(valid)})
+            assert r.status_code != 401, f"{method} {path} should not 401 with valid token"

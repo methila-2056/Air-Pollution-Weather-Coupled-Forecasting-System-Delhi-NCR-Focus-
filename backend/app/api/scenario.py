@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from ..api.auth import UserResponse, get_current_user
 from ..database import get_db
 from ..models.db_models import Station
 from ..schemas.schemas import ScenarioAnalysisRequest, ScenarioAnalysisResponse
@@ -20,6 +21,7 @@ router = APIRouter()
 def post_scenario_analysis(
     req: ScenarioAnalysisRequest,
     db: Session = Depends(get_db),
+    user: UserResponse = Depends(get_current_user),
 ):
     """Compare a baseline forecast against a what-if scenario produced by
     changing ONLY the requested environmental inputs (wind speed, wind

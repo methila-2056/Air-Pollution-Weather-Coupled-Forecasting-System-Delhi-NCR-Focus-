@@ -18,9 +18,12 @@ node_modules/
 *.log
 *.db
 
-    # frontend build output (produced by npm run build)
+# frontend build output (produced by npm run build)
 frontend/dist/
 frontend/*.tsbuildinfo
+# Demo credential emitted into public/ by frontend/scripts/generate-demo-credentials.mjs
+# at build time. Generated from Vercel env vars and never tracked.
+frontend/public/demo-credentials.json
 
 # The 120MB row-export exceeds GitHub's 100MB push limit.
 # It is committed (byte-identical) as part1 + part2; see data/processed/SPLIT_NOTE.txt

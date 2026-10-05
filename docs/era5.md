@@ -67,7 +67,10 @@ detects the empty source and continues with Open-Meteo weather.
 
 None. ERA5 feeds the offline model-training/explanation dataset
 (`scripts/build_dataset.py`) and is orthogonal to the live refresh path, which
-uses Open-Meteo archive + forecast (verified live) for the hourly API.
+reads the Open-Meteo **archive** endpoint only. The live refresh does not fall
+back to the Open-Meteo *forecast* endpoint — see
+[`weather_data_source.md`](weather_data_source.md) §5; look-ahead weather is
+fetched separately and kept in memory by the forecast-context builder.
 
 ## Tests
 

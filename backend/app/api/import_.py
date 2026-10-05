@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from ..api.auth import UserResponse, get_current_user
 from ..database import get_db
 from ..models.db_models import PollutionReading, Station, WeatherReading
 from ..services.aqi_calculator import calculate_aqi
@@ -248,6 +249,7 @@ def _upsert_row(db, model, station_id: int, ts: datetime, values: dict[str, Any]
 def import_weather(
     db: Session = Depends(get_db),
     body: str = Body(..., media_type="text/csv"),
+    user: UserResponse = Depends(get_current_user),
 ):
     """Import weather observations from a CSV body. Columns follow the
     ``/api/export/weather.csv`` format (``station,time,temperature_2m,...``).
@@ -267,6 +269,7 @@ def import_weather(
 def import_pollution(
     db: Session = Depends(get_db),
     body: str = Body(..., media_type="text/csv"),
+    user: UserResponse = Depends(get_current_user),
 ):
     """Import CPCB pollution observations from a CSV body. Columns follow the
     ``/api/export/pollution.csv`` format (``station,timestamp,pm25,...``). When

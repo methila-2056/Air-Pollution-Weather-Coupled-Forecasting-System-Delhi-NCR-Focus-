@@ -10,6 +10,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -99,6 +100,11 @@ PRESSURE_LEVEL_VARS = (
 DEFAULT_LOOKBACK_DAYS = 3
 HTTP_TIMEOUT = 60
 
+# ``opencity.in`` publishes the CPCB "Delhi Hourly Air Quality Reports" package
+# with a naive, offset-free ``Timestamp`` column carrying IST wall-clock, so a
+# naive CKAN timestamp must be localized to this zone before it is converted.
+IST = ZoneInfo("Asia/Kolkata")
+
 # A 5-day forecast starts at 00:00 of the current day and always extends past
 # ``now + 72h``, the horizon the atmospheric-context builder needs. No
 # ``past_days`` is requested: the frame is deliberately a *future* forecast, so
@@ -114,6 +120,26 @@ def _to_float(v):
         return f if f == f else None
     except (TypeError, ValueError):
         return None
+
+
+def _ckan_timestamp_to_naive_utc(value) -> pd.Timestamp | None:
+    """Normalise one CKAN/CPCB timestamp to the project's naive-UTC convention.
+
+    The opencity CKAN feed returns a naive, offset-free ``Timestamp`` column in
+    IST wall-clock, so a naive value is localized to ``IST`` first. An
+    offset-aware value already carries its own zone and is converted directly.
+    Either way the value is converted to UTC *before* the tzinfo is dropped:
+    stripping the tzinfo without converting would persist IST wall-clock under a
+    UTC contract and shift every reading 5 h 30 m into the future.
+
+    Returns ``None`` for values pandas cannot parse.
+    """
+    ts = pd.to_datetime(value, errors="coerce")
+    if ts is None or pd.isna(ts):
+        return None
+    if ts.tzinfo is None:
+        ts = ts.tz_localize(IST)
+    return ts.tz_convert("UTC").tz_localize(None)
 
 
 def _existing_timestamps(db, model_cls, station_id) -> set:
@@ -147,18 +173,16 @@ def _get_weather_df(station_name: str, lat: float, lon: float, start: str, end: 
         resp.raise_for_status()
         data = resp.json()
     except Exception as exc:
-        # Age out gracefully: fall back to forecast API for the next ~48h
-        logger.warning("archive fetch failed (%s) — trying forecast", exc)
-        f_params: dict[str, Any] = {
-            "latitude": lat,
-            "longitude": lon,
-            "forecast_days": 2,
-            "hourly": f"{HOURLY_VARS},{PRESSURE_LEVEL_VARS}",
-            "timezone": "UTC",
-        }
-        resp = requests.get(FORECAST_URL, params=f_params, timeout=HTTP_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
+        # Fail closed. The forecast API is not a substitute for the archive on
+        # this path: its hours span now..now+48h and are model output for instants
+        # that have not been observed yet, so persisting them would store
+        # forecast values inside an observations table. Look-ahead weather is
+        # still available through `fetch_forecast_hours`, which
+        # `coupling_service` consumes in-memory and never writes to
+        # `weather_observations`. Skipping this refresh is preferable to
+        # mislabelling the provenance of the rows.
+        logger.warning("archive fetch failed (%s) — skipping weather refresh", exc)
+        return pd.DataFrame()
     hourly = data.get("hourly", {})
     if not hourly or "time" not in hourly:
         return pd.DataFrame()
@@ -249,8 +273,14 @@ def refresh_weather(db, dry_run: bool = False) -> int:
     from ..models.db_models import Station, WeatherReading
 
     stations = {s.name: s for s in db.query(Station).all()}
-    end = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
-    start = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    # A single captured instant bounds the whole pass. `end_date` is today, so
+    # the frame covers hours that have not occurred yet, and for those the
+    # provider is supplying model output rather than an observation. Storing
+    # them would file forecast values as measurements, so only rows at or
+    # before `now` are kept.
+    now = datetime.now(UTC).replace(tzinfo=None)
+    end = now.strftime("%Y-%m-%d")
+    start = (now - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     inserted = 0
     for raw_name, (lat, lon) in STATIONS.items():
@@ -264,6 +294,8 @@ def refresh_weather(db, dry_run: bool = False) -> int:
         rows = []
         for _, r in df.iterrows():
             ts = r["time"]
+            if ts > now:
+                continue
             if ts in existing:
                 continue
             rows.append(
@@ -403,10 +435,9 @@ def refresh_pollution(db, dry_run: bool = False) -> int:
         existing = _existing_timestamps(db, PollutionReading, stations[display].id)
         rows = []
         for _, r in df.iterrows():
-            ts = pd.to_datetime(r[ts_col], utc=False, errors="coerce")
-            if ts is None or pd.isna(ts):
+            ts = _ckan_timestamp_to_naive_utc(r[ts_col])
+            if ts is None:
                 continue
-            ts = ts.tz_localize(None) if ts.tzinfo else ts
             vals = {}
             for src, dst in pmap.items():
                 vals[dst] = _to_float(r.get(src))

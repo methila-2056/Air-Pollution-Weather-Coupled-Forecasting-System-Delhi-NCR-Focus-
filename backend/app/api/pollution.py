@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from ..api.auth import UserResponse, get_current_user
 from ..database import get_db
 from ..models.db_models import PollutionReading, Station
 from ..schemas.schemas import (
@@ -107,7 +108,10 @@ def pollution_history(station_id: int, limit: int = 168, db: Session = Depends(g
 
 
 @router.post("/pollution/ingest", response_model=PollutionIngestResponse)
-def pollution_ingest(db: Session = Depends(get_db)):
+def pollution_ingest(
+    db: Session = Depends(get_db),
+    user: UserResponse = Depends(get_current_user),
+):
     try:
         summary = cpcb_service.run_ingestion(db)
     except CpcbError as exc:

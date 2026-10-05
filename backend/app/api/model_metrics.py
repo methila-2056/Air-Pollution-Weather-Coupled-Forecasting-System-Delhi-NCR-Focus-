@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from ..api.auth import UserResponse, get_current_user
 from ..database import get_db
 from ..models.db_models import ModelMetrics
 from ..schemas.schemas import ModelMetricCreate, ModelMetricResponse
@@ -22,13 +23,19 @@ def _to_response(m) -> ModelMetricResponse:
         trained_at=m.trained_at,
     )
 
+
 @router.get("/model/metrics", response_model=list[ModelMetricResponse])
 def get_model_metrics(db: Session = Depends(get_db)):
     metrics = db.query(ModelMetrics).order_by(ModelMetrics.trained_at.desc(), ModelMetrics.id.desc()).all()
     return [_to_response(m) for m in metrics]
 
+
 @router.post("/model/metrics", response_model=ModelMetricResponse, status_code=201)
-def save_model_metrics(metric: ModelMetricCreate, db: Session = Depends(get_db)):
+def save_model_metrics(
+    metric: ModelMetricCreate,
+    db: Session = Depends(get_db),
+    user: UserResponse = Depends(get_current_user),
+):
     if not metric.model_name or not metric.pollutant:
         raise HTTPException(status_code=400, detail="model_name and pollutant are required")
     if not metric.horizon_hours:

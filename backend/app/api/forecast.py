@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from ..api.auth import UserResponse, get_current_user
 from ..database import get_db
 from ..models.db_models import Alert, Forecast, PollutionReading, Station
 from ..schemas.schemas import (
@@ -118,9 +119,10 @@ def _to_forecast_point(f) -> ForecastPoint:
     )
 
 @router.post("/forecast/coupled", response_model=dict)
-def generate_coupled_forecast(
+def forecast_coupled(
     req: ForecastGenerateRequest = ForecastGenerateRequest(),
     db: Session = Depends(get_db),
+    user: UserResponse = Depends(get_current_user),
 ):
     """Run the time-stepped two-way coupled weather-chemistry forecast.
 
@@ -198,6 +200,7 @@ def generate_coupled_forecast(
 def generate_forecast(
     req: ForecastGenerateRequest = ForecastGenerateRequest(),
     db: Session = Depends(get_db),
+    user: UserResponse = Depends(get_current_user),
 ):
     if not req.horizons:
         raise HTTPException(status_code=400, detail="horizons must be a non-empty list")

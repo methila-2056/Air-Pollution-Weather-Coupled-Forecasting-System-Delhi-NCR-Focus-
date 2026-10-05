@@ -3,6 +3,71 @@
 All notable changes to **AeroCast-NCR** are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and semantic versioning.
 
+## [1.23.1] - 2026-10-04
+
+### Fixed
+
+- **CKAN/CPCB pollution timestamps are no longer stored as IST wall-clock.**
+  `refresh_pollution()` parsed the opencity `Timestamp` column with
+  `pd.to_datetime(..., utc=False)` and then applied `tz_localize(None)`. The
+  opencity CKAN feed publishes that column as a naive, offset-free IST value, so
+  stripping the tzinfo without converting persisted IST wall-clock into columns
+  the project defines as naive UTC — every reading landed **5 h 30 m in the
+  future**. Timestamps are now normalized by `_ckan_timestamp_to_naive_utc()`:
+  a naive value is localized to `Asia/Kolkata` and converted, an offset-aware
+  value is converted directly, and either way the conversion to UTC happens
+  *before* the tzinfo is dropped. This is the same rule `cpcb_service` already
+  applied; `refresh_service` had been missed by that fix.
+- **Future weather hours are no longer written to `weather_observations`.**
+  `refresh_weather()` requested `end_date` = today and then inserted every row of
+  the returned frame with no bound on the timestamp. The archive endpoint
+  answers a request for today with the whole of today (the 1.23.0 entry below
+  recorded the stored weather running to "today's 23:00 UTC" for exactly this
+  reason), so each pass filed the remaining hours of the day as measurements —
+  and for those hours the provider is supplying model output, not an
+  observation. Each pass now captures a single `now` and stores only rows at or
+  before it.
+- **The archive-failure path no longer substitutes forecast data for
+  observations.** When the archive request failed, `_get_weather_df()` fell back
+  to the Open-Meteo *forecast* API with `forecast_days=2`, whose hours span
+  `now..now+48 h`, and wrote them into the observations table. That contradicted
+  the documented guarantee that look-ahead weather is consumed in-memory only.
+  The fallback is removed and the path fails closed: the station's frame is
+  empty and nothing is written. `forecast_days` returns model output for *every*
+  hour in its window, including the ones at or before `now`, so there is no
+  eligible analysis data in it to keep — the `now` bound in the previous bullet
+  would not have been enough on its own. The trade-off is deliberate: if the
+  archive is unavailable the pass writes no weather at all rather than
+  mislabelling provenance, and the next successful pass backfills. Look-ahead
+  weather is unchanged and still served in-memory by `coupling_service` through
+  `fetch_forecast_hours`.
+
+Existing rows are **not** rewritten by this change. Any historical timestamp
+already stored under the old behaviour needs a separate, explicitly approved
+remediation; note that `UNIQUE(station_id, timestamp)` means re-ingesting
+corrected values would insert alongside the incorrect ones rather than replace
+them.
+
+### Changed
+
+- `refresh_service` weather test fixtures now build historical hours instead of
+  asserting that future hours are persisted, which is no longer correct
+  behaviour. Added five regression tests covering naive-IST and aware-offset
+  pollution conversion, future-hour exclusion, past-hour retention, and the
+  fail-closed archive fallback. Verified against the pre-fix implementation: the
+  two conversion tests, the future-hour test and the fallback test all fail
+  there, while the past-hour retention test passes both before and after — it
+  guards the new filter against over-rejecting, so it is not expected to
+  reproduce a defect.
+- Documentation that contradicted the behaviour above was corrected rather than
+  left to drift: `docs/era5.md` no longer claims the live refresh uses
+  "archive + forecast", `docs/dataset.md` no longer describes the weather
+  frequency as "both historical and forecast", and
+  `docs/weather_data_source.md` §2 no longer cites a `datetime.utcnow()` call
+  that does not exist in the code. Its §7 end-to-end table is now labelled as a
+  recorded snapshot instead of an assertion that the live provider was
+  re-checked by this change.
+
 ## [1.23.0] - 2026-09-29
 
 ### Fixed

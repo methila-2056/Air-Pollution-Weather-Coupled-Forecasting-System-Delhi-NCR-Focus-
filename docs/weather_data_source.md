@@ -71,9 +71,16 @@ inversion layer (`docs/SIH_FINAL_COMPLIANCE.md`, R1/R2).
    `pd.to_datetime(..., utc=True).dt.tz_localize(None)`. Stored datetimes are
    therefore **naive UTC by convention**: the wall clock is unambiguous and
    Pydantic serializes them with `Z` when served. The refresh window is also
-   computed in UTC (`datetime.utcnow()`), so query-window math never mixes
-   local and UTC clocks (the pre-existing Asia/Kolkata fetch had a latent
-   5.5 h skew — fixed).
+   computed in UTC (`datetime.now(UTC).replace(tzinfo=None)`), so query-window
+   math never mixes local and UTC clocks (the pre-existing Asia/Kolkata fetch
+   had a latent 5.5 h skew — fixed).
+   The same rule governs the pollution side: `refresh_pollution()` normalizes
+   every CKAN/CPCB timestamp through `_ckan_timestamp_to_naive_utc()`, which
+   localizes a naive value to `Asia/Kolkata` and converts an offset-aware one,
+   converting to UTC *before* dropping the tzinfo. The opencity CKAN feed
+   publishes its `Timestamp` column as offset-free IST wall-clock, so stripping
+   the tzinfo without converting would file every reading 5 h 30 m in the
+   future.
 3. **Spatial association** — each reading carries `station_id` plus the
    station lat/lon (`latitude`/`longitude` columns captured at fetch time), so
    every weather row is spatially anchored to an NCR station.
@@ -82,16 +89,17 @@ inversion layer (`docs/SIH_FINAL_COMPLIANCE.md`, R1/R2).
 
 ---
 
-## 3. Storage (PostgreSQL)
+  ## 3. Storage (PostgreSQL)
 
-- Table: **`weather_observations`**, model `WeatherReading`
-  (`backend/app/models/db_models.py`).
-- Index: `idx_weather_station_time (station_id, timestamp)` for the latest /
-  history query paths.
-- Connection: SQLAlchemy engine from `DATABASE_URL`
-  (`.env` → `postgresql://aerocast:...@localhost:5432/aerocast_ncr`).
-- Schema lifecycle: Alembic migrations + additive `apply_migrations()` for the
-  dev SQLite path. Columns are additive-only; the existing DB is preserved.
+  - Table: **`weather_observations`**, model `WeatherReading`
+    (`backend/app/models/db_models.py`).
+  - **Provenance:** The current schema does **not** include provenance tracking columns for weather (no `data_source`, `re_stamped`, or `is_re_stamped`). `pollution_observations` has `data_source` and `re_stamped`; `fire_readings` has `synthetic` and `source`. This is an intentional schema limitation (weather provenance is not implemented). The `bootstrap_recent.py` presentation aid sets `re_stamped=True` when instantiating `WeatherReading` objects, but the `WeatherReading` model does not define that column (schema drift); weather rows therefore have no reliable provenance marker in the current schema.
+  - Index: `idx_weather_station_time (station_id, timestamp)` for the latest /
+    history query paths.
+  - Connection: SQLAlchemy engine from `DATABASE_URL`
+    (`.env` → `postgresql://aerocast:...@localhost:5432/aerocast_ncr`).
+  - Schema lifecycle: Alembic migrations + additive `apply_migrations()` for the
+    dev SQLite path. Columns are additive-only; the existing DB is preserved.
 
 ## 4. API surface
 
@@ -108,7 +116,7 @@ lat/lon + all required variables + PBL height).
 
 | Failure | Behaviour |
 |---------|-----------|
-| Open-Meteo archive unreachable / non-200 | Logs warning, falls back to the live forecast API for the next 48 h (`_get_weather_df`) |
+| Open-Meteo archive unreachable / non-200 | Logs warning and **fails closed** — the station's frame is empty and nothing is written (`_get_weather_df`). The forecast API is deliberately *not* a fallback here: its hours span `now..now+48 h` and are model output for instants that have not been observed, so persisting them would file forecast values as observations. Look-ahead weather remains available in-memory via `fetch_forecast_hours`, consumed by `coupling_service` and never written to `weather_observations`. |
 | Forecast supplement fails | Logs warning; vertical-pressure backfill is skipped, hourly surface fields unaffected |
 | Response missing `hourly.time` | Returns empty frame; station is cleanly skipped (no partial rows) |
 | Unknown station / no data | `HTTP 404` from the API layer |
@@ -122,11 +130,29 @@ invoked by the scheduled `refresh_loop` (default every 3 h) or on demand via
 `run_refresh_once()` / the `aerocast-refresh` CLI. Idempotent by timestamp, so
 frequent runs are safe.
 
-## 7. Verification (this session, real end-to-end)
+**Observation-only bound.** `refresh_weather()` asks the archive for
+`end_date` = today and receives the whole of today back, hours that have not
+occurred yet included (the 1.23.0 changelog entry recorded the stored weather
+running to "today's 23:00 UTC" for exactly this reason). Those hours carry
+provider model output rather than an observation, so each pass captures a single
+`now` and stores only rows at or before it. Without this the table accumulated
+same-day forecast hours as if they were measurements.
+
+All `timestamp` values are naive **UTC** by repository convention. The archive
+is requested with `timezone=UTC` and its offsets are converted before the
+tzinfo is dropped.
+
+## 7. Verification (recorded snapshot, real end-to-end)
+
+Snapshot recorded by the session that built this layer: live Open-Meteo →
+PostgreSQL → HTTP. It is **not** re-verified by the observation bound (§6) or
+the fail-closed archive handling (§5); those two are covered by
+`backend/tests/unit/test_refresh_service.py` plus the CI gates, not by a live
+provider call.
 
 | Stage | Result |
 |-------|--------|
-| Real source | Open-Meteo forecast HTTP 200; 24/24 hourly rows with all 7 variables incl. real PBL `boundary_layer_height` (m) |
-| → PostgreSQL | `refresh_weather()` inserted NCR station-hour rows into `weather_observations` (values above verified in the DB) |
+| Real source | Open-Meteo HTTP 200; hourly rows with all 7 variables incl. real PBL `boundary_layer_height` (m) |
+| → PostgreSQL | `refresh_weather()` inserted NCR station-hour rows into `weather_observations` (values above verified in the DB). Since §6 stores only hours at or before the captured `now`, the ingested tail is now shorter than in the original snapshot |
 | → API | `GET /api/weather/latest`, `/api/weather/{station}`, `/api/weather/{station}/history` returned the ingested readings with PBL height present |
-| Tests | backend suite passes (count in session report) |
+| Tests | `make test` → `python -m pytest backend/tests -q`; lint gate is `python -m ruff check backend/app backend/tests backend/conftest.py backend/scripts alembic/env.py` |
