@@ -96,8 +96,22 @@ export default function StationMap({ stations, onSelectStation, fires = [], poll
       className="h-96 rounded-xl z-0"
     >
       <TileLayer
-        attribution='&copy; OpenStreetMap contributors &copy; CARTO'
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        // Esri's World Light Gray Canvas, which needs no API key.
+        //
+        // This was CARTO's light_all basemap. CARTO now gates
+        // basemaps.cartocdn.com behind an API key and answers an unkeyed
+        // request with a "key required" image carrying HTTP 200, so Leaflet
+        // painted that placard as if it were a map tile -- the error appeared
+        // inside the map rather than as a failed request. The gate is applied
+        // per region/IP/volume rather than per key, so it reproduced for site
+        // visitors without reproducing from every network.
+        //
+        // The ArcGIS REST tile path orders the coordinates {z}/{y}/{x} (row
+        // before column), which is the reverse of the OSM/CARTO convention --
+        // swapping them silently yields a map of the wrong place rather than an
+        // error, so the order below is deliberate.
+        attribution='&copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
       />
       <Polygon
         positions={ncrBoundary}
